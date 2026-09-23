@@ -284,6 +284,11 @@ func (m *Model) save() {
 		return
 	}
 	m.errMsg = ""
+	// A push that failed happened in the background, so it has to be said
+	// somewhere or it is the same as not happening at all.
+	if sync := m.svc.Sync(); sync.LastErr != "" {
+		m.status = "not pushed: " + sync.LastErr
+	}
 	// Links and tags just changed, and the sections below the outline are
 	// derived from them.
 	m.rebuildGraph()

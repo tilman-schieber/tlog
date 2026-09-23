@@ -164,3 +164,49 @@ func TestImportOfANonGraphFailsClearly(t *testing.T) {
 		t.Fatalf("code=%d stderr=%q", code, errs)
 	}
 }
+
+func TestPushWithoutARemoteSaysSo(t *testing.T) {
+	dir := t.TempDir()
+	if code, _, errs := runCLI(t, dir, "add", "a note"); code != 0 {
+		t.Fatalf("%d %s", code, errs)
+	}
+	code, _, errs := runCLI(t, dir, "push")
+	if code != 1 || !strings.Contains(errs, "no remote") {
+		t.Fatalf("code=%d stderr=%q", code, errs)
+	}
+	// And turning it on is refused for the same reason.
+	if code, _, errs = runCLI(t, dir, "push", "-auto", "on"); code != 1 || !strings.Contains(errs, "no remote") {
+		t.Fatalf("code=%d stderr=%q", code, errs)
+	}
+}
+
+func TestAutoPushCanBeTurnedOnAndOff(t *testing.T) {
+	dir := t.TempDir()
+	if code, _, errs := runCLI(t, dir, "add", "a note"); code != 0 {
+		t.Fatalf("%d %s", code, errs)
+	}
+	bare := t.TempDir()
+	if out, err := gitOutput(bare, "init", "-q", "--bare"); err != nil {
+		t.Fatal(out, err)
+	}
+	if out, err := gitOutput(dir, "remote", "add", "origin", bare); err != nil {
+		t.Fatal(out, err)
+	}
+
+	if code, out, errs := runCLI(t, dir, "push", "-auto", "on"); code != 0 || !strings.Contains(out, "every commit") {
+		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
+	}
+	if code, _, errs := runCLI(t, dir, "add", "pushed automatically"); code != 0 {
+		t.Fatalf("%d %s", code, errs)
+	}
+	if out, _ := gitOutput(bare, "log", "--oneline"); !strings.Contains(out, "tlog:") {
+		t.Fatalf("nothing reached the remote:\n%s", out)
+	}
+
+	if code, out, _ := runCLI(t, dir, "push", "-auto", "off"); code != 0 || !strings.Contains(out, "manual") {
+		t.Fatalf("code=%d out=%q", code, out)
+	}
+	if code, _, errs := runCLI(t, dir, "push", "-auto", "maybe"); code != 2 || !strings.Contains(errs, "on or off") {
+		t.Fatalf("code=%d stderr=%q", code, errs)
+	}
+}

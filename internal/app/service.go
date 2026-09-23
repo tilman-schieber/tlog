@@ -76,8 +76,33 @@ func (s *Service) Save(d *Doc) error {
 	return nil
 }
 
-// Commit flushes any pending auto-commit immediately.
+// Commit flushes any pending auto-commit immediately, pushing too when this
+// notes directory is set to.
 func (s *Service) Commit() error { return s.Git.Flush() }
+
+// Push sends the notes to their remote. Nothing pushes unless the notes
+// directory has been told to: writing a note and publishing it are different
+// acts, and only one of them is easy to take back.
+func (s *Service) Push() error { return s.Git.Push() }
+
+// SetAutoPush turns pushing-on-commit on or off for this notes directory.
+func (s *Service) SetAutoPush(on bool) error { return s.Git.SetAutoPush(on) }
+
+// SyncStatus describes where the notes stand with their remote.
+type SyncStatus struct {
+	Remote   bool   `json:"remote"`
+	AutoPush bool   `json:"autoPush"`
+	LastErr  string `json:"lastError,omitempty"`
+}
+
+// Sync reports the state of pushing, for an adapter to show.
+func (s *Service) Sync() SyncStatus {
+	st := SyncStatus{Remote: s.Git.HasRemote(), AutoPush: s.Git.AutoPush()}
+	if err := s.Git.LastPushError(); err != nil {
+		st.LastErr = err.Error()
+	}
+	return st
+}
 
 // ResolvePage returns the relative path of a page by name and whether it
 // already exists. The page name is the filename, so there is never more than

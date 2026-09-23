@@ -115,6 +115,9 @@ Measured rather than guessed:
   nesting mechanism would be two ways to say one thing, and they would disagree.
 - **Transclusion and embeds.** Real value, but block references still have no UI
   for creating them, so there is nothing to embed by hand yet.
+- **Auto-pull.** Pushing is automatic; pulling is not, and should stay that way.
+  A pull can conflict, and resolving a conflict in someone's notes behind their
+  back is the same mistake as merging a lost write instead of refusing it.
 - **A WYSIWYG editor.** The block under the caret shows raw text deliberately:
   the caret has to land where the characters are, and what you type is what is
   stored. Hiding the syntax while editing it is how round-trip guarantees die.

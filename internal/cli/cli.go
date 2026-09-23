@@ -25,6 +25,7 @@ usage:
   tlog open <page>          print the path of a page, creating it if needed
   tlog add [-p page] text   append a block to today's journal, or to a page
   tlog import [-from dir]   import a Logseq graph into the notes directory
+  tlog push [-auto on|off]  push the notes now, or set pushing on every commit
   tlog version              print the version
 
 global flags:
@@ -94,6 +95,8 @@ func Main(args []string, stdout, stderr io.Writer) int {
 		return cmdAdd(rest, stdout, stderr, svc)
 	case "import":
 		return cmdImport(rest, stdout, stderr, svc)
+	case "push":
+		return cmdPush(rest, stdout, stderr, svc)
 	case "version":
 		fmt.Fprintln(stdout, Version)
 		return 0
@@ -111,7 +114,7 @@ func Main(args []string, stdout, stderr io.Writer) int {
 func run(stderr io.Writer, svc *app.Service, fn func() error) int {
 	err := fn()
 	if cerr := svc.Commit(); cerr != nil && err == nil {
-		fmt.Fprintf(stderr, "tlog: note saved but not committed: %v\n", cerr)
+		fmt.Fprintf(stderr, "tlog: %v\n", cerr)
 	}
 	if err != nil {
 		fmt.Fprintf(stderr, "tlog: %v\n", err)
@@ -158,6 +161,49 @@ func cmdAdd(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 		fmt.Fprintln(stdout, svc.Store.Abs(rel))
 		return nil
 	})
+}
+
+func cmdPush(args []string, stdout, stderr io.Writer, svc *app.Service) int {
+	fs := flag.NewFlagSet("push", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	auto := fs.String("auto", "", "turn pushing on every commit on or off")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	if *auto != "" {
+		on := *auto == "on" || *auto == "true" || *auto == "yes"
+		if !on && *auto != "off" && *auto != "false" && *auto != "no" {
+			fmt.Fprintf(stderr, "tlog push: -auto takes on or off, not %q\n", *auto)
+			return 2
+		}
+		if err := svc.SetAutoPush(on); err != nil {
+			fmt.Fprintf(stderr, "tlog: %v\n", err)
+			return 1
+		}
+		if on {
+			fmt.Fprintf(stdout, "pushing on every commit, to %s\n", svc.Store.Root)
+		} else {
+			fmt.Fprintln(stdout, "pushing is now manual")
+		}
+		return 0
+	}
+
+	st := svc.Sync()
+	if !st.Remote {
+		fmt.Fprintf(stderr, "tlog: no remote; add one with `git -C %s remote add origin <url>`\n", svc.Store.Root)
+		return 1
+	}
+	if err := svc.Commit(); err != nil {
+		fmt.Fprintf(stderr, "tlog: %v\n", err)
+		return 1
+	}
+	if err := svc.Push(); err != nil {
+		fmt.Fprintf(stderr, "tlog: %v\n", err)
+		return 1
+	}
+	fmt.Fprintln(stdout, "pushed")
+	return 0
 }
 
 func cmdImport(args []string, stdout, stderr io.Writer, svc *app.Service) int {

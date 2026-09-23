@@ -16,7 +16,8 @@ A markdown-first knowledge outliner for the terminal, with a desktop app. Journa
 
 No Electron, no database, no daemon, no background process. The notes directory
 is a git repository and tlog commits to it as you work, so every structural edit
-is one `git checkout` away from being undone.
+is one `git checkout` away from being undone. Add a remote and
+`tlog push -auto on`, and it pushes too.
 
 Three ways in, one core: a terminal outliner, a CLI, and a desktop app that
 renders in the system WebView and weighs about 8 MB.
@@ -145,6 +146,28 @@ On Hyprland with an NVIDIA card, WebKitGTK's DMA-BUF renderer can produce a
 blank window; Wails detects the driver and disables it. Build natively rather
 than shipping an AppImage — a bundled, stale `libwayland-client` is the usual
 cause of an empty window on Wayland.
+
+## Pushing
+
+`tlog push` sends the notes to their remote. `tlog push -auto on` does it after
+every commit instead, and the setting is stored in the notes repository itself
+(`tlog.autopush`), not in tlog: whether these notes leave the machine is a
+property of this directory, so a freshly created one never pushes by surprise.
+
+Three rules it does not bend, because writing a note and publishing it are
+different acts and only one of them is easy to take back:
+
+- **A failed push is never a failed save.** The commit is what protects the
+  notes; the push is a convenience on top. If it fails you are told "committed,
+  but not pushed", and the commit is still there.
+- **It never forces and never merges.** A rejected push means the remote has
+  commits this copy does not — probably another machine. You get told to run
+  `git pull --rebase` and look at what comes back. Resolving that is a decision.
+- **It is bounded.** A push gets 20 seconds; being offline costs a moment rather
+  than hanging a command that is supposed to feel instant.
+
+A push that failed in the background is shown in the outliner's status line and
+in the app, because a failure nobody sees is the same as no backup at all.
 
 ## Pages, tags and backlinks
 

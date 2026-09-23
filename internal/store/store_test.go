@@ -252,3 +252,174 @@ func TestDateNamesResolveToJournalsNotPages(t *testing.T) {
 		}
 	}
 }
+
+// --- pushing ----------------------------------------------------------------
+
+// bareRemote gives the store somewhere to push to, so the whole path can be
+// exercised without a network.
+func bareRemote(t *testing.T, s *Store) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := run(dir, "init", "-q", "--bare"); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(s.Root, "remote", "add", "origin", dir); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func commitSomething(t *testing.T, s *Store, g *Git, rel, body string) {
+	t.Helper()
+	if err := s.Write(rel, []byte(body), ""); err != nil {
+		t.Fatal(err)
+	}
+	g.Touch(rel)
+	if err := g.Flush(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNothingPushesUnlessAsked(t *testing.T) {
+	s := newStore(t)
+	g := NewGit(s.Root)
+	if !g.Enabled() {
+		t.Skip("git is not available")
+	}
+	remote := bareRemote(t, s)
+
+	// Writing a note and publishing it are different acts.
+	if g.AutoPush() {
+		t.Fatal("auto-push should be off until the directory is told otherwise")
+	}
+	commitSomething(t, s, g, "journals/2026-09-17.md", "- private\n")
+
+	out, err := output(remote, "log", "--oneline")
+	if err == nil && strings.TrimSpace(out) != "" {
+		t.Fatalf("something was pushed without being asked: %q", out)
+	}
+}
+
+func TestAutoPushSendsEachCommit(t *testing.T) {
+	s := newStore(t)
+	g := NewGit(s.Root)
+	if !g.Enabled() {
+		t.Skip("git is not available")
+	}
+	remote := bareRemote(t, s)
+
+	if err := g.SetAutoPush(true); err != nil {
+		t.Fatal(err)
+	}
+	commitSomething(t, s, g, "journals/2026-09-17.md", "- first\n")
+	commitSomething(t, s, g, "journals/2026-09-18.md", "- second\n")
+
+	out, _ := output(remote, "log", "--oneline")
+	if n := len(strings.Fields(strings.TrimSpace(out))); n == 0 {
+		t.Fatal("nothing reached the remote")
+	}
+	if !strings.Contains(out, "2026-09-18") {
+		t.Fatalf("the second commit did not arrive:\n%s", out)
+	}
+
+	// The setting lives in the repository, so a later run remembers it.
+	if !NewGit(s.Root).AutoPush() {
+		t.Fatal("auto-push did not persist")
+	}
+}
+
+func TestAFailedPushStillLeavesTheCommit(t *testing.T) {
+	s := newStore(t)
+	g := NewGit(s.Root)
+	if !g.Enabled() {
+		t.Skip("git is not available")
+	}
+	// A remote that cannot work: the commit must survive regardless.
+	if err := run(s.Root, "remote", "add", "origin", filepath.Join(t.TempDir(), "nope")); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.SetAutoPush(true); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.Write("journals/2026-09-17.md", []byte("- kept\n"), ""); err != nil {
+		t.Fatal(err)
+	}
+	g.Touch("journals/2026-09-17.md")
+	err := g.Flush()
+	if err == nil {
+		t.Fatal("a failed push should be reported")
+	}
+	if !strings.Contains(err.Error(), "committed, but not pushed") {
+		t.Fatalf("a failed push must not read as a failed save: %v", err)
+	}
+
+	out, _ := output(s.Root, "log", "--oneline")
+	if !strings.Contains(out, "2026-09-17") {
+		t.Fatalf("the commit was lost: %q", out)
+	}
+	if g.LastPushError() == nil {
+		t.Fatal("the failure should be remembered for an adapter to show")
+	}
+}
+
+func TestPushIsNeverForcedWhenTheRemoteMoved(t *testing.T) {
+	s := newStore(t)
+	g := NewGit(s.Root)
+	if !g.Enabled() {
+		t.Skip("git is not available")
+	}
+	remote := bareRemote(t, s)
+	commitSomething(t, s, g, "journals/2026-09-17.md", "- ours\n")
+	if err := g.Push(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Another machine pushes something this copy has never seen.
+	other := t.TempDir()
+	if err := run(other, "clone", "-q", remote, other+"/c"); err != nil {
+		t.Fatal(err)
+	}
+	c := other + "/c"
+	_ = run(c, "config", "user.name", "other")
+	_ = run(c, "config", "user.email", "other@localhost")
+	if err := os.WriteFile(filepath.Join(c, "elsewhere.md"), []byte("- theirs\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_ = run(c, "add", "-A")
+	if err := run(c, "commit", "-q", "-m", "from elsewhere"); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(c, "push", "-q"); err != nil {
+		t.Fatal(err)
+	}
+
+	commitSomething(t, s, g, "journals/2026-09-19.md", "- ours again\n")
+	err := g.Push()
+	if err == nil {
+		t.Fatal("pushing over a moved remote should be refused, not forced")
+	}
+	if !strings.Contains(err.Error(), "rejected") || !strings.Contains(err.Error(), "pull --rebase") {
+		t.Fatalf("the message should say what happened and what to do: %v", err)
+	}
+
+	// And the other machine's work is still there.
+	out, _ := output(remote, "log", "--oneline")
+	if !strings.Contains(out, "from elsewhere") {
+		t.Fatalf("the other machine's commit was destroyed:\n%s", out)
+	}
+}
+
+func TestAutoPushRefusedWithoutARemote(t *testing.T) {
+	s := newStore(t)
+	g := NewGit(s.Root)
+	if !g.Enabled() {
+		t.Skip("git is not available")
+	}
+	if err := g.SetAutoPush(true); err == nil || !strings.Contains(err.Error(), "no remote") {
+		t.Fatalf("expected a refusal naming the missing remote, got %v", err)
+	}
+	if g.AutoPush() {
+		t.Fatal("auto-push turned on with nowhere to push")
+	}
+}

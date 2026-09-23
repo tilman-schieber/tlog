@@ -2,6 +2,7 @@ package store
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -18,6 +19,16 @@ import (
 // safe.
 const DebounceDefault = 30 * time.Second
 
+// PushTimeout bounds a push, so that being offline costs a moment rather than
+// hanging a command that is supposed to feel instant.
+const PushTimeout = 20 * time.Second
+
+// AutoPushKey is the repository-local setting that turns pushing on. It lives
+// in the notes repository rather than in tlog, because whether these notes go
+// anywhere is a property of this directory: a freshly created one never pushes
+// by surprise.
+const AutoPushKey = "tlog.autopush"
+
 // Git is the durability layer. Structural edits rewrite whole files, so the
 // only honest protection against tlog confidently writing the wrong thing is a
 // history you can walk back. It replaces backup files entirely.
@@ -25,10 +36,12 @@ type Git struct {
 	root    string
 	enabled bool
 
-	mu      sync.Mutex
-	touched map[string]bool
-	timer   *time.Timer
-	wait    time.Duration
+	mu       sync.Mutex
+	touched  map[string]bool
+	timer    *time.Timer
+	wait     time.Duration
+	autopush bool
+	lastErr  error
 }
 
 // NewGit prepares the notes directory for versioning, initialising a
@@ -47,7 +60,74 @@ func NewGit(root string) *Git {
 	}
 	ensureIdentity(root)
 	g.enabled = true
+	g.autopush = configBool(root, AutoPushKey)
 	return g
+}
+
+// AutoPush reports whether commits are pushed as they are made.
+func (g *Git) AutoPush() bool { return g != nil && g.enabled && g.autopush }
+
+// SetAutoPush turns pushing on or off for this notes directory.
+func (g *Git) SetAutoPush(on bool) error {
+	if !g.Enabled() {
+		return fmt.Errorf("no git repository in the notes directory")
+	}
+	if on && !g.HasRemote() {
+		return fmt.Errorf("no remote configured; add one with `git -C %s remote add origin <url>`", g.root)
+	}
+	if err := run(g.root, "config", AutoPushKey, boolStr(on)); err != nil {
+		return err
+	}
+	g.mu.Lock()
+	g.autopush = on
+	g.mu.Unlock()
+	return nil
+}
+
+// HasRemote reports whether there is anywhere to push to.
+func (g *Git) HasRemote() bool {
+	out, err := output(g.root, "remote")
+	return err == nil && strings.TrimSpace(out) != ""
+}
+
+// LastPushError is the most recent push failure, or nil. A push that fails must
+// never block writing a note, so the error is kept here for an adapter to show
+// rather than returned from the write path.
+func (g *Git) LastPushError() error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.lastErr
+}
+
+// Push sends the current branch to its remote. It never forces and never
+// merges: a rejected push means the remote moved, and resolving that is a
+// decision, not something to do behind someone's back.
+func (g *Git) Push() error {
+	if !g.Enabled() {
+		return fmt.Errorf("no git repository in the notes directory")
+	}
+	if !g.HasRemote() {
+		return fmt.Errorf("no remote configured; add one with `git -C %s remote add origin <url>`", g.root)
+	}
+
+	branch, err := output(g.root, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return err
+	}
+	branch = strings.TrimSpace(branch)
+
+	err = runTimeout(g.root, PushTimeout, "push", "--set-upstream", "origin", branch)
+	g.mu.Lock()
+	g.lastErr = err
+	g.mu.Unlock()
+	if err != nil {
+		if strings.Contains(err.Error(), "rejected") || strings.Contains(err.Error(), "non-fast-forward") {
+			return fmt.Errorf("push rejected: the remote has commits this copy does not. "+
+				"Run `git -C %s pull --rebase` and look at what comes back", g.root)
+		}
+		return err
+	}
+	return nil
 }
 
 // ensureIdentity sets a repository-local committer only when the user has none
@@ -61,10 +141,27 @@ func ensureIdentity(root string) {
 }
 
 func hasConfig(root, key string) bool {
-	cmd := exec.Command("git", "config", "--get", key)
+	out, err := output(root, "config", "--get", key)
+	return err == nil && strings.TrimSpace(out) != ""
+}
+
+func configBool(root, key string) bool {
+	out, err := output(root, "config", "--bool", "--get", key)
+	return err == nil && strings.TrimSpace(out) == "true"
+}
+
+func boolStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
+func output(root string, args ...string) (string, error) {
+	cmd := exec.Command("git", args...)
 	cmd.Dir = root
 	out, err := cmd.Output()
-	return err == nil && len(bytes.TrimSpace(out)) > 0
+	return string(out), err
 }
 
 // Enabled reports whether commits will actually happen.
@@ -121,7 +218,17 @@ func (g *Git) Flush() error {
 	if clean(g.root) {
 		return nil
 	}
-	return run(g.root, "commit", "-q", "-m", commitMessage(files))
+	if err := run(g.root, "commit", "-q", "-m", commitMessage(files)); err != nil {
+		return err
+	}
+	// The commit is what protects the notes; the push is a convenience on top.
+	// A failed push must never look like a failed save.
+	if g.AutoPush() {
+		if err := g.Push(); err != nil {
+			return fmt.Errorf("committed, but not pushed: %w", err)
+		}
+	}
+	return nil
 }
 
 func commitMessage(files []string) string {
@@ -159,12 +266,25 @@ func clean(root string) bool {
 	return cmd.Run() == nil
 }
 
-func run(root string, args ...string) error {
-	cmd := exec.Command("git", args...)
+func run(root string, args ...string) error { return runTimeout(root, 0, args...) }
+
+// runTimeout runs git, optionally bounded. Without a bound a push on a dead
+// network can hang for minutes.
+func runTimeout(root string, timeout time.Duration, args ...string) error {
+	ctx := context.Background()
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = root
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("git %s timed out after %s — offline?", args[0], timeout)
+		}
 		return fmt.Errorf("git %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
 	}
 	return nil

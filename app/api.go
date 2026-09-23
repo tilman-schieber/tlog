@@ -109,6 +109,18 @@ func (a *API) ToggleTask(rel string, offset int, hash string) (*Edit, error) {
 	return a.after(a.svc.ToggleTask(addr(rel, offset, hash)))
 }
 
+// Sync reports whether the notes are reaching their remote, so a push that
+// failed in the background is shown rather than silently forgotten.
+func (a *API) Sync() tapp.SyncStatus { return a.svc.Sync() }
+
+// Push sends the notes now.
+func (a *API) Push() error {
+	if err := a.svc.Commit(); err != nil {
+		return err
+	}
+	return a.svc.Push()
+}
+
 // onClose flushes the pending auto-commit, so quitting never leaves work
 // uncommitted in the notes repository.
 func (a *API) onClose(ctx context.Context) bool {
