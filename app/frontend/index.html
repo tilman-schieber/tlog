@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tlog</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="titlebar"></div>
+
+    <div id="layout">
+      <aside id="sidebar">
+        <input id="search" type="search" placeholder="Search" autocomplete="off" spellcheck="false" />
+        <div id="results" hidden></div>
+
+        <nav id="nav">
+          <button id="today" class="today">Today</button>
+
+          <details open>
+            <summary>Journals</summary>
+            <ul id="journals"></ul>
+          </details>
+          <details open>
+            <summary>Pages</summary>
+            <ul id="pages"></ul>
+          </details>
+          <details>
+            <summary>Tags</summary>
+            <ul id="tags"></ul>
+          </details>
+        </nav>
+
+        <footer id="root" title="Your notes live here"></footer>
+      </aside>
+
+      <main id="main">
+        <header id="pagehead">
+          <div id="daynav">
+            <button id="prev" title="Previous day">‹</button>
+            <button id="next" title="Next day">›</button>
+          </div>
+          <h1 id="title"></h1>
+          <div id="pagetags"></div>
+        </header>
+
+        <section id="outline"></section>
+
+        <section id="tagged" hidden>
+          <h2 id="taggedhead"></h2>
+          <ul id="taggedlist"></ul>
+        </section>
+
+        <section id="refs" hidden>
+          <h2 id="refshead"></h2>
+          <div id="reflist"></div>
+        </section>
+      </main>
+    </div>
+
+    <div id="complete" hidden></div>
+    <div id="error" hidden></div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

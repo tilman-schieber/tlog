@@ -1,0 +1,17 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "tlog",
+  "outputfilename": "tlog",
+  "frontend:dir": "frontend",
+  "frontend:install": "",
+  "frontend:build": "",
+  "wailsjsdir": "./frontend",
+  "author": {
+    "name": "Tilman Schieber"
+  },
+  "info": {
+    "productName": "tlog",
+    "productVersion": "0.1.0",
+    "comments": "A markdown-first knowledge outliner"
+  }
+}

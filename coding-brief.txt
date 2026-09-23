@@ -1,0 +1,861 @@
+CODING BRIEF
+Minimalistischer Markdown-First Knowledge Outliner
+für Terminal, CLI und Agents
+
+Arbeitstitel: noto
+Zielplattformen: Linux + macOS
+Primärsprache: Go
+Primäre Human-UI: TUI
+Primäre Machine-UI: CLI + JSON; später MCP
+Persistenz: Markdown als Source of Truth
+Index: In-Memory Graph, optional SQLite/FTS als vollständig rekonstruierbarer Cache
+
+
+1. PRODUKTIDEE
+
+Baue einen minimalistischen, schnellen Knowledge-Outliner, der sich grob an den
+starken Seiten von Logseq orientiert, aber deutlich kleiner, Unix-nativer und
+agent-first ist.
+
+Das Tool soll:
+
+- als schnelle Terminal-App funktionieren
+- auf macOS und Linux laufen
+- Markdown-Dateien als kanonischen Datenspeicher verwenden
+- Daily Notes / Journals als primären Einstieg unterstützen
+- Block-basierte Hierarchie / Outlining bieten
+- [[Page Links]], #Tags, Properties und Backlinks unterstützen
+- vollständig per CLI steuerbar sein
+- strukturierte JSON-Ausgabe für Agents liefern
+- später leicht als MCP-Server exponierbar sein
+- in Neovim editierbar bleiben
+- Autocomplete für [[Pages]], #Tags etc. ermöglichen
+- keine Electron-Abhängigkeit haben
+- keine eigene Theme-Engine für V1 benötigen
+- die ANSI-/Terminalpalette verwenden und dadurch automatisch mit Omarchy
+  bzw. dem jeweiligen Terminal-Theme harmonieren
+
+Das Tool besitzt die Daten nicht. Die Markdown-Dateien sind jederzeit direkt
+lesbar, editierbar, greppbar, versionierbar und portierbar.
+
+
+2. GRUNDPRINZIPIEN
+
+2.1 Markdown-first
+
+Markdown-Dateien sind die Source of Truth.
+
+Beispiel:
+
+  ~/notes/
+    journals/
+      2026-09-17.md
+      2026-09-18.md
+    pages/
+      Project Foo.md
+      Rust.md
+
+Ein Cache oder Index darf jederzeit vollständig gelöscht und aus Markdown
+rekonstruiert werden können.
+
+
+2.2 Agent-first
+
+Alle semantischen Operationen müssen über einen gemeinsamen Application/Core
+Layer erreichbar sein.
+
+Die TUI darf keine Funktionalität besitzen, die CLI oder MCP nicht ebenfalls
+aufrufen können.
+
+Beispiel:
+
+  TUI keypress
+      -> MoveBlock(...)
+      -> Core
+      -> Markdown patch
+
+  CLI
+      -> MoveBlock(...)
+      -> Core
+      -> Markdown patch
+
+  MCP
+      -> MoveBlock(...)
+      -> Core
+      -> Markdown patch
+
+Keine Business-Logik in TUI, CLI oder MCP duplizieren.
+
+
+2.3 TUI-first für Menschen
+
+Der Outliner lebt primär in der TUI.
+
+Standardaufruf:
+
+  noto
+
+öffnet das heutige Journal bzw. den letzten Kontext.
+
+Die TUI soll keyboard-first und modal funktionieren, ungefähr Vim-artig.
+
+
+2.4 Unix-native
+
+Das Tool soll gut mit bestehenden Werkzeugen zusammenspielen:
+
+  rg
+  grep
+  git
+  nvim
+  shell scripts
+  jq
+  tmux
+  ssh
+
+Beispiele:
+
+  noto search "sqlite" --json | jq
+  rg "#research" ~/notes
+  nvim ~/notes/journals/2026-09-17.md
+
+
+3. TECHNISCHE RICHTUNG
+
+Empfohlener Stack:
+
+- Go
+- Bubble Tea für TUI
+- Lip Gloss/Bubbles nur dort, wo sinnvoll
+- fsnotify für File Watching
+- SQLite optional:
+  - FTS5
+  - Query-Beschleunigung
+  - persistenter Cache
+- Markdown Parser:
+  - zunächst bewusst kleiner eigener Dialekt
+  - kein Anspruch auf vollständige CommonMark-/GFM-Kompatibilität
+
+Warum Go:
+
+- sehr schneller Entwicklungszyklus
+- unkompliziertes Single-Binary
+- sehr guter Cross-Platform-Support
+- gutes TUI-Ökosystem
+- hervorragende Standardbibliothek für CLI/HTTP
+- geringe Runtime-/Deployment-Komplexität
+- guter Fit für Filesystem + Parser + Daemon + CLI + TUI
+
+
+4. HIGH-LEVEL ARCHITEKTUR
+
+                 Markdown files
+                       |
+                 parser / AST
+                       |
+                 in-memory Graph
+                       |
+         +-------------+-------------+
+         |             |             |
+        CLI           MCP           TUI
+       JSON                         Bubble Tea
+         |
+      scripts
+      agents
+      nvim
+
+Optional unterhalb bzw. neben dem Graph:
+
+  SQLite / FTS index
+
+SQLite ist niemals die einzige Wahrheit.
+
+
+5. DOMAIN-MODELL
+
+Kernobjekt: Block
+
+Beispiel:
+
+  type Block struct {
+      ID         BlockID
+      File       string
+      ParentID   *BlockID
+      Text       string
+      Tags       []string
+      Properties map[string]string
+
+      StartByte  int
+      EndByte    int
+  }
+
+Zusätzlich:
+
+- Page
+- BlockRef
+- PageRef
+- Tag
+- Property
+- Journal
+
+Der Graph sollte unabhängig vom Storage funktionieren.
+
+Beispiel-API:
+
+  GetBlock(id)
+  Children(id)
+  Parent(id)
+  Backlinks(id)
+  Search(query)
+  CreateBlock(...)
+  UpdateBlock(...)
+  DeleteBlock(...)
+  MoveBlock(...)
+  SetProperty(...)
+  AddTag(...)
+  ResolvePage(...)
+  ResolveBlock(...)
+
+
+6. MARKDOWN-DIALEKT
+
+V1 bewusst klein halten.
+
+Unterstützen:
+
+  # Page title
+
+  - block
+    - child block
+
+  - another block
+    status:: todo
+    due:: 2026-09-20
+
+  - reference to [[Some Page]]
+  - tag #research
+
+Optional später:
+
+- fenced code blocks
+- multiline block content
+- embeds
+- block references
+- richer properties
+
+Nicht versuchen, gleichzeitig vollständig kompatibel zu sein mit:
+
+- CommonMark
+- GFM
+- Obsidian
+- Logseq
+- Org mode
+
+Nur die Syntax implementieren, die das Produkt wirklich braucht.
+
+
+7. BLOCK-IDENTITÄTEN
+
+Wichtige Anforderung:
+
+Der Nutzer soll niemals von Hand IDs tippen oder nachsehen müssen.
+
+Unterscheide:
+
+A) Human-facing references
+B) Stable machine identities
+
+Pages werden über lesbare Namen referenziert:
+
+  [[Project Foo]]
+
+Intern dürfen Pages stabile IDs besitzen.
+
+Blocks bekommen persistente IDs nur bei Bedarf.
+
+Prinzip: lazy identity.
+
+Normale Blocks:
+
+  - ordinary thought
+  - another thought
+
+brauchen keine sichtbare ID.
+
+Eine stabile ID wird erst materialisiert, wenn ein Block:
+
+- direkt referenziert wird
+- von einem Agent dauerhaft adressiert werden muss
+- langlebige Metadaten bekommt
+- sonst eine stabile Identität benötigt
+
+Beispiel für maschinengenerierte Metadaten:
+
+  - interesting idea
+    <!-- id: 01K58QX6Y6Y... -->
+
+Alternativ kann später eine kompaktere Syntax evaluiert werden.
+
+Wichtig:
+
+- der Nutzer erzeugt diese IDs nicht selbst
+- IDs sind Infrastruktur, keine UX
+- Page-Navigation erfolgt über Namen
+- Block-Auswahl erfolgt über Search/Autocomplete
+- Mutationen durch Agents sollten nach Auflösung bevorzugt über stabile IDs
+  erfolgen
+
+
+8. EDITIEREN AUSSERHALB DER TUI
+
+Direktes Bearbeiten in Neovim muss ausdrücklich unterstützt sein.
+
+Beispiel:
+
+  nvim ~/notes/journals/2026-09-17.md
+
+Danach:
+
+- fsnotify erkennt die Änderung
+- betroffene Datei wird neu geparst
+- Graph/Index wird aktualisiert
+- TUI/Daemon sieht den neuen Zustand
+
+Die App soll externe Änderungen nicht als Ausnahme behandeln, sondern als
+normalen Workflow.
+
+
+9. SOURCE-PRESERVING EDITS
+
+Beim Schreiben möglichst keine komplette Markdown-Datei neu formatieren.
+
+Parser sollte Source-Ranges behalten:
+
+  StartByte
+  EndByte
+  ContentStart
+  ContentEnd
+
+Einfache Textänderung:
+
+- nur den relevanten Bereich patchen
+
+Strukturelle Änderung:
+
+- zusammenhängende Block-Spans verschieben
+
+Ziel:
+
+- kleine Git-Diffs
+- manuelle Formatierung möglichst erhalten
+- kein unnötiger Pretty-Print der gesamten Datei
+
+
+10. TUI
+
+Die TUI ist der primäre interaktive Outliner.
+
+Grundzustand:
+
+  NORMAL
+
+Navigation:
+
+  j/k        Block hoch/runter
+  h/l        collapse/expand
+  Ctrl-P     Page/Search Palette
+  /          Suche
+  :          Command Mode
+
+Editing:
+
+  i/e        aktuellen Block bearbeiten
+  o          Block darunter
+  O          Block darüber
+  Tab        indent
+  Shift-Tab  outdent
+  J/K        Block verschieben
+  dd         Block löschen
+  yy/p       Copy/Paste optional später
+
+Links:
+
+  gf         [[Link]] folgen
+  gb         Backlinks anzeigen
+
+INSERT mode:
+
+- normale Texteingabe
+- [[  -> Page Autocomplete
+- ((  -> Block Search/Autocomplete, falls Block Refs implementiert
+- #   -> Tag Autocomplete
+- ::  -> Property Autocomplete
+
+Ein Block ist die primäre Editing Unit.
+
+Nicht versuchen, in V1 einen vollständigen allgemeinen Texteditor nachzubauen.
+
+Anmerkung: zu sehr auf vim-hotkeys verlassen ist auch nicht gut. intuitive pfeilnavigation solle acuh klappen
+
+11. AUTOCOMPLETE
+
+Autocomplete soll zentral aus dem Core/Daemon kommen.
+
+Beispiele:
+
+  noto complete pages --prefix "Pro"
+  noto complete tags --prefix "res"
+  noto complete blocks --query "sqlite cache"
+  noto complete props --prefix "sta"
+
+JSON-Ausgabe:
+
+  [
+    {
+      "label": "Project Foo",
+      "insertText": "[[Project Foo]]"
+    }
+  ]
+
+Dadurch kann dieselbe Completion später genutzt werden von:
+
+- TUI
+- Neovim
+- Helix
+- Zed
+- VS Code
+- Web UI
+- Agents
+
+
+12. CLI
+
+Ein Binary.
+
+Beispiele:
+
+  noto
+  noto today
+  noto open "Project Foo"
+
+  noto search "sqlite"
+  noto search "sqlite" --json
+
+  noto add "Buy milk"
+  noto add --page "Project Foo" "Implement parser"
+
+  noto get <id>
+  noto backlinks <id>
+
+  noto block create ...
+  noto block update ...
+  noto block move ...
+  noto block delete ...
+
+  noto set <id> status doing
+
+  noto complete pages --prefix "Pro"
+
+  noto rebuild
+  noto doctor
+
+  noto daemon
+  noto mcp
+
+CLI-Ausgaben müssen für Agents stabil und maschinenlesbar sein.
+
+Bevorzugt:
+
+  --json
+
+JSON sollte als API-Vertrag behandelt werden.
+
+
+13. AGENT-SICHERE ADRESSIERUNG
+
+Agents dürfen suchen und fuzzy auflösen, sollen aber Mutationen möglichst nur
+auf eindeutig adressierten Objekten durchführen.
+
+Guter Workflow:
+
+  noto search "database cache" --json
+
+liefert:
+
+  {
+    "results": [
+      {
+        "id": "01K58QW...",
+        "text": "Use SQLite as cache"
+      }
+    ]
+  }
+
+Dann:
+
+  noto block update 01K58QW... --text "Use SQLite as disposable cache"
+
+Nicht bevorzugen:
+
+  noto update --query "sqlite cache"
+
+Fuzzy mutation ist gefährlich.
+
+Prinzip:
+
+  search
+    -> resolve exact entity
+    -> mutate by ID
+
+
+14. DAEMON
+
+Optional, aber wahrscheinlich früh sinnvoll.
+
+  noto daemon
+
+Aufgabe:
+
+- Graph im Speicher halten
+- Markdown-Dateien beobachten
+- schnellen Search/Autocomplete liefern
+- Unix Socket bereitstellen
+
+Beispiel:
+
+  ~/.cache/noto/socket
+
+CLI-Verhalten:
+
+  noto command
+      |
+      +-- socket available? -> daemon verwenden
+      |
+      +-- sonst standalone laden/parsen
+
+Damit bleibt die CLI vollständig nutzbar, auch wenn kein Daemon läuft.
+
+
+15. MCP
+
+MCP erst nach stabiler Core- und CLI-API implementieren.
+
+MCP soll nur eine dünne Transport-Schicht sein.
+
+Beispieltools:
+
+  noto.search
+  noto.get
+  noto.create_block
+  noto.update_block
+  noto.delete_block
+  noto.move_block
+  noto.backlinks
+  noto.set_property
+
+Keine eigene MCP-Business-Logik.
+
+
+16. SQLITE / INDEX
+
+SQLite ist optional und rekonstruierbar.
+
+Varianten:
+
+A) nur In-Memory Graph
+B) In-Memory Graph + SQLite FTS
+C) persistenter SQLite Cache
+
+Empfehlung für MVP:
+
+- Graph im RAM
+- optional SQLite FTS5 für Volltext
+- persistenter Cache erst bei echtem Bedarf
+
+Falls persistenter Cache:
+
+  files
+    path
+    mtime
+    hash
+
+  blocks
+    id
+    file
+    line
+    parent
+    position
+    text
+
+  refs
+    source_block
+    target
+
+  tags
+    block_id
+    tag
+
+  properties
+    block_id
+    key
+    value
+
+Cache muss jederzeit mit:
+
+  noto rebuild
+
+neu erzeugbar sein.
+
+
+17. THEMING
+
+Kein eigenes Theme-System in V1.
+
+Nur Terminalfarben verwenden.
+
+Ziele:
+
+- automatisch kompatibel mit Omarchy
+- automatisch kompatibel mit macOS-Terminals
+- funktioniert über tmux/SSH
+- keine hardcodierten RGB-Farben
+
+Semantische Rollen auf ANSI/Terminal-Farben mappen:
+
+  normal        -> default foreground/background
+  selected      -> reverse / bold
+  link          -> blue
+  tag           -> magenta
+  property      -> cyan
+  todo          -> yellow
+  done          -> green oder dim
+  error         -> red
+  muted         -> bright black / dim
+
+Omarchy themed bereits das Terminal. Noto erbt dadurch automatisch das aktive
+Theme.
+
+Kein Omarchy-spezifischer Theme-Parser für V1.
+
+
+18. NEOVIM
+
+Neovim ist ein vollwertiger alternativer Datei-Editor.
+
+Erste Integration:
+
+- sehr kleine Completion Source
+- eigentliche Semantik bleibt in noto
+
+Ziel:
+
+  [[
+
+öffnet Page Completion.
+
+Neovim Plugin sollte möglichst dünn sein:
+
+  nvim
+    -> noto complete ...
+    -> Ergebnis anzeigen
+    -> insertText übernehmen
+
+Nicht:
+
+- Graph-Parsing in Lua nachbauen
+- Markdown-Semantik im Plugin duplizieren
+
+
+19. MVP-SCOPE
+
+V0.1
+
+- Go project structure
+- Markdown repository detection
+- Journals
+- hierarchical blocks
+- parser
+- in-memory graph
+- TUI
+- block create/edit/delete
+- indent/outdent
+- move block
+- [[Page Links]]
+- Page Autocomplete
+- Backlinks
+- CLI
+- JSON output
+- rebuild/index command
+
+V0.2
+
+- #Tags
+- Properties
+- TODO/DONE
+- richer search
+- Neovim completion
+- file watcher
+- daemon + Unix socket
+
+V0.3
+
+- block references
+- SQLite FTS5
+- persistent disposable cache
+- MCP server
+
+Später:
+
+- local web UI
+- attachments
+- plugin system
+- sync
+- richer query language
+
+
+20. NICHT-ZIELE FÜR V1
+
+Nicht bauen:
+
+- Electron
+- native GUI
+- Web UI
+- Sync
+- CRDT
+- Collaboration
+- Plugin Marketplace
+- Full Markdown Standard
+- Datalog
+- komplexes EAV-System
+- eigene Theme Engine
+- Mobile Apps
+
+Diese Dinge dürfen später kommen, dürfen aber die Architektur des MVP nicht
+unnötig aufblähen.
+
+
+21. PROJEKTSTRUKTUR
+
+Möglicher Start:
+
+  cmd/
+    noto/
+
+  internal/
+    app/
+      service.go
+      commands.go
+
+    domain/
+      block.go
+      page.go
+      graph.go
+      refs.go
+
+    markdown/
+      parser.go
+      writer.go
+      patch.go
+
+    index/
+      memory.go
+      search.go
+
+    store/
+      repository.go
+
+    tui/
+      model.go
+      update.go
+      view.go
+      editor.go
+      completion.go
+
+    cli/
+      commands.go
+      output.go
+
+    daemon/
+      server.go
+      client.go
+      watcher.go
+
+    mcp/
+      server.go
+
+  tests/
+  fixtures/
+
+
+22. QUALITÄTSANFORDERUNGEN
+
+- Startup gefühlt instant
+- keine unnötigen Hintergrundprozesse
+- einzelnes Binary
+- kleine Speicher- und CPU-Last
+- keine Datenverluste bei Editor-/App-Crash
+- atomische Dateiänderungen, wo sinnvoll
+- Backups/Tempfiles bei riskanten strukturellen Writes
+- reproduzierbarer Rebuild des Index
+- stabile JSON-Ausgabe
+- gute Fehlermeldungen
+- alle Mutation-Operationen testbar ohne TUI
+
+
+23. TESTSTRATEGIE
+
+Besonders wichtig:
+
+Parser fixtures:
+
+- nested blocks
+- multiline blocks
+- links
+- tags
+- properties
+- malformed input
+- files edited externally
+
+Writer/Patch tests:
+
+- text replacement preserves unrelated formatting
+- indent/outdent
+- move subtree
+- delete subtree
+- external edits do not cause unrelated rewrites
+
+Graph tests:
+
+- backlinks
+- page resolution
+- duplicate page names behavior
+- stable block IDs
+- lazy ID materialization
+
+CLI tests:
+
+- JSON schemas
+- exit codes
+- unambiguous mutations
+- missing/duplicate entity handling
+
+Golden tests für Markdown sind ausdrücklich sinnvoll.
+
+
+24. WICHTIGSTE ARCHITEKTURREGEL
+
+Der Core ist das Produkt.
+
+TUI, CLI, MCP und spätere Web-UIs sind nur Adapter.
+
+Die Daten sind Markdown.
+
+Der Graph ist eine interpretierte Sicht auf diese Daten.
+
+Der Index ist ein Cache.
+
+IDs sind Maschineninfrastruktur, nicht Nutzer-UX.
+
+Die TUI ist die primäre Human-Experience.
+
+CLI/MCP sind die primäre Agent-Experience.
