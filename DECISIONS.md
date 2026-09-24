@@ -430,6 +430,30 @@ surveying the notes must not leave an empty page behind everywhere it looked.
 Creating on follow is right for a person following a link and wrong for
 anything that reads in bulk, so the two are different commands.
 
+## Which rows are folded
+
+**Collapse is remembered by position**, as "the second block at the top level".
+A block has no durable identity to remember it by, and every alternative was
+worse: pointers and byte offsets are replaced on every write now that writing
+reloads, and materialising an anchor would mean collapsing a row writes to the
+file — the one thing a view action must never do.
+
+**So the state is carried across whenever the tree changes shape.** Positions
+renumber: move a block up and "the second block" is a different block, which
+used to hand the fold to whichever block took that slot. Blocks are matched by
+their text in document order, which is exact for every operation that only
+rearranges them, and the best available guess for an edit that arrived from
+another editor. A block whose text was edited loses its own fold and keeps its
+children's, because each is matched on its own text rather than its parent's.
+
+**Arriving on a different page starts expanded.** The map is keyed by position
+alone, so without this "the second block" was folded on every page at once.
+
+The remap hangs off `reloadFromDisk`, which is the single point every
+structural write and every external edit already passes through. Before the
+outliner was moved onto the core there was no such point, and this fix would
+have had to be repeated at a dozen call sites.
+
 ## Known gaps
 
 - A name that parses as an ISO date resolves to that day's journal rather than

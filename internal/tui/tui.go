@@ -135,6 +135,15 @@ func (m *Model) load(rel string) error {
 	if err != nil {
 		return err
 	}
+	// Collapse is remembered by position, and a position means a different
+	// block on a different file — "the second block at the top level" is not
+	// the same thing on two pages. Arriving somewhere new starts expanded;
+	// re-reading the same file keeps what was folded.
+	if m.doc == nil || m.doc.Rel != rel {
+		m.collapsed = map[string]bool{}
+	} else {
+		m.collapsed = carryCollapse(m.collapsed, m.doc.Doc, d.Doc)
+	}
 	m.doc, m.page = d, page
 	m.stale = false
 	if len(m.doc.Doc.Blocks) == 0 {
@@ -161,7 +170,7 @@ func (m *Model) buildRows() {
 	var walk func(bs []*markdown.Block, depth int, prefix string)
 	walk = func(bs []*markdown.Block, depth int, prefix string) {
 		for i, b := range bs {
-			path := fmt.Sprintf("%s%d.", prefix, i)
+			path := blockPath(prefix, i)
 			m.rows = append(m.rows, row{block: b, depth: depth, path: path})
 			if len(b.Children) > 0 && !m.collapsed[path] {
 				walk(b.Children, depth+1, path)
@@ -594,6 +603,9 @@ func (m *Model) reloadFromDisk() error {
 	if err != nil {
 		return err
 	}
+	// The tree has just changed shape, so what was folded has to be carried
+	// onto the blocks it belonged to rather than left on their old positions.
+	m.collapsed = carryCollapse(m.collapsed, m.doc.Doc, d.Doc)
 	m.doc, m.page = d, page
 	m.stale = false
 	if len(m.doc.Doc.Blocks) == 0 {
