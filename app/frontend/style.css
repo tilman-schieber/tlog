@@ -528,3 +528,58 @@ table.cal td.sel { background: var(--accent); color: #fff; font-weight: 600; }
   color: #fff;
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.22);
 }
+
+/* --- the agenda ----------------------------------------------------------- */
+
+#agenda {
+  padding: 4px 0 40px;
+}
+
+#agendalist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.agendaitem {
+  display: grid;
+  grid-template-columns: 5.5rem 8rem 1fr auto;
+  gap: 12px;
+  align-items: baseline;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.agendaitem:hover {
+  background: var(--sel);
+}
+
+.agendaitem .due {
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-muted);
+}
+
+.agendaitem .when {
+  color: var(--fg-muted);
+  font-size: 0.92em;
+}
+
+.agendaitem .where {
+  color: var(--fg-muted);
+  font-size: 0.92em;
+  white-space: nowrap;
+}
+
+/* Overdue is the one thing on this screen that has to be seen first. */
+.agendaitem.t-overdue .due,
+.agendaitem.t-overdue .when {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.agendaitem.t-today .due,
+.agendaitem.t-today .when {
+  color: var(--todo);
+  font-weight: 600;
+}

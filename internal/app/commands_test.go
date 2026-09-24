@@ -226,3 +226,41 @@ func TestSlashFileWithNothingOnTheShelfSaysWhereToPutOne(t *testing.T) {
 		t.Fatalf("the block was modified anyway: %q", got)
 	}
 }
+
+func TestPropCommandSetsAndRemovesAProperty(t *testing.T) {
+	s := newSvc(t)
+	rel, _ := s.AddToday("the meeting")
+
+	text := "the meeting /prop status offen"
+	res, err := s.RunCommand(addrOf(t, s, rel, 0), "prop", "status offen", text, 12, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := body(t, s, rel); got != "- the meeting \n  status:: offen\n" {
+		t.Fatalf("got %q", got)
+	}
+	// The command itself is gone from the text, like every other one.
+	d, _ := s.Load(rel)
+	if b := d.Doc.FindByOffset(res.Offset); b == nil || b.Text != "the meeting " {
+		t.Fatalf("the slash stayed behind: %+v", b)
+	}
+
+	// No value takes it off again, which is the only way to.
+	if _, err := s.RunCommand(addrOf(t, s, rel, 0), "prop", "status", "the meeting ", 12, 12); err != nil {
+		t.Fatal(err)
+	}
+	if got := body(t, s, rel); got != "- the meeting \n" {
+		t.Fatalf("the property was not removed: %q", got)
+	}
+}
+
+func TestPropWithoutAKeyIsRefused(t *testing.T) {
+	s := newSvc(t)
+	rel, _ := s.AddToday("note")
+	if _, err := s.RunCommand(addrOf(t, s, rel, 0), "prop", "", "note", 4, 4); err == nil {
+		t.Fatal("a property with no name was accepted")
+	}
+	if got := body(t, s, rel); got != "- note\n" {
+		t.Fatalf("a refused command wrote anyway: %q", got)
+	}
+}

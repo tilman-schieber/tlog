@@ -37,6 +37,7 @@ eval(lift("function decorate"));
 eval(lift("function linkPrefix"));
 eval(lift("function slashAt"));
 eval(lift("function shouldReload"));
+eval(lift("function refPrefix"));
 
 let failures = 0;
 function eq(label, got, want) {
@@ -246,6 +247,19 @@ eq("no slash at all", String(slashAt("nothing here")), "null");
   eq("no event, nothing to do", shouldReload(null, page, false), "none");
   eq("no page open yet", shouldReload(ev(page.rel, "bbb"), null, false), "none");
 }
+
+// --- the (( trigger for a block reference -----------------------------------
+
+eq("(( opens the menu", JSON.stringify(refPrefix("see ((lect")), '{"kind":"ref","prefix":"lect"}');
+eq("(( alone opens it with nothing typed", JSON.stringify(refPrefix("see ((")), '{"kind":"ref","prefix":""}');
+eq("a closed pair is ordinary prose", refPrefix("a call f((x))"), null);
+eq("no parens, no menu", refPrefix("just words"), null);
+eq("a newline ends the trigger", refPrefix("((one\ntwo"), null);
+eq(
+  "the last unclosed pair wins",
+  JSON.stringify(refPrefix("f((x)) and ((lect")),
+  '{"kind":"ref","prefix":"lect"}'
+);
 
 console.log(failures === 0 ? "frontend: all pass" : `frontend: ${failures} FAILURES`);
 process.exit(failures ? 1 : 0);

@@ -99,6 +99,19 @@ func (a *API) CompleteTags(prefix string) ([]string, error) {
 	return a.svc.CompleteTags(prefix, 8)
 }
 
+// Blocks are the candidates for a ((block reference)): the same search the
+// palette runs, so what you can find you can point at.
+func (a *API) Blocks(query string) ([]tapp.BlockRef, error) {
+	return a.svc.Blocks(query, 8)
+}
+
+// RefTo gives a block a durable name and returns the link that points at it.
+// The anchor is written now and not before — a corpus nobody has referred to
+// has no anchors in it at all.
+func (a *API) RefTo(rel string, offset int, hash string) (string, error) {
+	return a.svc.RefTo(addr(rel, offset, hash))
+}
+
 func addr(rel string, offset int, hash string) tapp.Addr {
 	return tapp.Addr{Rel: rel, Offset: offset, Hash: hash}
 }

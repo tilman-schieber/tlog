@@ -32,6 +32,10 @@ func (c Command) TakesDate() bool { return c.Arg == "date" }
 // TakesAttachment reports whether the command wants a file chosen after it.
 func (c Command) TakesAttachment() bool { return c.Arg == "attachment" }
 
+// TakesText reports whether the command wants free text typed after it, which
+// the menu shows verbatim because there is nothing to resolve or preview.
+func (c Command) TakesText() bool { return c.Arg == "text" }
+
 // DeadlineProp is the property a deadline is written to. Capitalised because
 // that is what is already in these notes; reading is case-insensitive.
 const DeadlineProp = "Deadline"
@@ -47,6 +51,7 @@ var commands = []Command{
 	{Name: "page", Title: "Seite", Hint: "Link auf eine Seite", aliases: []string{"link", "seite"}},
 	{Name: "tag", Title: "Tag", Hint: "Tag einfügen"},
 	{Name: "file", Title: "Anhang", Hint: "Datei aus ~/.att einfügen", Arg: "attachment", aliases: []string{"anhang", "att", "attach"}},
+	{Name: "prop", Title: "Property", Hint: "Eigenschaft setzen: /prop status offen", Arg: "text", aliases: []string{"property", "eigenschaft"}},
 }
 
 // Commands returns the whole menu, in the order it is shown.
@@ -143,6 +148,18 @@ func (s *Service) RunCommand(a Addr, name, arg, text string, from, to int) (*Com
 		due = d
 	}
 
+	// A property is "key value": the first word names it, the rest is the
+	// value. An empty value removes the property, which is what SetProperty
+	// already means and the only way to take one off again.
+	var propKey, propVal string
+	if cmd.Name == "prop" {
+		propKey, propVal, _ = strings.Cut(strings.TrimSpace(arg), " ")
+		propVal = strings.TrimSpace(propVal)
+		if propKey == "" {
+			return nil, fmt.Errorf("which property? try /prop status offen")
+		}
+	}
+
 	insert := ""
 	if cmd.TakesAttachment() {
 		found, err := s.Attachments(arg, 1)
@@ -200,6 +217,12 @@ func (s *Service) RunCommand(a Addr, name, arg, text string, from, to int) (*Com
 			if !b.Quote() {
 				b.Text = "> " + b.Text
 				caret += 2
+			}
+		case "prop":
+			if propVal == "" {
+				b.DelProp(propKey)
+			} else {
+				b.SetProp(propKey, propVal)
 			}
 		}
 		return nil

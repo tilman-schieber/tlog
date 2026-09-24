@@ -286,6 +286,10 @@ function render() {
     tags.appendChild(el);
   });
 
+  // Drawing a page is also how the agenda is left: every way of navigating
+  // ends up here, so putting it in one place means no route can forget.
+  showOutline();
+
   renderOutline();
   renderTagged();
   renderRefs();
@@ -616,6 +620,17 @@ function linkPrefix(before) {
   return { kind: "page", prefix: rest };
 }
 
+// The trigger for a block reference is an unclosed (( to the left of the caret.
+// (( is free in the dialect and is what Logseq uses, so the habit carries; a
+// closed pair is ordinary prose, so f((x)) opens nothing.
+function refPrefix(before) {
+  const open = before.lastIndexOf("((");
+  if (open < 0) return null;
+  const rest = before.slice(open + 2);
+  if (rest.includes("))") || rest.includes("\n")) return null;
+  return { kind: "ref", prefix: rest };
+}
+
 async function updateCompletion(el) {
   const before = textBeforeCaret(el);
 
@@ -645,6 +660,19 @@ async function updateCompletion(el) {
       return drawCompletion();
     }
     return hideCompletion(); // not a command: ordinary text with a slash in it
+  }
+
+  const ref = refPrefix(before);
+  if (ref) {
+    const refs = (await call(() => api().Blocks(ref.prefix))) || [];
+    completion = {
+      ...ref,
+      refs,
+      items: refs.map((r) => r.text),
+      sel: 0,
+      el,
+    };
+    return drawCompletion();
   }
 
   const trigger = linkPrefix(before);
@@ -723,13 +751,22 @@ function drawCompletion() {
     hint.textContent =
       completion.kind === "tag"
         ? "no tags yet — type one to create it"
-        : "no page by that name yet — it is created when you go there";
+        : completion.kind === "ref"
+          ? "no block says that — type a word from the one you mean"
+          : "no page by that name yet — it is created when you go there";
     box.appendChild(hint);
   } else {
     completion.items.forEach((name, i) => {
       const item = document.createElement("div");
       item.className = "item" + (i === completion.sel ? " sel" : "");
-      item.textContent = name;
+      if (completion.kind === "ref") {
+        // Which page a block is on is most of what identifies it.
+        item.innerHTML =
+          `${escapeHTML(name.replace(/\n/g, " ").slice(0, 60))}` +
+          `<span class="hint"> ${escapeHTML(completion.refs[i].page)}</span>`;
+      } else {
+        item.textContent = name;
+      }
       item.onmousedown = (e) => {
         e.preventDefault();
         completion.sel = i;
@@ -824,8 +861,30 @@ function handleCompletionKey(e, el) {
   return false;
 }
 
+// replaceBefore swaps the n characters before the caret for text, as one edit
+// the browser can undo. Completions that append can just insert; a block
+// reference replaces what was typed, because (( is not part of what is stored.
+function replaceBefore(n, text) {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  for (let i = 0; i < n; i++) sel.modify("extend", "backward", "character");
+  document.execCommand("insertText", false, text);
+}
+
 // A page name closes the link; a tag does not, because you may want another.
-function acceptCompletion() {
+// A block reference is different in kind: accepting one gives that block a
+// durable name, which is a write to another file, and only then is there
+// anything to type here.
+async function acceptCompletion() {
+  if (completion.kind === "ref") {
+    const r = completion.refs[completion.sel];
+    const n = completion.prefix.length + 2;
+    hideCompletion();
+    if (!r) return;
+    const link = await call(() => api().RefTo(r.rel, r.offset, r.hash));
+    if (link) replaceBefore(n, link);
+    return;
+  }
   const name = completion.items[completion.sel];
   if (!name) return hideCompletion();
   const closing = completion.kind === "tag" ? "" : "]]";
@@ -1069,6 +1128,56 @@ if (window.runtime && window.runtime.OnFileDropOff) {
   window.addEventListener("dragleave", () => document.body.classList.remove("dropping"));
 }
 
+// --- the agenda -------------------------------------------------------------
+//
+// Everything with a deadline, soonest first — the same list `tlog due` prints,
+// from the same core call. It is a view rather than a page: nothing is written
+// by looking at it, and clicking a line goes to the block itself.
+
+async function openAgenda() {
+  const items = await call(() => api().Due(false));
+  if (items === null) return;
+
+  const list = $("agendalist");
+  list.innerHTML = "";
+  if (items.length === 0) {
+    const li = document.createElement("li");
+    li.className = "hint";
+    li.textContent = "nothing is due — /deadline on a block puts it here";
+    list.appendChild(li);
+  }
+  items.forEach((it) => {
+    const li = document.createElement("li");
+    li.className = "agendaitem t-" + (it.state || "done");
+    li.innerHTML =
+      `<span class="due">${escapeHTML(it.due)}</span>` +
+      `<span class="when">${escapeHTML(it.label || "")}</span>` +
+      `<span class="what">${decorate(it.text)}</span>` +
+      `<span class="where">${escapeHTML(it.page)}</span>`;
+    li.onclick = async () => {
+      const p = await call(() => api().OpenRel(it.rel));
+      if (!p) return;
+      focusOffset = it.offset;
+      show(p); // which puts the outline back
+    };
+    list.appendChild(li);
+  });
+
+  $("outline").hidden = true;
+  $("tagged").hidden = true;
+  $("refs").hidden = true;
+  $("pagehead").hidden = true;
+  $("agenda").hidden = false;
+}
+
+// showOutline puts the page back. render calls it, so every way of navigating
+// away from the agenda closes it without having to remember.
+function showOutline() {
+  $("agenda").hidden = true;
+  $("pagehead").hidden = false;
+  $("outline").hidden = false;
+}
+
 // --- noticing an edit made somewhere else -----------------------------------
 
 // shouldReload decides what a change on disk means for what is on screen. It is
@@ -1110,6 +1219,8 @@ if (window.runtime && window.runtime.EventsOn) {
     }
   });
 }
+
+$("agendabtn").onclick = () => openAgenda();
 
 (async function start() {
   const root = await call(() => api().Root());

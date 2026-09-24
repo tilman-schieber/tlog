@@ -385,7 +385,6 @@ protects the file itself. fsnotify has the same problem, sooner.
 - A name that parses as an ISO date resolves to that day's journal rather than
   to a page, so `[[2026-09-17]]` and `tlog open 2026-09-17` go where you mean.
   A page cannot therefore be named after a date; nothing else claims a name.
-- Block references have a syntax and a graph, but no UI for creating them.
 - `Outdent` moves a block to just after its parent and leaves its following
   siblings where they were. Some outliners instead adopt those siblings as
   children. Predictable was preferred over clever.

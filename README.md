@@ -154,6 +154,21 @@ blank window; Wails detects the driver and disables it. Build natively rather
 than shipping an AppImage — a bundled, stale `libwayland-client` is the usual
 cause of an empty window on Wayland.
 
+## Referring to one block
+
+`((` opens a chooser of blocks — the same search the palette runs, so whatever
+you can find you can point at. Picking one gives that block a durable name and
+types a link to it:
+
+```
+see ((lecture          →   see [[Timetable#^k3f9q2]]
+```
+
+The `^k3f9q2` is written into the other file at that moment and not before. A
+corpus nobody has referred to has no anchors in it at all, which is why reading
+never writes. The reference is an ordinary link, so it appears in that page's
+backlinks like any other mention, and following it goes to the block.
+
 ## Tasks and deadlines
 
 `/` in a block opens a command menu, named after Logseq's so the muscle memory
@@ -168,6 +183,7 @@ is its effect, never a slash.
 | `/quote` `/code` `/table` | a quotation, a code fence, a `csv` table |
 | `/file report` | a link to an attachment, chosen from the shelf |
 | `/page` `/tag` | a `[[link]]` or a `#tag`, where completion takes over |
+| `/prop status offen` | `status:: offen` on the block; no value removes it |
 
 The date argument is typed, not picked. A calendar appears beside the menu
 showing what the shorthand resolved to — confirmation, so a mistyped date is
@@ -194,6 +210,9 @@ Finished work is never overdue, however long ago it was due.
 tlog due          # everything open and dated, soonest first
 tlog due -all     # including what is done
 ```
+
+**Agenda** in the desktop app's sidebar is that same list, from the same call.
+Clicking a line goes to the block itself.
 
 ## Settings
 

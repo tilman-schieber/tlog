@@ -23,6 +23,10 @@ type completion struct {
 	// own, and what it inserts is an effect rather than text.
 	cmds  []tapp.Command
 	files []tapp.AttachView
+	// refs is the (( menu: blocks to point at. Accepting one gives that block
+	// a durable name, which is a write to another file, so it is kept here
+	// rather than reduced to a string like the other candidates.
+	refs  []tapp.BlockRef
 	arg   string
 	start int // rune offset where the "/" sits
 	// closing is appended when a candidate is accepted: page names finish the
@@ -39,7 +43,7 @@ const completionLimit = 8
 // updateCompletion re-evaluates the trigger after every keystroke. The trigger
 // is an unclosed [[ to the left of the cursor.
 func (m *Model) updateCompletion() {
-	if m.slashCompletion() {
+	if m.slashCompletion() || m.refCompletion() {
 		return
 	}
 	prefix, ok := linkPrefix(m.ed.textBefore())
@@ -80,6 +84,78 @@ func (m *Model) updateCompletion() {
 		}
 	}
 	m.comp = &completion{active: true, prefix: prefix, items: items, sel: sel, moved: moved, closing: "]]"}
+}
+
+// refCompletion opens the block-reference menu when (( has been typed. It
+// reports whether it took over.
+//
+// (( is free in the dialect and is what Logseq uses, so the habit carries. The
+// candidates are the same search the palette runs: what you can find, you can
+// point at.
+func (m *Model) refCompletion() bool {
+	prefix, ok := refPrefix(m.ed.textBefore())
+	if !ok {
+		return false
+	}
+	l := m.snapshot()
+	if l == nil {
+		return false
+	}
+	refs := l.Blocks(prefix, completionLimit)
+	items := make([]string, 0, len(refs))
+	for _, r := range refs {
+		items = append(items, oneLine(r.Text)+"  "+styleMuted.Render(r.Page))
+	}
+	sel := 0
+	if m.comp != nil && m.comp.refs != nil && m.comp.sel < len(items) {
+		sel = m.comp.sel
+	}
+	m.comp = &completion{active: true, prefix: prefix, items: items, refs: refs, sel: sel}
+	return true
+}
+
+// refPrefix is an unclosed (( to the left of the caret.
+func refPrefix(before string) (string, bool) {
+	open := strings.LastIndex(before, "((")
+	if open < 0 {
+		return "", false
+	}
+	rest := before[open+2:]
+	if strings.ContainsAny(rest, "\n") || strings.Contains(rest, "))") {
+		return "", false
+	}
+	return rest, true
+}
+
+// oneLine flattens a block for a menu row: a reference candidate may be a
+// multi-line block, and a menu is one line per candidate.
+func oneLine(s string) string {
+	s = strings.ReplaceAll(s, "\n", " ")
+	if len([]rune(s)) > 60 {
+		s = string([]rune(s)[:57]) + "…"
+	}
+	return s
+}
+
+// acceptRef gives the chosen block a durable name and types a link to it. The
+// anchor is written now and not before, which is the whole point of lazy
+// anchors: a corpus nobody has referred to has none.
+func (m *Model) acceptRef() {
+	if m.comp.sel >= len(m.comp.refs) {
+		m.comp = nil
+		return
+	}
+	r := m.comp.refs[m.comp.sel]
+	link, err := m.svc.RefTo(r.Addr())
+	if err != nil {
+		m.fail(err)
+		m.comp = nil
+		return
+	}
+	// The (( goes too: what stays in the file is an ordinary link.
+	m.ed.replaceBefore(len([]rune(m.comp.prefix))+2, link)
+	m.comp = nil
+	m.status = "referring to a block on " + r.Page
 }
 
 func (m *Model) currentCompletion() string {
@@ -215,11 +291,14 @@ func (m *Model) completionKey(k string) (bool, tea.Cmd) {
 		}
 		return true, nil
 	case "tab", "enter":
-		if m.comp.cmds != nil {
+		switch {
+		case m.comp.cmds != nil:
 			m.runCommand()
-			return true, nil
+		case m.comp.refs != nil:
+			m.acceptRef()
+		default:
+			m.acceptCompletion()
 		}
-		m.acceptCompletion()
 		return true, nil
 	}
 	return false, nil

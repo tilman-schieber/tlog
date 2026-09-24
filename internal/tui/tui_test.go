@@ -1120,3 +1120,83 @@ func TestAChangeElsewhereWaitsUntilYouStopTyping(t *testing.T) {
 		t.Fatal("still marked dirty after catching up")
 	}
 }
+
+func TestSlashPropSetsAProperty(t *testing.T) {
+	m := newModel(t)
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "the meeting /prop status offen")
+	send(t, m, k(tea.KeyEnter)) // the menu is open; enter runs the command
+	send(t, m, k(tea.KeyEsc))
+
+	if got := onDisk(t, m); got != "- the meeting \n  status:: offen\n" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestBlockReferenceIsMadeWithDoubleParens(t *testing.T) {
+	m := newModel(t)
+	if _, err := m.svc.AddToPage("Timetable", "the lecture is at nine"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.load(m.doc.Rel); err != nil {
+		t.Fatal(err)
+	}
+
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "see ((lecture")
+	if m.comp == nil || len(m.comp.refs) != 1 {
+		t.Fatalf("no block was offered: %+v", m.comp)
+	}
+	send(t, m, k(tea.KeyEnter), k(tea.KeyEsc))
+
+	// An anchor was written on the target, and a link to it typed here.
+	target, err := m.svc.Store.Read("pages/Timetable.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(target.Data), " ^") {
+		t.Fatalf("no anchor on the target: %q", target.Data)
+	}
+	here := onDisk(t, m)
+	if !strings.Contains(here, "see [[Timetable#^") || strings.Contains(here, "((") {
+		t.Fatalf("got %q", here)
+	}
+}
+
+func TestABlockReferenceShowsUpAsABacklink(t *testing.T) {
+	m := newModel(t)
+	if _, err := m.svc.AddToPage("Timetable", "the lecture is at nine"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.load(m.doc.Rel); err != nil {
+		t.Fatal(err)
+	}
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "see ((lecture")
+	send(t, m, k(tea.KeyEnter), k(tea.KeyEsc))
+
+	// The whole point of a reference is that the other page knows about it.
+	m.goTo("pages/Timetable.md")
+	found := false
+	for _, r := range m.rows {
+		if r.kind == rowRef && strings.Contains(r.text, "see") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("the reference is not visible from the other end: %+v", m.rows)
+	}
+}
+
+func TestParensInProseAreNotAReference(t *testing.T) {
+	m := newModel(t)
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "a function call f((x))")
+	if m.comp != nil && m.comp.refs != nil {
+		t.Fatal("closed parens opened the reference menu")
+	}
+	send(t, m, k(tea.KeyEsc))
+	if got := onDisk(t, m); got != "- a function call f((x))\n" {
+		t.Fatalf("got %q", got)
+	}
+}
