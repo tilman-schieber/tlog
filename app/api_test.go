@@ -445,3 +445,60 @@ func TestSettingsFromTheApp(t *testing.T) {
 		t.Fatal("an unknown key should be refused")
 	}
 }
+
+// Enter in the window is one call now. It used to be SetText followed by
+// NewBlock, so the frontend has to be able to chain from what Split hands back.
+func TestSplitAndMergeChainLikeTheFrontendDoes(t *testing.T) {
+	a := newAPI(t)
+	p, _ := a.Today()
+	e, err := a.AppendBlock(p.Rel, p.Hash, "onetwo")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e, err = a.SplitBlock(e.Page.Rel, e.Offset, e.Page.Hash, "one", "two", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(e.Page.Blocks) != 2 {
+		t.Fatalf("blocks: %+v", e.Page.Blocks)
+	}
+	// The offset must address the new block, because that is where the caret
+	// goes and what the next keystroke edits.
+	if b := blockAt(e.Page.Blocks, e.Offset); b == nil || b.Text != "two" {
+		t.Fatalf("split returned %d, blocks %+v", e.Offset, e.Page.Blocks)
+	}
+
+	e, err = a.MergeIntoPrevious(e.Page.Rel, e.Offset, e.Page.Hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(e.Page.Blocks) != 1 || e.Page.Blocks[0].Text != "onetwo" {
+		t.Fatalf("merge: %+v", e.Page.Blocks)
+	}
+	if b := blockAt(e.Page.Blocks, e.Offset); b == nil {
+		t.Fatalf("merge returned %d, which is no block", e.Offset)
+	}
+}
+
+func TestSplitRefusesAStaleHash(t *testing.T) {
+	a := newAPI(t)
+	p, _ := a.Today()
+	e, _ := a.AppendBlock(p.Rel, p.Hash, "mine")
+	stale := e.Page.Hash
+	if _, err := a.SetText(e.Page.Rel, e.Offset, stale, "theirs"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.SplitBlock(e.Page.Rel, e.Offset, stale, "mi", "ne", false); err == nil {
+		t.Fatal("the window overwrote an edit it had not seen")
+	}
+}
+
+func blockAt(bs []tapp.BlockView, off int) *tapp.BlockView {
+	for i := range bs {
+		if bs[i].Offset == off {
+			return &bs[i]
+		}
+	}
+	return nil
+}
