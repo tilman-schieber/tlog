@@ -25,6 +25,8 @@ usage:
   tlog open <page>          print the path of a page, creating it if needed
   tlog add [-p page] text   append a block to today's journal, or to a page
   tlog import [-from dir]   import a Logseq graph into the notes directory
+  tlog attach FILE...       put files on the ~/.att shelf and link them here
+  tlog files [query]        what is on the shelf, newest first
   tlog due [-all]           what is dated and still open, soonest first
   tlog push [-auto on|off]  push the notes now, or set pushing on every commit
   tlog version              print the version
@@ -100,6 +102,10 @@ func Main(args []string, stdout, stderr io.Writer) int {
 		return cmdPush(rest, stdout, stderr, svc)
 	case "due":
 		return cmdDue(rest, stdout, stderr, svc)
+	case "attach":
+		return cmdAttach(rest, stdout, stderr, svc)
+	case "files":
+		return cmdFiles(rest, stdout, stderr, svc)
 	case "version":
 		fmt.Fprintln(stdout, Version)
 		return 0
@@ -164,6 +170,73 @@ func cmdAdd(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 		fmt.Fprintln(stdout, svc.Store.Abs(rel))
 		return nil
 	})
+}
+
+func cmdAttach(args []string, stdout, stderr io.Writer, svc *app.Service) int {
+	fs := flag.NewFlagSet("attach", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	page := fs.String("p", "", "attach to this page instead of today's journal")
+	only := fs.Bool("link-only", false, "put the file on the shelf and print the link, writing no note")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() == 0 {
+		fmt.Fprintln(stderr, "tlog attach: which file?")
+		return 2
+	}
+
+	return run(stderr, svc, func() error {
+		if *only {
+			added, err := svc.Attach(fs.Args()...)
+			for _, a := range added {
+				fmt.Fprintln(stdout, a.Link)
+			}
+			return err
+		}
+		rel := svc.TodayRel()
+		if *page != "" {
+			r, _, err := svc.ResolvePage(*page)
+			if err != nil {
+				return err
+			}
+			rel = r
+		}
+		added, err := svc.AttachTo(rel, fs.Args()...)
+		for _, a := range added {
+			fmt.Fprintf(stdout, "%s  %s\n", a.Name, a.Size)
+		}
+		if err == nil && len(added) > 0 {
+			fmt.Fprintln(stdout, svc.Store.Abs(rel))
+		}
+		return err
+	})
+}
+
+func cmdFiles(args []string, stdout, stderr io.Writer, svc *app.Service) int {
+	fs := flag.NewFlagSet("files", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	links := fs.Bool("links", false, "print the Markdown links instead of a table")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	items, err := svc.Attachments(strings.Join(fs.Args(), " "), 0)
+	if err != nil {
+		fmt.Fprintf(stderr, "tlog: %v\n", err)
+		return 1
+	}
+	if len(items) == 0 {
+		fmt.Fprintf(stdout, "nothing on the shelf at %s\n", svc.AttachDir())
+		return 0
+	}
+	for _, a := range items {
+		if *links {
+			fmt.Fprintln(stdout, a.Link)
+			continue
+		}
+		fmt.Fprintf(stdout, "%s  %9s  %s\n", a.When, a.Size, a.Name)
+	}
+	return 0
 }
 
 func cmdDue(args []string, stdout, stderr io.Writer, svc *app.Service) int {

@@ -29,6 +29,9 @@ type Command struct {
 // TakesDate reports whether the command wants a date typed after it.
 func (c Command) TakesDate() bool { return c.Arg == "date" }
 
+// TakesAttachment reports whether the command wants a file chosen after it.
+func (c Command) TakesAttachment() bool { return c.Arg == "attachment" }
+
 // DeadlineProp is the property a deadline is written to. Capitalised because
 // that is what is already in these notes; reading is case-insensitive.
 const DeadlineProp = "Deadline"
@@ -43,6 +46,7 @@ var commands = []Command{
 	{Name: "table", Title: "Tabelle", Hint: "Tabelle als csv einfügen", aliases: []string{"tabelle", "csv"}},
 	{Name: "page", Title: "Seite", Hint: "Link auf eine Seite", aliases: []string{"link", "seite"}},
 	{Name: "tag", Title: "Tag", Hint: "Tag einfügen"},
+	{Name: "file", Title: "Anhang", Hint: "Datei aus ~/.att einfügen", Arg: "attachment", aliases: []string{"anhang", "att", "attach"}},
 }
 
 // Commands returns the whole menu, in the order it is shown.
@@ -140,6 +144,16 @@ func (s *Service) RunCommand(a Addr, name, arg, text string, from, to int) (*Com
 	}
 
 	insert := ""
+	if cmd.TakesAttachment() {
+		found, err := s.Attachments(arg, 1)
+		if err != nil {
+			return nil, err
+		}
+		if len(found) == 0 {
+			return nil, fmt.Errorf("no attachment matches %q — `att drop` puts one there", arg)
+		}
+		insert = found[0].Link
+	}
 	switch cmd.Name {
 	case "date":
 		insert = "[[" + dates.Format(due) + "]]"

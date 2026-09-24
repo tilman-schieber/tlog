@@ -41,6 +41,8 @@ tlog open "Project Foo"       # print a page's path, creating it if needed
 tlog add "buy milk"           # append a block to today's journal
 tlog add -p "Project Foo" "implement the parser"
 echo "note" | tlog add        # append from a pipe
+tlog attach report.pdf        # onto the shelf, and linked in today's journal
+tlog files                    # what is on the shelf, newest first
 tlog due                      # what is dated and still open, soonest first
 tlog import                   # one-time import from a Logseq graph
 tlog push                     # send the notes to their remote
@@ -163,6 +165,7 @@ is its effect, never a slash.
 | `/deadline fr` | `Deadline:: 2026-09-25` on the block |
 | `/date morgen` | `[[2026-09-25]]` inline, a link to that day's journal |
 | `/quote` `/code` `/table` | a quotation, a code fence, a `csv` table |
+| `/file report` | a link to an attachment, chosen from the shelf |
 | `/page` `/tag` | a `[[link]]` or a `#tag`, where completion takes over |
 
 The date argument is typed, not picked. A calendar appears beside the menu
@@ -190,6 +193,34 @@ Finished work is never overdue, however long ago it was due.
 tlog due          # everything open and dated, soonest first
 tlog due -all     # including what is done
 ```
+
+## Attachments
+
+Files live in `~/.att`, shared with [att](https://github.com/tilman-schieber/att)
+rather than in a second place of tlog's own: the same flat store with original
+names, the same collision rule, and byte-for-byte the same Markdown link. So
+`att drop` and `tlog attach` fill one shelf, and a link written by either is
+understood by both.
+
+```sh
+tlog attach report.pdf slides.pptx   # onto the shelf, linked in today's journal
+tlog attach -p "Projekt" report.pdf  # ...or on a page
+tlog attach -link-only report.pdf    # shelved, link printed, no note written
+tlog files                           # the shelf, newest first
+tlog files budget                    # narrowed, fuzzily if nothing contains it
+```
+
+In a note, `/file` offers the shelf. **In the desktop app, drop files on the
+window** — they land on the shelf and their links land in the page you are
+reading. Clicking one opens it in the Finder.
+
+The original file is never moved: attaching it to a note should not take it
+away from whatever else refers to it. Images become `![embeds]`, everything
+else a plain link, and nothing on the shelf is ever overwritten — a clash gets
+a numeric suffix, `report.pdf` then `report-2.pdf`.
+
+att is not required. It owns the workflow tlog does not have — a drop folder
+and a watcher — and if it is installed the two simply share a directory.
 
 ## Pushing
 

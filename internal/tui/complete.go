@@ -23,6 +23,7 @@ type completion struct {
 	// A slash command is a different kind of completion: it has a menu of its
 	// own, and what it inserts is an effect rather than text.
 	cmds  []tapp.Command
+	files []tapp.AttachView
 	arg   string
 	start int // rune offset where the "/" sits
 	// closing is appended when a candidate is accepted: page names finish the
@@ -105,17 +106,34 @@ func (m *Model) slashCompletion() bool {
 	}
 	items := make([]string, 0, len(cmds))
 	for _, c := range cmds {
-		label := c.Title
+		label := c.Title + "  " + c.Hint
 		if c.TakesDate() {
 			if d, ok := tapp.PreviewDate(arg); ok {
 				label = c.Title + "  → " + dates.Short(d) + "  " + dates.Describe(d, time.Now())
-			} else {
-				label = c.Title + "  " + c.Hint
 			}
-		} else {
-			label = c.Title + "  " + c.Hint
 		}
 		items = append(items, label)
+	}
+
+	// A file command shows the shelf itself: what you are choosing between is
+	// the attachments, not a menu entry called "attachment".
+	if len(cmds) == 1 && cmds[0].TakesAttachment() {
+		found, err := m.svc.Attachments(arg, 8)
+		if err == nil && len(found) > 0 {
+			items = items[:0]
+			for _, f := range found {
+				items = append(items, f.Name+"  "+styleMuted.Render(f.Size+"  "+f.When))
+			}
+			sel := 0
+			if m.comp != nil && m.comp.files != nil && m.comp.sel < len(items) {
+				sel = m.comp.sel
+			}
+			m.comp = &completion{
+				active: true, items: items, cmds: cmds, files: found,
+				arg: arg, start: start, sel: sel,
+			}
+			return true
+		}
 	}
 	sel := 0
 	if m.comp != nil && m.comp.cmds != nil && m.comp.sel < len(items) {
@@ -226,7 +244,16 @@ func (m *Model) runCommand() {
 	if m.comp == nil || m.comp.sel >= len(m.comp.cmds) || m.edBlock == nil {
 		return
 	}
-	cmd := m.comp.cmds[m.comp.sel]
+	cmd := m.comp.cmds[0]
+	arg := m.comp.arg
+	if m.comp.files != nil {
+		// The menu was the shelf, so the selection names the file.
+		if m.comp.sel < len(m.comp.files) {
+			arg = m.comp.files[m.comp.sel].Name
+		}
+	} else {
+		cmd = m.comp.cmds[m.comp.sel]
+	}
 
 	text := m.ed.String()
 	from := m.comp.start
@@ -262,7 +289,7 @@ func (m *Model) runCommand() {
 
 	res, err := m.svc.RunCommand(
 		tapp.Addr{Rel: m.doc.Rel, Offset: flat[index].Start, Hash: m.doc.Hash},
-		cmd.Name, m.comp.arg, text, from, to,
+		cmd.Name, arg, text, from, to,
 	)
 	if err != nil {
 		m.errMsg = err.Error()

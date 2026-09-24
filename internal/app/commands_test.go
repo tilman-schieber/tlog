@@ -1,6 +1,8 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -185,5 +187,42 @@ func TestOutOfRangeSpanIsRefused(t *testing.T) {
 	rel, _ := s.AddToday("x")
 	if _, err := s.RunCommand(addrOf(t, s, rel, 0), "todo", "", "x", 5, 99); err == nil {
 		t.Fatal("a span outside the text should be refused, not clamped")
+	}
+}
+
+func TestSlashFileInsertsTheLink(t *testing.T) {
+	shelf := t.TempDir()
+	t.Setenv("ATT_DIR", shelf)
+	src := filepath.Join(t.TempDir(), "Protokoll.pdf")
+	if err := os.WriteFile(src, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newSvc(t)
+	if _, err := s.Attach(src); err != nil {
+		t.Fatal(err)
+	}
+	rel, _ := s.AddToday("siehe /file protokoll")
+	run(t, s, rel, 0, "siehe /file protokoll", "file", "protokoll", 6, 21)
+
+	got := body(t, s, rel)
+	if !strings.Contains(got, "[Protokoll.pdf](file://") {
+		t.Fatalf("no link: %q", got)
+	}
+	if strings.Contains(got, "/file") {
+		t.Fatalf("the command survived: %q", got)
+	}
+}
+
+func TestSlashFileWithNothingOnTheShelfSaysWhereToPutOne(t *testing.T) {
+	t.Setenv("ATT_DIR", t.TempDir())
+	s := newSvc(t)
+	rel, _ := s.AddToday("x")
+	_, err := s.RunCommand(addrOf(t, s, rel, 0), "file", "nope", "x", 1, 1)
+	if err == nil || !strings.Contains(err.Error(), "att drop") {
+		t.Fatalf("expected a message naming how to put one there, got %v", err)
+	}
+	if got := body(t, s, rel); got != "- x\n" {
+		t.Fatalf("the block was modified anyway: %q", got)
 	}
 }

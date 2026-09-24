@@ -246,3 +246,37 @@ func (a *API) RunCommand(rel string, offset int, hash, name, arg, text string, f
 
 // Due lists everything dated and still open, soonest first.
 func (a *API) Due(includeDone bool) ([]tapp.DueItem, error) { return a.svc.Due(includeDone) }
+
+// --- attachments ------------------------------------------------------------
+
+// AttachDir is the shared shelf, shown so it is never a mystery where a
+// dropped file went.
+func (a *API) AttachDir() string { return a.svc.AttachDir() }
+
+// Attachments lists the shelf, narrowed by a query.
+func (a *API) Attachments(query string) ([]tapp.AttachView, error) {
+	return a.svc.Attachments(query, 12)
+}
+
+// AttachFiles puts files on the shelf and writes their links into a page as one
+// block — what a drag and drop onto the window means.
+func (a *API) AttachFiles(rel string, paths []string) (*Edit, error) {
+	if len(paths) == 0 {
+		return nil, fmt.Errorf("nothing to attach")
+	}
+	if _, err := a.svc.AttachTo(rel, paths...); err != nil {
+		return nil, err
+	}
+	page, err := a.svc.View(rel)
+	if err != nil {
+		return nil, err
+	}
+	return &Edit{Page: page}, nil
+}
+
+// ChooseFiles opens the system file dialog, for when there is nothing to drag.
+func (a *API) ChooseFiles() ([]string, error) {
+	return runtime.OpenMultipleFilesDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Anhängen",
+	})
+}

@@ -46,6 +46,12 @@ func main() {
 		Bind:          []any{api},
 		OnBeforeClose: api.onClose,
 		OnStartup:     func(ctx context.Context) { api.ctx = ctx },
+		// A window can be dropped onto, which a terminal cannot. Files land on
+		// the shared shelf and their links land in the page being read.
+		DragAndDrop: &options.DragAndDrop{
+			EnableFileDrop:     true,
+			DisableWebViewDrop: true,
+		},
 		Mac: &mac.Options{
 			TitleBar:             mac.TitleBarHiddenInset(),
 			WebviewIsTransparent: false,

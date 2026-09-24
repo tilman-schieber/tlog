@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -346,5 +348,58 @@ func TestMonthIsLaidOutMondayFirst(t *testing.T) {
 	// An unparseable date still yields a usable month rather than nothing.
 	if got := a.Month("nonsense"); len(got.Days) == 0 {
 		t.Fatal("a bad date should still draw a calendar")
+	}
+}
+
+// --- attachments ------------------------------------------------------------
+
+func TestAttachFromTheApp(t *testing.T) {
+	shelf := t.TempDir()
+	t.Setenv("ATT_DIR", shelf)
+
+	src := filepath.Join(t.TempDir(), "Quartalsbericht.pdf")
+	if err := os.WriteFile(src, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a := newAPI(t)
+	p, _ := a.Today()
+
+	// What a drop on the window means: the file onto the shelf, the link into
+	// the page being read.
+	e, err := a.AttachFiles(p.Rel, []string{src})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(e.Page.Blocks) != 1 || !strings.Contains(e.Page.Blocks[0].Text, "file://") {
+		t.Fatalf("blocks: %+v", e.Page.Blocks)
+	}
+	if !strings.Contains(e.Page.Blocks[0].Text, "Quartalsbericht.pdf") {
+		t.Fatalf("link: %q", e.Page.Blocks[0].Text)
+	}
+
+	// The original stays where it was.
+	if _, err := os.Stat(src); err != nil {
+		t.Fatalf("the original was moved: %v", err)
+	}
+	// And the shelf is the shared one.
+	if !strings.HasPrefix(a.AttachDir(), shelf) {
+		t.Fatalf("shelf: %q", a.AttachDir())
+	}
+
+	found, err := a.Attachments("quartal")
+	if err != nil || len(found) != 1 {
+		t.Fatalf("lookup: %+v %v", found, err)
+	}
+	if found[0].Size == "" || found[0].When == "" || found[0].Link == "" {
+		t.Fatalf("an attachment should be showable: %+v", found[0])
+	}
+}
+
+func TestAttachingNothingIsRefused(t *testing.T) {
+	a := newAPI(t)
+	p, _ := a.Today()
+	if _, err := a.AttachFiles(p.Rel, nil); err == nil {
+		t.Fatal("expected a refusal")
 	}
 }

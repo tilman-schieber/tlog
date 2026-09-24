@@ -1,13 +1,15 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/tilman-schieber/tlog/internal/app"
+	tapp "github.com/tilman-schieber/tlog/internal/app"
 )
 
 // The outliner is driven headlessly here: Update takes key messages and the
@@ -17,7 +19,7 @@ import (
 
 func newModel(t *testing.T) *Model {
 	t.Helper()
-	svc, err := app.New(t.TempDir())
+	svc, err := tapp.New(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -783,5 +785,52 @@ func TestSlashMenuCanBeDismissed(t *testing.T) {
 	send(t, m, k(tea.KeyEsc)) // leave insert
 	if got := onDisk(t, m); !strings.Contains(got, "/todo") {
 		t.Fatalf("dismissing should leave the literal text: %q", got)
+	}
+}
+
+func TestSlashFileOffersTheShelf(t *testing.T) {
+	shelf := t.TempDir()
+	t.Setenv("ATT_DIR", shelf)
+	src := filepath.Join(t.TempDir(), "Quartalsbericht.pdf")
+	if err := os.WriteFile(src, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := newModel(t)
+	if _, err := m.svc.Attach(src); err != nil {
+		t.Fatal(err)
+	}
+
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "siehe /file quartal")
+	if m.comp == nil || m.comp.files == nil {
+		t.Fatalf("the shelf was not offered: %+v", m.comp)
+	}
+	if !strings.Contains(m.comp.items[0], "Quartalsbericht.pdf") {
+		t.Fatalf("wrong candidate: %q", m.comp.items[0])
+	}
+
+	send(t, m, k(tea.KeyEnter))
+	send(t, m, k(tea.KeyEsc))
+
+	got := onDisk(t, m)
+	if !strings.Contains(got, "[Quartalsbericht.pdf](file://") {
+		t.Fatalf("no link written: %q", got)
+	}
+	if strings.Contains(got, "/file") {
+		t.Fatalf("the command survived: %q", got)
+	}
+}
+
+func TestSlashFileWithNoMatchSaysSo(t *testing.T) {
+	t.Setenv("ATT_DIR", t.TempDir())
+	m := newModel(t)
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "/file")
+	// Nothing on the shelf, so the command is offered but has nothing to insert.
+	m.comp = &completion{active: true, cmds: []tapp.Command{{Name: "file", Arg: "attachment"}}, sel: 0, start: 0}
+	m.runCommand()
+	if m.errMsg == "" || !strings.Contains(m.errMsg, "att drop") {
+		t.Fatalf("expected a message naming how to put one there, got %q", m.errMsg)
 	}
 }

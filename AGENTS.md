@@ -25,6 +25,7 @@ cmd/tlog/            main — the CLI and the outliner
 app/                 the desktop app (Wails): main.go, api.go, frontend/
 internal/markdown/   the dialect: parse, render, structural edits
 internal/store/      the notes directory: paths, CAS writes, git
+internal/attach/     the shelf shared with att
 internal/dates/      typed shorthand in, ISO out
 internal/graph/      derived view: pages, links, backlinks, search
 internal/app/        the core — every semantic operation
@@ -60,6 +61,11 @@ guarantee is gone.
 **Slash commands live in one table.** `internal/app/commands.go` holds the menu
 and does the cutting of `/name arg` out of the text. Adding one is a table entry
 plus a case; do not teach an adapter about a command it can look up.
+
+**Attachments share att's directory and att's format.** `internal/attach`
+restates att's rules because Go forbids importing another module's internal
+packages. If either side's link format changes they must change together, and
+`TestLinkFormat` is what would catch it.
 
 **Dates are stored as ISO, always.** `internal/dates` is forgiving on input and
 strict on output. Anything that cannot be parsed is refused rather than guessed

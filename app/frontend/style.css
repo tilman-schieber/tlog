@@ -384,6 +384,10 @@ blockquote {
 #complete .item.sel { background: var(--sel); }
 #complete .hint { color: var(--fg-muted); font-size: 12px; }
 #complete .cmds { min-width: 168px; max-height: 224px; overflow-y: auto; }
+#complete .cmds.files { min-width: 280px; }
+
+/* A window can be dropped onto; say so while something is over it. */
+body.dropping #main { outline: 2px dashed var(--accent); outline-offset: -8px; }
 
 /* The calendar is confirmation, not input: it shows what the shorthand meant. */
 #complete .datepick {

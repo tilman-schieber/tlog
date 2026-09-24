@@ -226,6 +226,29 @@ written down beats one that is clever.
 is just text that looks like a date. Run against the real corpus for the first
 time it surfaced something seven days overdue, which is the whole argument.
 
+## Attachments
+
+**Share att's directory rather than inventing one.** `att` already owns the
+attachment store, it is already live in these notes, and it owns the half of the
+workflow tlog has no business in — a drop folder and a watcher. tlog does the
+other half: shelving a file from inside a note, and finding one again while
+writing.
+
+**The rules are restated, not imported.** att's packages are internal to its
+module, so Go forbids importing them. The handful that matter — a file keeps its
+name, a clash gets a numeric suffix, nothing is overwritten, an image becomes an
+embed — are small, unlikely to move, and pinned by tests that were checked
+against att's real output byte for byte, escaped brackets and percent-encoded
+spaces included.
+
+**The original is never moved.** att's `add` copies and so does tlog's:
+attaching a file to a note should not take it away from whatever else refers to
+it.
+
+**A window can be dropped onto, and a terminal cannot.** File drop is the one
+thing the desktop app does that the outliner has no equivalent for, and it is
+the reason to have the app open while writing.
+
 ## Pushing
 
 **Pushing is opt in, per notes directory.** The setting lives in the notes
