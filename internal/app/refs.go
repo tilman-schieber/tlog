@@ -13,15 +13,13 @@ import "strings"
 // BlockRef is a block that could be referred to: what it says, so a chooser can
 // show it, and where it is, so a link to it can be asked for.
 type BlockRef struct {
+	Addr   Addr   `json:"addr"`
 	Text   string `json:"text"`
 	Page   string `json:"page"`
 	Rel    string `json:"rel"`
 	Offset int    `json:"offset"`
 	Hash   string `json:"hash"`
 }
-
-// Addr is where this block is, for asking Anchor or RefTo about it.
-func (r BlockRef) Addr() Addr { return Addr{Rel: r.Rel, Offset: r.Offset, Hash: r.Hash} }
 
 // Blocks finds blocks to refer to. It is the same search the palette uses, so
 // what you can find you can refer to, with empty blocks left out because a
@@ -33,6 +31,7 @@ func (l *Lookup) Blocks(query string, limit int) []BlockRef {
 			continue
 		}
 		out = append(out, BlockRef{
+			Addr:   Addr{Rel: h.Page.Rel, Offset: h.Offset, Hash: h.Hash},
 			Text:   h.Block.Text,
 			Page:   h.Page.Name,
 			Rel:    h.Page.Rel,

@@ -146,7 +146,7 @@ func (m *Model) acceptRef() {
 		return
 	}
 	r := m.comp.refs[m.comp.sel]
-	link, err := m.svc.RefTo(r.Addr())
+	link, err := m.svc.RefTo(r.Addr)
 	if err != nil {
 		m.fail(err)
 		m.comp = nil

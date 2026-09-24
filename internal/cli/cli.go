@@ -33,6 +33,17 @@ usage:
   tlog push [-auto on|off]  push the notes now, or set pushing on every commit
   tlog version              print the version
 
+for scripts and agents:
+  tlog search <query>       find blocks; -json gives an address for each
+  tlog view [page]          print a page; -addr shows addresses, -json all of it
+  tlog index                every journal, page and tag
+  tlog block <addr> <op>    change one block — see: tlog block help
+
+Every read that can be acted on carries an address, and every write takes one.
+The address holds the hash of the file it was read from, so a write from a
+stale read is refused rather than landing in the wrong place. Exit codes say
+which: 3 the move does not exist, 4 the file moved since you read it.
+
 global flags:
   -dir <path>   notes directory (default $TLOG_DIR, else ~/notes)
 
@@ -110,6 +121,14 @@ func Main(args []string, stdout, stderr io.Writer) int {
 		return cmdConfig(rest, stdout, stderr, svc)
 	case "files":
 		return cmdFiles(rest, stdout, stderr, svc)
+	case "search":
+		return cmdSearch(rest, stdout, stderr, svc)
+	case "view":
+		return cmdView(rest, stdout, stderr, svc)
+	case "index":
+		return cmdIndex(rest, stdout, stderr, svc)
+	case "block":
+		return cmdBlock(rest, stdout, stderr, svc)
 	case "version":
 		fmt.Fprintln(stdout, Version)
 		return 0
@@ -265,14 +284,20 @@ func cmdFiles(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 	fs := flag.NewFlagSet("files", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	links := fs.Bool("links", false, "print the Markdown links instead of a table")
-	if err := fs.Parse(args); err != nil {
-		return 2
+	asJSON := fs.Bool("json", false, "print as JSON")
+	if err := parseFlags(fs, args); err != nil {
+		return exitUsage
 	}
 
 	items, err := svc.Attachments(strings.Join(fs.Args(), " "), 0)
 	if err != nil {
-		fmt.Fprintf(stderr, "tlog: %v\n", err)
-		return 1
+		return fail(stderr, err)
+	}
+	if *asJSON {
+		if err := emit(stdout, items); err != nil {
+			return fail(stderr, err)
+		}
+		return exitOK
 	}
 	if len(items) == 0 {
 		fmt.Fprintf(stdout, "nothing on the shelf at %s\n", svc.AttachDir())
@@ -292,14 +317,20 @@ func cmdDue(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 	fs := flag.NewFlagSet("due", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	all := fs.Bool("all", false, "include what is already done")
-	if err := fs.Parse(args); err != nil {
-		return 2
+	asJSON := fs.Bool("json", false, "print as JSON, with an address for each")
+	if err := parseFlags(fs, args); err != nil {
+		return exitUsage
 	}
 
 	items, err := svc.Due(*all)
 	if err != nil {
-		fmt.Fprintf(stderr, "tlog: %v\n", err)
-		return 1
+		return fail(stderr, err)
+	}
+	if *asJSON {
+		if err := emit(stdout, items); err != nil {
+			return fail(stderr, err)
+		}
+		return exitOK
 	}
 	if len(items) == 0 {
 		fmt.Fprintln(stdout, "nothing dated is open")

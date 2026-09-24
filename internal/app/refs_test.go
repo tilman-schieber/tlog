@@ -50,7 +50,7 @@ func TestBlocksOffersWhatCanBeFoundAndNothingEmpty(t *testing.T) {
 		t.Fatalf("got %+v", got)
 	}
 	// The candidate carries everything needed to ask for a reference to it.
-	if _, err := s.RefTo(got[0].Addr()); err != nil {
+	if _, err := s.RefTo(got[0].Addr); err != nil {
 		t.Fatalf("a candidate could not be referred to: %v", err)
 	}
 }

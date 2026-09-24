@@ -394,6 +394,51 @@ still render, so nothing you already wrote changes.
 Fenced code is highlighted for go, js/ts, python, sh, sql, json, yaml and toml.
 An unknown language stays plain monospace.
 
+## Scripts and agents
+
+Everything the outliner can do is reachable from the command line, because both
+are adapters over the same core. Reads hand back an address; writes take one.
+
+```sh
+tlog search lecture -json      # hits, each with an address
+tlog view Timetable -addr      # a page, with an address per block
+tlog index -json               # every journal, page and tag
+tlog due -json                 # the agenda, addressable
+tlog block <addr> <operation>  # change one block
+```
+
+An address is `pages/Note.md:42@9f3a2b1c8d4e5f60` — the file, where the block
+starts, and **the hash of the file it was read from**. That last part is the
+point: a write computed against a file that has since changed is refused, not
+merged and not applied to whatever now sits at that offset. Every write prints
+the address the block ended up at, because rewriting a file moves every offset
+after it, so one call chains into the next:
+
+```sh
+addr=$(tlog search "plan the lecture" -json | jq -r '.[0].addr')
+addr=$(tlog block "$addr" task)                      # [ ] plan the lecture
+addr=$(tlog block "$addr" prop Deadline 2026-10-01)  # now on the agenda
+        tlog block "$addr" after -child "book the room"
+```
+
+The operations are `text`, `after [-child]`, `before`, `split`, `merge`,
+`indent`, `outdent`, `up`, `down`, `task`, `prop`, `ref`, `delete` — see
+`tlog block help`.
+
+**The exit code says which kind of no it was**, so a caller knows whether
+reading again would help:
+
+| | |
+|---|---|
+| `0` | done |
+| `1` | something went wrong |
+| `2` | that is not a command, an operation or an address |
+| `3` | the move does not exist — outdenting a top-level block. Retrying will not help. |
+| `4` | the file moved since you read it. Read again and retry. |
+
+Nothing here is a special agent mode: `tlog block` is the same `app.Service`
+call the outliner makes when you press Tab.
+
 ## Design
 
 The core is the product. The outliner, the CLI and the desktop app are adapters

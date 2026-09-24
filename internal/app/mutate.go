@@ -207,13 +207,18 @@ func (s *Service) DeleteBlock(a Addr) (*Result, error) {
 // core, because the answer turns on whether those children are *visible* —
 // collapse is view state, and a core that guessed would disagree with whichever
 // adapter guessed differently. It used to, which is why this is a parameter.
+//
+// asChild nests whether or not there are children already. It used to be
+// ignored on a childless block, which made it a request the core could quietly
+// decline: both outliners only ask when children exist, so nothing noticed
+// until a script asked plainly for a child and got a sibling.
 func (s *Service) InsertAfter(a Addr, text string, asChild bool) (*Result, error) {
 	d, b, err := s.Resolve(a)
 	if err != nil {
 		return nil, err
 	}
 	nb := &markdown.Block{Text: text}
-	if asChild && len(b.Children) > 0 {
+	if asChild {
 		b.Children = append([]*markdown.Block{nb}, b.Children...)
 		nb.Parent = b
 		d.Doc.Reindex()
@@ -282,7 +287,7 @@ func (s *Service) SplitBlock(a Addr, before, after string, asChild bool) (*Resul
 	}
 	b.Text = before
 	nb := &markdown.Block{Text: after}
-	if asChild && len(b.Children) > 0 {
+	if asChild {
 		b.Children = append([]*markdown.Block{nb}, b.Children...)
 		nb.Parent = b
 		d.Doc.Reindex()

@@ -4,6 +4,7 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -282,6 +283,25 @@ type Addr struct {
 
 // String renders an address in the form the CLI accepts.
 func (a Addr) String() string { return fmt.Sprintf("%s:%d@%s", a.Rel, a.Offset, a.Hash) }
+
+// An address crosses the wire as the single string it prints as, rather than
+// as three fields a caller would have to reassemble in the right order. A
+// script or an agent copies what it was given straight into the next command,
+// which is the only way an address is ever used.
+func (a Addr) MarshalJSON() ([]byte, error) { return json.Marshal(a.String()) }
+
+func (a *Addr) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	parsed, err := ParseAddr(s)
+	if err != nil {
+		return err
+	}
+	*a = parsed
+	return nil
+}
 
 // ParseAddr reads the form produced by Addr.String.
 func ParseAddr(s string) (Addr, error) {

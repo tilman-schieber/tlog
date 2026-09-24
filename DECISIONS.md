@@ -399,6 +399,37 @@ overwhelmingly common case — costs nothing. That the check lives in the servic
 and not in `store` is deliberate: the store owns bytes and filenames, and what a
 name *means* is interpretation.
 
+## The surface a script drives
+
+**An address carries the hash of the file it was read from.** That is what makes
+it safe to hand block-level writes to something that is not a person: a write
+computed against a file that has moved on is refused, rather than landing at
+whatever now happens to sit at that offset. The same compare-and-swap that
+protects the outliner from nvim protects the notes from an agent working off a
+stale read — it was not added for this, it was already there.
+
+**An address crosses the wire as one string.** `Addr` marshals to
+`rel:offset@hash` rather than three fields, because assembling three fields in
+the right order is exactly the sort of thing a caller gets wrong once and then
+silently keeps getting wrong. Everything that can be acted on carries one:
+search hits, blocks in a page view, agenda items, backlinks.
+
+**The exit code distinguishes three kinds of no.** A move that does not exist
+(3) is not a failure and retrying will not help; a stale address (4) means read
+again; anything else (1) is a real error. Without this a caller has to match on
+the text of a message, which is not a contract.
+
+**Flags are accepted on either side of the arguments.** Go's flag package stops
+at the first positional, so `tlog search lecture -json` searched for
+`"lecture -json"` and printed nothing at all. A surface whose whole point is
+being driven by a script cannot have a trap in it that silently changes the
+query rather than failing.
+
+**`tlog view` creates nothing, while `tlog open` still does.** An agent
+surveying the notes must not leave an empty page behind everywhere it looked.
+Creating on follow is right for a person following a link and wrong for
+anything that reads in bulk, so the two are different commands.
+
 ## Known gaps
 
 - A name that parses as an ISO date resolves to that day's journal rather than

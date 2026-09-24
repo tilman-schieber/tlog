@@ -28,6 +28,10 @@ type FenceView struct {
 
 // BlockView is one block, flattened into document order with its depth.
 type BlockView struct {
+	// Addr is what a caller needs in order to change this block: the file, the
+	// offset and the hash the offset was computed against, in one string.
+	// Everything that can be acted on carries one, so nobody assembles it.
+	Addr        Addr            `json:"addr"`
 	Offset      int             `json:"offset"`
 	Depth       int             `json:"depth"`
 	Text        string          `json:"text"`
@@ -46,6 +50,7 @@ type BlockView struct {
 
 // RefView is a block elsewhere that mentions this page, or one of its children.
 type RefView struct {
+	Addr   Addr   `json:"addr"`
 	Page   string `json:"page"`
 	Rel    string `json:"rel"`
 	Offset int    `json:"offset"`
@@ -70,6 +75,7 @@ type PageView struct {
 
 // SearchHit is one search result, addressable for a later mutation.
 type SearchHit struct {
+	Addr   Addr   `json:"addr"`
 	Rel    string `json:"rel"`
 	Page   string `json:"page"`
 	Offset int    `json:"offset"`
@@ -144,6 +150,7 @@ func (s *Service) viewWith(g *graph.Graph, d *Doc) *PageView {
 
 	d.Doc.Walk(func(b *markdown.Block) bool {
 		bv := BlockView{
+			Addr:        Addr{Rel: d.Rel, Offset: b.Start, Hash: d.Hash},
 			Offset:      b.Start,
 			Depth:       b.Depth,
 			Text:        b.Text,
@@ -209,6 +216,7 @@ func taskName(t markdown.TaskState) string {
 // mention is usually a bare name with the substance nested under it.
 func refViews(r graph.Ref) []RefView {
 	out := []RefView{{
+		Addr:   Addr{Rel: r.From.Rel, Offset: r.Block.Start, Hash: r.From.Hash},
 		Page:   r.From.Name,
 		Rel:    r.From.Rel,
 		Offset: r.Block.Start,
@@ -225,6 +233,7 @@ func refViews(r graph.Ref) []RefView {
 			}
 			budget--
 			out = append(out, RefView{
+				Addr:   Addr{Rel: r.From.Rel, Offset: c.Start, Hash: r.From.Hash},
 				Page:   r.From.Name,
 				Rel:    r.From.Rel,
 				Offset: c.Start,
@@ -241,6 +250,7 @@ func refViews(r graph.Ref) []RefView {
 // DueItem is one dated block, addressable so that it can be ticked off from
 // wherever it is listed.
 type DueItem struct {
+	Addr   Addr   `json:"addr"`
 	Rel    string `json:"rel"`
 	Page   string `json:"page"`
 	Offset int    `json:"offset"`
@@ -280,6 +290,7 @@ func (s *Service) Due(includeDone bool) ([]DueItem, error) {
 				label = dates.Describe(due, now)
 			}
 			out = append(out, DueItem{
+				Addr:   Addr{Rel: p.Rel, Offset: b.Start, Hash: p.Hash},
 				Rel:    p.Rel,
 				Page:   p.Name,
 				Offset: b.Start,
@@ -336,6 +347,7 @@ func (l *Lookup) Search(query string, limit int) []SearchHit {
 	var out []SearchHit
 	for _, h := range l.g.Search(query, limit) {
 		out = append(out, SearchHit{
+			Addr:   Addr{Rel: h.Page.Rel, Offset: h.Offset, Hash: h.Hash},
 			Rel:    h.Page.Rel,
 			Page:   h.Page.Name,
 			Offset: h.Offset,

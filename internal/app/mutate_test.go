@@ -13,7 +13,7 @@ func TestSplitBlockIsOneWrite(t *testing.T) {
 	s := newSvc(t)
 	rel, _ := s.AddToday("onetwo")
 
-	res, err := s.SplitBlock(addrOf(t, s, rel, 0), "one", "two", true)
+	res, err := s.SplitBlock(addrOf(t, s, rel, 0), "one", "two", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,5 +148,31 @@ func TestSplitAndMergeRefuseAStaleAddress(t *testing.T) {
 	}
 	if got := body(t, s, rel); got != "- theirs\n" {
 		t.Fatalf("the other writer's work was destroyed: %q", got)
+	}
+}
+
+func TestAsChildNestsEvenWhenThereAreNoChildrenYet(t *testing.T) {
+	// It used to be ignored on a childless block, which made it a request the
+	// core could quietly decline. Both outliners only ask when children are
+	// already there, so nothing noticed until a script asked plainly.
+	s := newSvc(t)
+	rel, _ := s.AddToday("parent")
+
+	if _, err := s.InsertAfter(addrOf(t, s, rel, 0), "child", true); err != nil {
+		t.Fatal(err)
+	}
+	if got := body(t, s, rel); got != "- parent\n  - child\n" {
+		t.Fatalf("asking for a child got %q", got)
+	}
+}
+
+func TestSplitAsChildNestsEvenWhenThereAreNoChildrenYet(t *testing.T) {
+	s := newSvc(t)
+	rel, _ := s.AddToday("onetwo")
+	if _, err := s.SplitBlock(addrOf(t, s, rel, 0), "one", "two", true); err != nil {
+		t.Fatal(err)
+	}
+	if got := body(t, s, rel); got != "- one\n  - two\n" {
+		t.Fatalf("got %q", got)
 	}
 }
