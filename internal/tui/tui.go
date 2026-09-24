@@ -25,6 +25,7 @@ const (
 	modeLinks
 	modeBacklinks
 	modeHelp
+	modeSettings
 )
 
 type rowKind int
@@ -69,6 +70,7 @@ type Model struct {
 	comp *completion
 
 	backlinks []graph.Ref
+	settings  *settings
 
 	history []string
 	status  string
@@ -328,6 +330,8 @@ func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.insertKey(msg, k)
 	case modePalette, modeSearch, modeLinks, modeBacklinks:
 		return m.pickerKey(msg, k)
+	case modeSettings:
+		return m.settingsKey(msg, k)
 	case modeHelp:
 		m.mode = modeNormal
 		return m, nil
@@ -371,6 +375,9 @@ func (m *Model) normalKey(msg tea.KeyMsg, k string) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "?":
 		m.mode = modeHelp
+		return m, nil
+	case ",":
+		m.openSettings()
 		return m, nil
 	case "R":
 		if err := m.load(m.doc.Rel); err != nil {

@@ -171,3 +171,58 @@ func TestHuman(t *testing.T) {
 		}
 	}
 }
+
+func TestSanitize(t *testing.T) {
+	cases := map[string]string{
+		"meeting notes.pdf":               "meeting-notes.pdf",
+		"meeting   notes.pdf":             "meeting-notes.pdf",
+		"Quartalsbericht (final) v2.xlsx": "Quartalsbericht-final-v2.xlsx",
+		"260907_FHR_Künstliche KI.pptx":   "260907_FHR_Künstliche-KI.pptx",
+		"report.pdf":                      "report.pdf",
+		"a/b:c*d?.txt":                    "a-b-c-d.txt",
+		"  leading and trailing  .md":     "leading-and-trailing.md",
+		"NOTES":                           "NOTES",
+		"...":                             "datei",
+		"Übersicht Präsentation.key":      "Übersicht-Präsentation.key",
+	}
+	for in, want := range cases {
+		if got := Sanitize(in, false); got != want {
+			t.Errorf("%q → %q, want %q", in, got, want)
+		}
+	}
+	// Umlauts are kept: they are valid in filenames, they survive
+	// percent-encoding, and mangling a German word helps nobody.
+	if got := Sanitize("Übersicht.key", true); got != "übersicht.key" {
+		t.Errorf("lowercase: %q", got)
+	}
+	if got := Sanitize("Report.PDF", true); got != "report.pdf" {
+		t.Errorf("lowercase extension: %q", got)
+	}
+}
+
+func TestAddWithSanitizeIsOffUnlessAsked(t *testing.T) {
+	s := newStore(t)
+	src := t.TempDir()
+	orig := write(t, src, "meeting notes.pdf", "x")
+
+	plain, err := s.AddWith(orig, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plain.Name != "meeting notes.pdf" {
+		t.Fatalf("a name should be kept unless asked: %q", plain.Name)
+	}
+
+	tidy, err := s.AddWith(orig, Options{Sanitize: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tidy.Name != "meeting-notes.pdf" {
+		t.Fatalf("got %q", tidy.Name)
+	}
+	// And the tidied one still collides safely with its own kind.
+	again, _ := s.AddWith(orig, Options{Sanitize: true})
+	if again.Name != "meeting-notes-2.pdf" {
+		t.Fatalf("got %q", again.Name)
+	}
+}

@@ -27,6 +27,9 @@ func (m *Model) View() string {
 	if m.mode == modeHelp {
 		return m.helpView()
 	}
+	if m.mode == modeSettings {
+		return m.settingsView()
+	}
 
 	var b strings.Builder
 	b.WriteString(m.header())
@@ -440,6 +443,7 @@ func (m *Model) helpView() string {
 		{"backspace", "back to where you came from"},
 		{"R", "reload from disk after an external edit"},
 		{"g g / G", "first · last block"},
+		{",", "settings"},
 		{"q", "quit"},
 	}
 	var b strings.Builder

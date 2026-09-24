@@ -7,10 +7,15 @@ import (
 // IndentUnit is the canonical indentation of one outline level.
 const IndentUnit = "  "
 
-// BlankLineBetweenTopLevel controls whether canonical output separates
+// blankLineBetweenTopLevel controls whether canonical output separates
 // top-level blocks with a blank line. It makes files easier to read and git
-// hunks easier to follow; flip it here if you prefer dense outlines.
-const BlankLineBetweenTopLevel = true
+// hunks easier to follow, and it is a setting rather than a constant because
+// it is a preference — see SetBlankLines.
+var blankLineBetweenTopLevel = true
+
+// SetBlankLines changes the canonical form. Each file is reformatted the next
+// time that file is written; content is untouched, but the diff will be large.
+func SetBlankLines(on bool) { blankLineBetweenTopLevel = on }
 
 // Render produces the canonical form of a document. tlog owns the formatting
 // of files it writes: the first write normalises a file, and from then on a
@@ -31,7 +36,7 @@ func Render(d *Document) []byte {
 	}
 
 	for i, b := range d.Blocks {
-		if i > 0 && BlankLineBetweenTopLevel {
+		if i > 0 && blankLineBetweenTopLevel {
 			sb.WriteByte('\n')
 		}
 		writeBlock(&sb, b, 0)

@@ -3,6 +3,7 @@ module github.com/tilman-schieber/tlog
 go 1.27.1
 
 require (
+	github.com/BurntSushi/toml v1.6.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/wailsapp/wails/v2 v2.16.0

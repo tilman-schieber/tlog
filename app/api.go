@@ -280,3 +280,38 @@ func (a *API) ChooseFiles() ([]string, error) {
 		Title: "Anhängen",
 	})
 }
+
+// --- settings ---------------------------------------------------------------
+
+// ConfigPath is where the settings live, shown so it is never a mystery.
+func (a *API) ConfigPath() string { return a.svc.ConfigPath() }
+
+// Settings describes the current configuration, the same list `tlog config`
+// prints and the outliner edits.
+func (a *API) Settings() []tapp.Setting { return tapp.Settings(a.svc.Cfg) }
+
+// SetSetting changes one value and writes the file. What cannot take effect
+// until a restart says so rather than looking applied.
+type SettingResult struct {
+	Settings []tapp.Setting `json:"settings"`
+	Note     string         `json:"note,omitempty"`
+}
+
+func (a *API) SetSetting(key, value string) (*SettingResult, error) {
+	before := a.svc.Cfg
+	cfg, err := tapp.SetSetting(before, key, value)
+	if err != nil {
+		return nil, err
+	}
+	if err := a.svc.Reconfigure(cfg); err != nil {
+		return nil, err
+	}
+	res := &SettingResult{Settings: tapp.Settings(a.svc.Cfg)}
+	switch {
+	case cfg.Notes != before.Notes || cfg.Attachments.Dir != before.Attachments.Dir:
+		res.Note = "wirkt beim nächsten Start"
+	case cfg.Format.BlankLines != before.Format.BlankLines:
+		res.Note = "Dateien werden beim nächsten Schreiben neu formatiert"
+	}
+	return res, nil
+}

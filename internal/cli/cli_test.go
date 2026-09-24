@@ -210,3 +210,35 @@ func TestAutoPushCanBeTurnedOnAndOff(t *testing.T) {
 		t.Fatalf("code=%d stderr=%q", code, errs)
 	}
 }
+
+func TestConfigShowsAndSets(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("TLOG_CONFIG", cfgPath)
+	dir := t.TempDir()
+
+	code, out, _ := runCLI(t, dir, "config")
+	if code != 0 || !strings.Contains(out, "attachments.sanitize") {
+		t.Fatalf("code=%d out=%q", code, out)
+	}
+	if !strings.Contains(out, "not written yet") {
+		t.Fatalf("it should say nothing has been written: %q", out)
+	}
+
+	if code, out, _ = runCLI(t, dir, "config", "attachments.sanitize", "true"); code != 0 {
+		t.Fatalf("code=%d out=%q", code, out)
+	}
+	data, err := os.ReadFile(cfgPath)
+	if err != nil || !strings.Contains(string(data), "sanitize = true") {
+		t.Fatalf("file: %q %v", data, err)
+	}
+
+	if code, _, errs := runCLI(t, dir, "config", "git.debounce", "banana"); code != 2 || !strings.Contains(errs, "not a delay") {
+		t.Fatalf("code=%d stderr=%q", code, errs)
+	}
+	if code, _, errs := runCLI(t, dir, "config", "nope", "x"); code != 2 || !strings.Contains(errs, "no such setting") {
+		t.Fatalf("code=%d stderr=%q", code, errs)
+	}
+	if code, _, errs := runCLI(t, dir, "config", "notes"); code != 2 || !strings.Contains(errs, "give a value") {
+		t.Fatalf("code=%d stderr=%q", code, errs)
+	}
+}

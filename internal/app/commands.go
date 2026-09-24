@@ -195,7 +195,7 @@ func (s *Service) RunCommand(a Addr, name, arg, text string, from, to int) (*Com
 				b.ToggleTask()
 			}
 		case "deadline":
-			setDeadline(b, due)
+			setDeadline(b, due, s.Cfg.DeadlineProperty())
 		case "quote":
 			if !b.Quote() {
 				b.Text = "> " + b.Text
@@ -215,19 +215,26 @@ func (s *Service) RunCommand(a Addr, name, arg, text string, from, to int) (*Com
 
 // setDeadline writes the date, replacing whatever spelling of the property was
 // already there so a block never ends up with two.
-func setDeadline(b *markdown.Block, due time.Time) {
+func setDeadline(b *markdown.Block, due time.Time, prop string) {
 	for _, p := range b.Props {
-		if strings.EqualFold(p.Key, DeadlineProp) {
+		if isDeadlineKey(p.Key) {
 			b.DelProp(p.Key)
 		}
 	}
-	b.SetProp(DeadlineProp, dates.Format(due))
+	b.SetProp(prop, dates.Format(due))
+}
+
+// isDeadlineKey accepts every spelling, whatever the setting says to write, so
+// that changing the setting never orphans what is already in the notes.
+func isDeadlineKey(k string) bool {
+	return strings.EqualFold(k, DeadlineProp) || strings.EqualFold(k, "due") ||
+		strings.EqualFold(k, "deadline") || strings.EqualFold(k, "fällig")
 }
 
 // Deadline reads a block's deadline, whatever case the property was written in.
 func Deadline(b *markdown.Block) (time.Time, bool) {
 	for _, p := range b.Props {
-		if strings.EqualFold(p.Key, DeadlineProp) || strings.EqualFold(p.Key, "due") {
+		if isDeadlineKey(p.Key) {
 			if d, ok := dates.Parse(p.Value, time.Now()); ok {
 				return d, true
 			}

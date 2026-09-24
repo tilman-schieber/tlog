@@ -75,6 +75,7 @@ The notes directory is `$TLOG_DIR`, or `~/notes`. Any command takes `-dir`.
 | `t` / `[` `]` | today · previous, next day |
 | `backspace` | back to where you came from |
 | `R` | reload after an external edit |
+| `,` | settings |
 | `?` / `q` | help · quit |
 
 Arrow keys work everywhere; the vim keys are an alternative, not the foundation.
@@ -193,6 +194,49 @@ Finished work is never overdue, however long ago it was due.
 tlog due          # everything open and dated, soonest first
 tlog due -all     # including what is done
 ```
+
+## Settings
+
+`~/.config/tlog/config.toml`, written the first time something changes. `,` in
+the outliner opens the settings, `⌘,` in the app, and `tlog config` prints them
+with where each one came from.
+
+```sh
+tlog config                                # everything, and its current value
+tlog config attachments.sanitize true      # change one
+```
+
+A flag beats the environment, which beats the file, which beats the default.
+The file is rendered whole each time it is saved, with the explanation of every
+setting in it — reading it is how you find out what there is. Hand-written
+comments are replaced; values are not.
+
+| | |
+|---|---|
+| `notes` | where the notes live — `$TLOG_DIR` overrides |
+| `attachments.dir` | the shelf shared with att — `$ATT_DIR` overrides |
+| `attachments.sanitize` | tidy filenames on the way in |
+| `attachments.lowercase` | …and lowercase them |
+| `git.debounce` | how long writing must be idle before a commit |
+| `format.blank_lines` | a blank line between top-level blocks |
+| `deadline.property` | `Deadline` or `due`, whichever you prefer |
+| `dates.end_of_week` | what `eow` means: friday or sunday |
+
+Most of tlog is deliberately *not* configurable. ISO dates, files as the source
+of truth, compare-and-swap writes and the small dialect are decisions rather
+than preferences, and a setting for each would only be a way to break them.
+
+Two of these have consequences the menus tell you about: changing where the
+notes live takes effect at the next start, and changing `blank_lines` reformats
+each file the next time that file is written — the content is untouched, but
+the diff will be large.
+
+**On `attachments.sanitize`:** it renames `meeting notes.pdf` to
+`meeting-notes.pdf` on the way in. Off by default, because att's own rule is
+that files keep their names and att writes to the same directory — turning it
+on means the two tools name things differently. Umlauts are kept either way:
+they are valid in filenames, they survive percent-encoding in a link, and
+mangling a German word to look English helps nobody.
 
 ## Attachments
 

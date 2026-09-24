@@ -834,3 +834,85 @@ func TestSlashFileWithNoMatchSaysSo(t *testing.T) {
 		t.Fatalf("expected a message naming how to put one there, got %q", m.errMsg)
 	}
 }
+
+func TestSettingsScreenTogglesAndPersists(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("TLOG_CONFIG", cfgPath)
+
+	m := newModel(t)
+	send(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{','}})
+	if m.mode != modeSettings {
+		t.Fatal("the settings screen did not open")
+	}
+
+	// Walk to the sanitize toggle and turn it on.
+	for m.settings.items[m.settings.sel].Key != "attachments.sanitize" {
+		send(t, m, k(tea.KeyDown))
+	}
+	send(t, m, k(tea.KeyEnter))
+
+	if !m.svc.Cfg.Attachments.Sanitize {
+		t.Fatal("the setting did not take effect")
+	}
+	if _, err := os.Stat(cfgPath); err != nil {
+		t.Fatalf("nothing was written: %v", err)
+	}
+	// And it is really in the file, not just in memory.
+	data, _ := os.ReadFile(cfgPath)
+	if !strings.Contains(string(data), "sanitize = true") {
+		t.Fatalf("file says:\n%s", data)
+	}
+
+	send(t, m, k(tea.KeyEsc))
+	if m.mode != modeNormal {
+		t.Fatal("esc should leave the settings screen")
+	}
+}
+
+func TestSettingsScreenEditsAValueAndRefusesNonsense(t *testing.T) {
+	t.Setenv("TLOG_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
+	m := newModel(t)
+	send(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{','}})
+
+	for m.settings.items[m.settings.sel].Key != "git.debounce" {
+		send(t, m, k(tea.KeyDown))
+	}
+	send(t, m, k(tea.KeyEnter)) // start typing
+	for i := 0; i < 3; i++ {
+		send(t, m, k(tea.KeyBackspace))
+	}
+	typeText(t, m, "banana")
+	send(t, m, k(tea.KeyEnter))
+
+	if !strings.Contains(m.settings.msg, "not a delay") {
+		t.Fatalf("nonsense should be refused with a reason: %q", m.settings.msg)
+	}
+	if m.svc.Cfg.Git.Debounce != "30s" {
+		t.Fatalf("the bad value was kept: %q", m.svc.Cfg.Git.Debounce)
+	}
+
+	send(t, m, k(tea.KeyEnter))
+	for i := 0; i < 3; i++ {
+		send(t, m, k(tea.KeyBackspace))
+	}
+	typeText(t, m, "5s")
+	send(t, m, k(tea.KeyEnter))
+	if m.svc.Cfg.Git.Debounce != "5s" {
+		t.Fatalf("got %q", m.svc.Cfg.Git.Debounce)
+	}
+}
+
+func TestSettingsSayWhatWillNotTakeEffectYet(t *testing.T) {
+	t.Setenv("TLOG_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
+	m := newModel(t)
+	send(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{','}})
+
+	m.applySetting("notes", "~/zettel")
+	if !strings.Contains(m.settings.msg, "nächsten Start") {
+		t.Fatalf("a setting that needs a restart should say so: %q", m.settings.msg)
+	}
+	m.applySetting("format.blank_lines", "false")
+	if !strings.Contains(m.settings.msg, "neu formatiert") {
+		t.Fatalf("a reformat should be announced: %q", m.settings.msg)
+	}
+}

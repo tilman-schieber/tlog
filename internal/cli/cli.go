@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/tilman-schieber/tlog/internal/app"
+	"github.com/tilman-schieber/tlog/internal/config"
 	"github.com/tilman-schieber/tlog/internal/importer"
 	"github.com/tilman-schieber/tlog/internal/tui"
 )
@@ -25,6 +26,7 @@ usage:
   tlog open <page>          print the path of a page, creating it if needed
   tlog add [-p page] text   append a block to today's journal, or to a page
   tlog import [-from dir]   import a Logseq graph into the notes directory
+  tlog config [key value]   show the settings, or change one
   tlog attach FILE...       put files on the ~/.att shelf and link them here
   tlog files [query]        what is on the shelf, newest first
   tlog due [-all]           what is dated and still open, soonest first
@@ -104,6 +106,8 @@ func Main(args []string, stdout, stderr io.Writer) int {
 		return cmdDue(rest, stdout, stderr, svc)
 	case "attach":
 		return cmdAttach(rest, stdout, stderr, svc)
+	case "config":
+		return cmdConfig(rest, stdout, stderr, svc)
 	case "files":
 		return cmdFiles(rest, stdout, stderr, svc)
 	case "version":
@@ -170,6 +174,46 @@ func cmdAdd(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 		fmt.Fprintln(stdout, svc.Store.Abs(rel))
 		return nil
 	})
+}
+
+// settable is every key the config menus and `tlog config` can change, with
+// how to read a typed value. Keeping it in one list is what makes the two
+// menus and the command agree about what exists.
+func cmdConfig(args []string, stdout, stderr io.Writer, svc *app.Service) int {
+	if len(args) == 0 {
+		fmt.Fprintf(stdout, "# %s", svc.ConfigPath())
+		if !config.Exists() {
+			fmt.Fprint(stdout, "  (not written yet — these are the defaults)")
+		}
+		fmt.Fprintln(stdout)
+		for _, s := range app.Settings(svc.Cfg) {
+			fmt.Fprintf(stdout, "%-24s %-10s  %s\n", s.Key, s.Value, s.Hint)
+		}
+		if svc.CfgErr != nil {
+			fmt.Fprintf(stderr, "\ntlog: %v\n", svc.CfgErr)
+			return 1
+		}
+		return 0
+	}
+	if len(args) == 1 {
+		fmt.Fprintln(stderr, "tlog config: give a value, or no arguments to see everything")
+		return 2
+	}
+
+	cfg, err := app.SetSetting(svc.Cfg, args[0], strings.Join(args[1:], " "))
+	if err != nil {
+		fmt.Fprintf(stderr, "tlog: %v\n", err)
+		return 2
+	}
+	if err := svc.Reconfigure(cfg); err != nil {
+		fmt.Fprintf(stderr, "tlog: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "%s is now %s\n", args[0], strings.Join(args[1:], " "))
+	if args[0] == "notes" || args[0] == "attachments.dir" {
+		fmt.Fprintln(stdout, "(takes effect next time tlog starts)")
+	}
+	return 0
 }
 
 func cmdAttach(args []string, stdout, stderr io.Writer, svc *app.Service) int {

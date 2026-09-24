@@ -226,6 +226,36 @@ written down beats one that is clever.
 is just text that looks like a date. Run against the real corpus for the first
 time it surfaced something seven days overdue, which is the whole argument.
 
+## Settings
+
+**Almost nothing is configurable, on purpose.** ISO dates, files as the source
+of truth, compare-and-swap writes and the small dialect are decisions, not
+preferences; a setting for each would only be a supported way to break them.
+What is configurable is the handful of places where two reasonable people would
+genuinely want different things.
+
+**One description, three surfaces.** `internal/app/settings.go` holds the list
+with each value's kind, its explanation and its consequence. `tlog config`, the
+outliner's `,` screen and the app's panel all render that, so they cannot offer
+different things or disagree about what a value means.
+
+**TOML in `~/.config`, on macOS too.** Not `Library/Application Support`:
+everything else here already lives in `~/.config` — nvim, fish, kitty,
+aerospace, starship, mise — and the same dotfiles are stowed onto an Arch
+machine, where a second location would be one more thing to keep in step.
+
+**The file is rendered whole, with its own documentation in it.** Reading the
+file is how you find out what can be configured, so saving regenerates the
+comments. Hand-written ones are replaced; values never are.
+
+**A broken config must not stop someone writing a note.** A parse error is kept
+on the service and shown, not returned from startup, and an unusable value falls
+back to the default rather than failing.
+
+**A setting that cannot take effect yet says so.** Changing the notes directory
+waits for a restart; changing `blank_lines` reformats files on their next write.
+Both are announced rather than left to be discovered.
+
 ## Attachments
 
 **Share att's directory rather than inventing one.** `att` already owns the

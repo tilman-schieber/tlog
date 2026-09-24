@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // Entry is one stored file.
@@ -93,7 +94,9 @@ func newEntry(path string, info fs.FileInfo) Entry {
 // Add copies a file onto the shelf and returns it. The original is left alone:
 // attaching a file to a note should not move it out from under whatever else
 // refers to it.
-func (s *Store) Add(src string) (Entry, error) {
+func (s *Store) Add(src string) (Entry, error) { return s.add(src, filepath.Base(src)) }
+
+func (s *Store) add(src, name string) (Entry, error) {
 	info, err := os.Stat(src)
 	if err != nil {
 		return Entry{}, err
@@ -105,7 +108,7 @@ func (s *Store) Add(src string) (Entry, error) {
 		return Entry{}, err
 	}
 
-	f, dst, err := reserve(s.Dir(), filepath.Base(src))
+	f, dst, err := reserve(s.Dir(), name)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -227,4 +230,65 @@ func Human(n int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGT"[exp])
+}
+
+// Options change how a file is taken in.
+type Options struct {
+	// Sanitize tidies the name: "meeting notes (final).pdf" becomes
+	// "meeting-notes-final.pdf". Off unless asked for, because att's rule is
+	// that files keep their names and att writes to this same directory.
+	Sanitize bool
+	// Lowercase goes further, and only applies with Sanitize.
+	Lowercase bool
+}
+
+// AddWith is Add with the name tidied on the way in.
+func (s *Store) AddWith(src string, opt Options) (Entry, error) {
+	if !opt.Sanitize {
+		return s.Add(src)
+	}
+	return s.add(src, Sanitize(filepath.Base(src), opt.Lowercase))
+}
+
+// Sanitize makes a filename pleasant to type, link and shell-quote: spaces and
+// punctuation become single hyphens, and the extension is left alone.
+//
+// Letters are kept as they are, umlauts included. They are valid in filenames,
+// they survive percent-encoding in a link, and mangling a German word to make
+// it look like an English one helps nobody.
+func Sanitize(name string, lower bool) string {
+	ext := filepath.Ext(name)
+	if ext == "." {
+		ext = "" // a name that is only dots has no extension worth keeping
+	}
+	stem := strings.TrimSuffix(name, ext)
+
+	var b strings.Builder
+	dash := false
+	for _, r := range stem {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			b.WriteRune(r)
+			dash = false
+		case r == '.' || r == '_' || r == '+':
+			b.WriteRune(r)
+			dash = false
+		default:
+			// Everything else — spaces, brackets, slashes, punctuation — is one
+			// hyphen, however many of them there were.
+			if !dash && b.Len() > 0 {
+				b.WriteByte('-')
+				dash = true
+			}
+		}
+	}
+	out := strings.Trim(b.String(), "-._")
+	if out == "" {
+		out = "datei"
+	}
+	if lower {
+		out = strings.ToLower(out)
+		ext = strings.ToLower(ext)
+	}
+	return out + ext
 }

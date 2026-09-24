@@ -403,3 +403,45 @@ func TestAttachingNothingIsRefused(t *testing.T) {
 		t.Fatal("expected a refusal")
 	}
 }
+
+func TestSettingsFromTheApp(t *testing.T) {
+	t.Setenv("TLOG_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
+	a := newAPI(t)
+
+	items := a.Settings()
+	if len(items) == 0 {
+		t.Fatal("no settings offered")
+	}
+	// Every setting must say what it is, or the panel is a list of riddles.
+	for _, s := range items {
+		if s.Key == "" || s.Kind == "" || s.Hint == "" {
+			t.Fatalf("incomplete: %+v", s)
+		}
+	}
+
+	res, err := a.SetSetting("attachments.sanitize", "true")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !a.svc.Cfg.Attachments.Sanitize {
+		t.Fatal("not applied")
+	}
+	if res.Note != "" {
+		t.Fatalf("this one takes effect at once: %q", res.Note)
+	}
+
+	res, err = a.SetSetting("notes", "~/zettel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Note == "" {
+		t.Fatal("a setting that needs a restart should say so")
+	}
+
+	if _, err := a.SetSetting("git.debounce", "banana"); err == nil {
+		t.Fatal("nonsense should be refused")
+	}
+	if _, err := a.SetSetting("nope", "x"); err == nil {
+		t.Fatal("an unknown key should be refused")
+	}
+}

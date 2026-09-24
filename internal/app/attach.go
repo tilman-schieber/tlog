@@ -32,12 +32,14 @@ func attachView(e attach.Entry) AttachView {
 }
 
 // AttachDir is where the shared shelf is, shown so it is never a mystery.
-func (s *Service) AttachDir() string { return attach.Open("").Dir() }
+func (s *Service) AttachDir() string { return s.shelf().Dir() }
+
+func (s *Service) shelf() *attach.Store { return attach.Open(s.Cfg.AttachDir()) }
 
 // Attachments lists the shelf, newest first, narrowed by a query the same way
 // `att find` narrows it.
 func (s *Service) Attachments(query string, limit int) ([]AttachView, error) {
-	all, err := attach.Open("").List()
+	all, err := s.shelf().List()
 	if err != nil {
 		return nil, err
 	}
@@ -55,10 +57,14 @@ func (s *Service) Attachments(query string, limit int) ([]AttachView, error) {
 // Attach copies files onto the shelf and returns them. The originals are left
 // where they are.
 func (s *Service) Attach(paths ...string) ([]AttachView, error) {
-	store := attach.Open("")
+	store := s.shelf()
+	opt := attach.Options{
+		Sanitize:  s.Cfg.Attachments.Sanitize,
+		Lowercase: s.Cfg.Attachments.Lowercase,
+	}
 	var out []AttachView
 	for _, p := range paths {
-		e, err := store.Add(p)
+		e, err := store.AddWith(p, opt)
 		if err != nil {
 			return out, fmt.Errorf("%s: %w", p, err)
 		}

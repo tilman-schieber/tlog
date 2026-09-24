@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tilman-schieber/tlog/internal/config"
 	"github.com/tilman-schieber/tlog/internal/graph"
 	"github.com/tilman-schieber/tlog/internal/importer"
 	"github.com/tilman-schieber/tlog/internal/markdown"
@@ -18,16 +19,45 @@ import (
 type Service struct {
 	Store *store.Store
 	Git   *store.Git
+	Cfg   config.Config
+
+	// CfgErr is a broken config file, kept rather than returned: a typo in a
+	// setting must not stop someone writing a note.
+	CfgErr error
 }
 
 // New opens the notes directory, creating it and its git repository if needed.
+// An empty root means the configured one, which means the default one.
 func New(root string) (*Service, error) {
+	cfg, cfgErr := config.Load()
+	if root == "" {
+		root = cfg.NotesDir()
+	}
 	s, err := store.Open(root)
 	if err != nil {
 		return nil, err
 	}
-	return &Service{Store: s, Git: store.NewGit(s.Root)}, nil
+	g := store.NewGit(s.Root)
+	g.SetDebounce(cfg.DebounceDuration())
+	markdown.SetBlankLines(cfg.Format.BlankLines)
+	return &Service{Store: s, Git: g, Cfg: cfg, CfgErr: cfgErr}, nil
 }
+
+// Reconfigure applies changed settings and writes them to the config file.
+// Everything that can take effect without a restart does.
+func (s *Service) Reconfigure(cfg config.Config) error {
+	if err := cfg.Save(); err != nil {
+		return err
+	}
+	s.Cfg = cfg
+	s.CfgErr = nil
+	s.Git.SetDebounce(cfg.DebounceDuration())
+	markdown.SetBlankLines(cfg.Format.BlankLines)
+	return nil
+}
+
+// ConfigPath is where the settings live, shown so it is never a mystery.
+func (s *Service) ConfigPath() string { return config.Path() }
 
 // Graph builds a fresh in-memory graph of the whole notes directory.
 func (s *Service) Graph() (*graph.Graph, error) {
