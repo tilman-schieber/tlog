@@ -113,8 +113,10 @@ Measured rather than guessed:
   markdown.
 - **Nested lists inside a block's text.** The outline already nests. A second
   nesting mechanism would be two ways to say one thing, and they would disagree.
-- **Transclusion and embeds.** Real value, but block references still have no UI
-  for creating them, so there is nothing to embed by hand yet.
+- ~~**Transclusion and embeds.**~~ Done. `((` creates a reference, a reference
+  draws as the block it points at, and a block that is *only* a reference draws
+  that block's subtree with it. No new syntax: the embed rule is that a block
+  saying nothing else is showing what it points at.
 - **A `/query` command.** Logseq has one and it is the door to a whole query
   language. `tlog due` covers the one query these notes actually want; the rest
   is `rg`.

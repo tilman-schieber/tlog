@@ -15,9 +15,10 @@ import (
 )
 
 var (
-	viewLinkRe  = regexp.MustCompile(`\[\[[^\[\]]+\]\]`)
-	viewTagRe   = regexp.MustCompile(`(^|\s)(#[A-Za-z][A-Za-z0-9_/\-]*)`)
-	viewCheckRe = regexp.MustCompile(`^\[( |x|X)\] `)
+	viewLinkRe   = regexp.MustCompile(`\[\[[^\[\]]+\]\]`)
+	viewAnchorRe = regexp.MustCompile(`\[\[[^\[\]]*#\^[^\[\]]+\]\]`)
+	viewTagRe    = regexp.MustCompile(`(^|\s)(#[A-Za-z][A-Za-z0-9_/\-]*)`)
+	viewCheckRe  = regexp.MustCompile(`^\[( |x|X)\] `)
 )
 
 func (m *Model) View() string {
@@ -190,7 +191,7 @@ func (m *Model) renderRow(r row, selected, editing bool) []string {
 			// needing a colour of its own.
 			body = styleMuted.Render("│ " + strings.TrimPrefix(strings.TrimSpace(l), "> "))
 		} else {
-			body = highlight(l)
+			body = m.highlight(l, r)
 		}
 		if selected && !editing {
 			body = styleSelected.Render(stripANSI(l))
@@ -254,7 +255,7 @@ func (m *Model) renderFenced(r row, text, indent, bullet string) []string {
 
 	for i := 0; i < len(lines); i++ {
 		if !strings.HasPrefix(strings.TrimLeft(lines[i], " \t"), "```") {
-			push(highlight(lines[i]))
+			push(m.highlight(lines[i], r))
 			continue
 		}
 		f := fences[min(fi, len(fences)-1)]
@@ -303,7 +304,7 @@ func (m *Model) renderSectionRow(r row, selected bool) string {
 	default:
 		indent := strings.Repeat("  ", r.depth+1)
 		text := truncate(r.text, max(10, min(m.width, 100)-len(indent)-4))
-		body := highlight(text)
+		body := highlightRaw(text)
 		if selected {
 			body = styleSelected.Render(text)
 		}
@@ -316,7 +317,7 @@ func (m *Model) renderSectionRow(r row, selected bool) string {
 func (m *Model) renderEditLine(l string, idx int) string {
 	cline, ccol := m.ed.cursorPos()
 	if idx != cline {
-		return highlight(l)
+		return highlightRaw(l)
 	}
 	runes := []rune(l)
 	if ccol > len(runes) {
@@ -329,7 +330,7 @@ func (m *Model) renderEditLine(l string, idx int) string {
 		at = string(runes[ccol])
 		after = string(runes[ccol+1:])
 	}
-	return highlight(before) + styleCursor.Render(at) + highlight(after)
+	return highlightRaw(before) + styleCursor.Render(at) + highlightRaw(after)
 }
 
 func (m *Model) completionLines(indent string) []string {
@@ -353,30 +354,98 @@ func (m *Model) completionLines(indent string) []string {
 	return out
 }
 
-// highlight applies the semantic colour roles to inline syntax.
-func highlight(s string) string {
+// highlight applies the semantic colour roles to inline syntax, resolving any
+// block reference in the line to the block it points at.
+func (m *Model) highlight(s string, r row) string {
 	if s == "" {
 		return s
 	}
+	// References are numbered across the whole block but drawn a line at a
+	// time, so the count is shared. Lines before this one have already used up
+	// theirs.
+	var embeds []tapp.EmbedView
+	if r.kind == rowBlock && r.block != nil {
+		embeds = m.embeds[r.block.Start]
+	}
+	cursor := &refCursor{embeds: embeds}
+	cursor.skip(r, s)
+
 	out := s
-	if m := viewCheckRe.FindString(out); m != "" {
-		rest := out[len(m):]
-		if strings.HasPrefix(m, "[ ]") {
-			return styleTodo.Render("☐ ") + highlightInline(rest)
+	if mark := viewCheckRe.FindString(out); mark != "" {
+		rest := out[len(mark):]
+		if strings.HasPrefix(mark, "[ ]") {
+			return styleTodo.Render("☐ ") + highlightInline(rest, cursor)
 		}
 		return styleDone.Render("☑ " + rest)
 	}
-	return highlightInline(out)
+	return highlightInline(out, cursor)
 }
 
-func highlightInline(s string) string {
-	s = viewLinkRe.ReplaceAllStringFunc(s, func(m string) string {
-		return styleLink.Render(m)
+// refCursor hands out a block's resolved references in the order they appear.
+type refCursor struct {
+	embeds []tapp.EmbedView
+	i      int
+}
+
+func (c *refCursor) next() (tapp.EmbedView, bool) {
+	if c.i >= len(c.embeds) {
+		c.i++
+		return tapp.EmbedView{}, false
+	}
+	e := c.embeds[c.i]
+	c.i++
+	return e, true
+}
+
+// skip advances past the references on earlier lines of the same block, so that
+// the second line of a two-line block does not redraw the first line's.
+func (c *refCursor) skip(r row, line string) {
+	if r.kind != rowBlock || r.block == nil {
+		return
+	}
+	for _, l := range strings.Split(r.block.Text, "\n") {
+		if l == line {
+			return
+		}
+		c.i += len(viewAnchorRe.FindAllString(l, -1))
+	}
+}
+
+func highlightInline(s string, cursor *refCursor) string {
+	s = viewLinkRe.ReplaceAllStringFunc(s, func(match string) string {
+		if !viewAnchorRe.MatchString(match) {
+			return styleLink.Render(match)
+		}
+		// A block reference shows the block. Showing the page name told the
+		// reader nothing: you point at one block out of a hundred and are
+		// shown the word "Timetable".
+		e, ok := cursor.next()
+		switch {
+		case !ok:
+			return styleLink.Render(match) // nothing was resolved for this row
+		case e.Missing:
+			return styleError.Render(match)
+		}
+		return styleLink.Render(oneLineRef(e.Text))
 	})
-	s = viewTagRe.ReplaceAllStringFunc(s, func(m string) string {
-		i := strings.Index(m, "#")
-		return m[:i] + styleTag.Render(m[i:])
+	s = viewTagRe.ReplaceAllStringFunc(s, func(match string) string {
+		i := strings.Index(match, "#")
+		return match[:i] + styleTag.Render(match[i:])
 	})
+	return s
+}
+
+// highlightRaw colours a line without resolving anything, for the places that
+// must show what is actually in the file: the block under the caret, and the
+// section rows below the outline, which belong to other pages.
+func highlightRaw(s string) string { return highlightInline(s, &refCursor{}) }
+
+// oneLineRef flattens a referenced block for use inside a line of prose.
+func oneLineRef(s string) string {
+	s = strings.ReplaceAll(s, "\n", " ")
+	if len([]rune(s)) > 80 {
+		s = string([]rune(s)[:77]) + "…"
+	}
 	return s
 }
 

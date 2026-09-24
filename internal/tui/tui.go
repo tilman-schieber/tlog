@@ -35,6 +35,7 @@ const (
 	rowHeader                // a section heading below the outline
 	rowLink                  // a page name to jump to
 	rowRef                   // a block on another page that refers to this one
+	rowEmbed                 // a block on another page, brought in by a reference
 )
 
 type row struct {
@@ -70,6 +71,11 @@ type Model struct {
 	comp *completion
 
 	settings *settings
+
+	// embeds resolves each block's references by offset, so that a reference
+	// can be drawn as the block it points at rather than as a page name. It is
+	// rebuilt with the rows, from the same read model the desktop app uses.
+	embeds map[int][]app.EmbedView
 
 	// look is a snapshot held only while a picker is open, so that filtering as
 	// you type does not rebuild the graph on every keystroke.
@@ -167,11 +173,43 @@ func (m *Model) refresh() {
 
 func (m *Model) buildRows() {
 	m.rows = m.rows[:0]
+
+	// What the core resolved about this page, by offset: which references
+	// point where, and which blocks are nothing but a reference.
+	views := map[int]*app.BlockView{}
+	m.embeds = map[int][]app.EmbedView{}
+	if m.page != nil {
+		for i := range m.page.Blocks {
+			bv := &m.page.Blocks[i]
+			views[bv.Offset] = bv
+			if len(bv.Embeds) > 0 {
+				m.embeds[bv.Offset] = bv.Embeds
+			}
+		}
+	}
+
 	var walk func(bs []*markdown.Block, depth int, prefix string)
 	walk = func(bs []*markdown.Block, depth int, prefix string) {
 		for i, b := range bs {
 			path := blockPath(prefix, i)
 			m.rows = append(m.rows, row{block: b, depth: depth, path: path})
+
+			// A block that is nothing but a reference brings the subtree with
+			// it. Those rows belong to another file, so they are shown and not
+			// edited — current() returns nil for anything that is not a block
+			// of this page, which is what keeps them read-only.
+			if bv := views[b.Start]; bv != nil && bv.IsEmbed && !m.collapsed[path] {
+				for _, kid := range bv.EmbedKids {
+					m.rows = append(m.rows, row{
+						kind:   rowEmbed,
+						text:   kid.Text,
+						rel:    kid.Rel,
+						offset: kid.Addr.Offset,
+						depth:  depth + kid.Depth,
+					})
+				}
+			}
+
 			if len(b.Children) > 0 && !m.collapsed[path] {
 				walk(b.Children, depth+1, path)
 			}
@@ -248,7 +286,7 @@ func (m *Model) activateRow() bool {
 			m.openLink(markdown.Link{Page: r.text})
 		}
 		return true
-	case rowRef:
+	case rowRef, rowEmbed:
 		m.goTo(r.rel)
 		m.focusOffset(r.offset)
 		return true

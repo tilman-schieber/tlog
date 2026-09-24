@@ -589,3 +589,34 @@ table.cal td.sel { background: var(--accent); color: #fff; font-weight: 600; }
   font-size: 12px;
   margin-left: 8px;
 }
+
+/* --- block references and embeds ------------------------------------------ */
+
+/* A reference shows the block it points at. The dotted underline says the
+   words came from somewhere else without shouting about it. */
+.ref {
+  border-bottom: 1px dotted var(--accent);
+  cursor: pointer;
+}
+
+.ref.missing {
+  border-bottom: 1px dotted var(--danger);
+  color: var(--danger);
+}
+
+/* The subtree an embed brings with it belongs to another file, so it is shown
+   and not edited — quieter than the page's own blocks, and with a rule down
+   the side saying where it stops. */
+.block.embedded {
+  opacity: 0.78;
+}
+
+.block.embedded .text {
+  cursor: pointer;
+  border-left: 2px solid var(--line);
+  padding-left: 8px;
+}
+
+.block.embedded .bullet {
+  opacity: 0.5;
+}

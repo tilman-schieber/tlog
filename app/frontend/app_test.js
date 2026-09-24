@@ -60,9 +60,38 @@ eq("a link shows its text, not its brackets",
   decorateInline("see [[Project Foo]]"),
   'see <span class="link" data-page="Project Foo">Project Foo</span>');
 
-eq("an anchor is machinery and stays hidden",
+// A block reference shows the block. It used to show the page name, which told
+// the reader nothing: you point at one block out of a hundred and are shown the
+// word "Rust". The resolved text comes from the core alongside the block.
+const ref = (text) => [{ anchor: "a1b2c3", page: "Rust", text }];
+
+eq("a resolved reference shows what it points at",
+  decorateInline("[[Rust#^a1b2c3]]", ref("ownership is the whole idea")),
+  '<span class="ref" data-page="Rust" data-anchor="a1b2c3">ownership is the whole idea</span>');
+
+eq("markup inside the referenced block is drawn too",
+  decorateInline("[[Rust#^a1b2c3]]", ref("**ownership**")),
+  '<span class="ref" data-page="Rust" data-anchor="a1b2c3"><strong>ownership</strong></span>');
+
+eq("a reference with nothing behind it shows that it is broken",
+  decorateInline("[[Rust#^a1b2c3]]", [{ anchor: "a1b2c3", page: "Rust", missing: true }]),
+  '<span class="ref missing" data-page="Rust">[[Rust#^a1b2c3]]</span>');
+
+eq("where nothing was resolved, the page name is what is honestly known",
   decorateInline("[[Rust#^a1b2c3]]"),
   '<span class="link" data-page="Rust">Rust</span>');
+
+eq("references are consumed in the order they appear",
+  decorateInline("[[Rust#^a]] then [[Rust#^b]]", [
+    { anchor: "a", page: "Rust", text: "first" },
+    { anchor: "b", page: "Rust", text: "second" },
+  ]),
+  '<span class="ref" data-page="Rust" data-anchor="a">first</span> then ' +
+    '<span class="ref" data-page="Rust" data-anchor="b">second</span>');
+
+eq("a plain page link is untouched by any of this",
+  decorateInline("see [[Rust]]", ref("ignored")),
+  'see <span class="link" data-page="Rust">Rust</span>');
 
 eq("a typed link shows the page and what it is",
   decorateInline("[[Ada Lovelace #person]]"),

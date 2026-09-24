@@ -180,6 +180,24 @@ corpus nobody has referred to has no anchors in it at all, which is why reading
 never writes. The reference is an ordinary link, so it appears in that page's
 backlinks like any other mention, and following it goes to the block.
 
+**A reference draws as the block it points at**, not as the page name:
+
+```
+what you type      see ((lecture        → picks a block
+what is stored     see [[Timetable#^k3f9q2]]
+what you read      see the lecture is at nine
+```
+
+The block under the caret still shows the reference itself, like every other
+piece of syntax — what you type is what is stored.
+
+**A block that is nothing but a reference is an embed:** it draws the block it
+points at *and that block's children*, in place. No syntax to learn; the rule is
+simply that a block which says nothing else is showing you what it points at.
+Those rows belong to the other file, so they are shown and not edited — click
+one to go there. A reference with prose around it stays inline, because
+inlining a subtree into the middle of a sentence would be nonsense.
+
 ## Tasks and deadlines
 
 `/` in a block opens a command menu, named after Logseq's so the muscle memory

@@ -1244,3 +1244,175 @@ func TestALinkByAliasOpensThePageItNames(t *testing.T) {
 		}
 	}
 }
+
+// --- block references and embeds ---------------------------------------------
+
+// refModel sets up a target block with a child on one page, a reference to it
+// in today's journal, and returns the link text.
+func refModel(t *testing.T) (*Model, string) {
+	t.Helper()
+	m := newModel(t)
+	target, err := m.svc.AddToPage("Timetable", "the lecture is at nine")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.svc.AppendBlock(target, "", "room B103"); err != nil {
+		t.Fatal(err)
+	}
+	d, _ := m.svc.Load(target)
+	if _, err := m.svc.Indent(tapp.Addr{Rel: target, Offset: d.Doc.Flatten()[1].Start, Hash: d.Hash}); err != nil {
+		t.Fatal(err)
+	}
+	d, _ = m.svc.Load(target)
+	link, err := m.svc.RefTo(tapp.Addr{Rel: target, Offset: d.Doc.Flatten()[0].Start, Hash: d.Hash})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m, link
+}
+
+func TestAReferenceDrawsTheBlockItPointsAt(t *testing.T) {
+	m, link := refModel(t)
+	if _, err := m.svc.AddToday("remember: " + link); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.load(m.doc.Rel); err != nil {
+		t.Fatal(err)
+	}
+
+	out := strings.Join(m.renderRow(m.rows[0], false, false), "\n")
+	if !strings.Contains(stripANSI(out), "the lecture is at nine") {
+		t.Fatalf("the reference did not draw the block: %q", stripANSI(out))
+	}
+	if strings.Contains(stripANSI(out), "#^") {
+		t.Fatalf("the machinery is still on screen: %q", stripANSI(out))
+	}
+}
+
+func TestTheBlockUnderTheCaretStillShowsTheReferenceItself(t *testing.T) {
+	// What you type is what is stored, so editing must show the characters
+	// that are actually in the file.
+	m, link := refModel(t)
+	if _, err := m.svc.AddToday("remember: " + link); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.load(m.doc.Rel); err != nil {
+		t.Fatal(err)
+	}
+	m.cur = 0
+	m.startInsert(true)
+
+	out := stripANSI(strings.Join(m.renderRow(m.rows[0], true, true), "\n"))
+	if !strings.Contains(out, "#^") {
+		t.Fatalf("editing hid the syntax being edited: %q", out)
+	}
+}
+
+func TestABlockThatIsOnlyAReferenceBringsTheSubtree(t *testing.T) {
+	m, link := refModel(t)
+	if _, err := m.svc.AddToPage("Notes", link); err != nil {
+		t.Fatal(err)
+	}
+	m.goTo("pages/Notes.md")
+
+	var embedded []string
+	for _, r := range m.rows {
+		if r.kind == rowEmbed {
+			embedded = append(embedded, r.text)
+		}
+	}
+	if len(embedded) != 1 || embedded[0] != "room B103" {
+		t.Fatalf("the subtree did not come with it: %v", embedded)
+	}
+}
+
+func TestAnEmbeddedRowIsNotEditable(t *testing.T) {
+	// Those rows belong to another file. Editing one here would be editing a
+	// file this page does not have open.
+	m, link := refModel(t)
+	if _, err := m.svc.AddToPage("Notes", link); err != nil {
+		t.Fatal(err)
+	}
+	m.goTo("pages/Notes.md")
+
+	for i, r := range m.rows {
+		if r.kind != rowEmbed {
+			continue
+		}
+		m.cur = i
+		if m.current() != nil {
+			t.Fatal("an embedded row is being treated as a block of this page")
+		}
+		before := onDisk(t, m)
+		send(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+		typeText(t, m, "xyz")
+		send(t, m, k(tea.KeyEsc))
+		if onDisk(t, m) != before {
+			t.Fatal("typing on an embedded row changed this page")
+		}
+	}
+}
+
+func TestFollowingAnEmbeddedRowGoesToItsOwnPage(t *testing.T) {
+	m, link := refModel(t)
+	if _, err := m.svc.AddToPage("Notes", link); err != nil {
+		t.Fatal(err)
+	}
+	m.goTo("pages/Notes.md")
+
+	for i, r := range m.rows {
+		if r.kind == rowEmbed {
+			m.cur = i
+			break
+		}
+	}
+	if !m.activateRow() {
+		t.Fatal("an embedded row did not follow")
+	}
+	if m.doc.Rel != "pages/Timetable.md" {
+		t.Fatalf("went to %q", m.doc.Rel)
+	}
+}
+
+func TestAReferenceToAVanishedBlockIsVisiblyBroken(t *testing.T) {
+	m := newModel(t)
+	if _, err := m.svc.AddToPage("Timetable", "something"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.svc.AddToday("see [[Timetable#^gone42]]"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.load(m.doc.Rel); err != nil {
+		t.Fatal(err)
+	}
+	out := stripANSI(strings.Join(m.renderRow(m.rows[0], false, false), "\n"))
+	if !strings.Contains(out, "gone42") {
+		t.Fatalf("a dangling reference was drawn as though it worked: %q", out)
+	}
+}
+
+func TestTheWholeRoundTrip(t *testing.T) {
+	// Type (( in one page, pick a block, and read it back as the block's text.
+	m := newModel(t)
+	if _, err := m.svc.AddToPage("Timetable", "the lecture is at nine"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.load(m.doc.Rel); err != nil {
+		t.Fatal(err)
+	}
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "see ((lecture")
+	send(t, m, k(tea.KeyEnter), k(tea.KeyEsc))
+
+	if err := m.load(m.doc.Rel); err != nil {
+		t.Fatal(err)
+	}
+	out := stripANSI(strings.Join(m.renderRow(m.rows[0], false, false), "\n"))
+	if !strings.Contains(out, "see") || !strings.Contains(out, "the lecture is at nine") {
+		t.Fatalf("got %q", out)
+	}
+	// And the file still holds the reference, not the referenced text.
+	if !strings.Contains(onDisk(t, m), "#^") {
+		t.Fatalf("the file lost the reference: %q", onDisk(t, m))
+	}
+}

@@ -41,6 +41,15 @@ type BlockView struct {
 	HasChildren bool            `json:"hasChildren"`
 	Fences      []FenceView     `json:"fences,omitempty"`
 
+	// Embeds resolves each [[Page#^anchor]] in the text, in order, so that a
+	// reference draws as what it points at rather than as a page name.
+	Embeds []EmbedView `json:"embeds,omitempty"`
+	// IsEmbed says the block is nothing but a reference, and should be drawn
+	// as the block it points at together with that block's children.
+	IsEmbed bool `json:"isEmbed,omitempty"`
+	// EmbedKids is that subtree, present only for an embed.
+	EmbedKids []EmbedView `json:"embedKids,omitempty"`
+
 	// A deadline is resolved once, here, so that no adapter has to decide for
 	// itself what "soon" means or how to say "3 Tage überfällig".
 	Due      string `json:"due,omitempty"`
@@ -159,6 +168,11 @@ func (s *Service) viewWith(g *graph.Graph, d *Doc) *PageView {
 			Task:        taskName(b.Task()),
 			HasChildren: len(b.Children) > 0,
 			Fences:      fenceViews(b.Text),
+		}
+		bv.Embeds = embedsFor(g, b)
+		if isEmbed(b.Text, bv.Embeds) {
+			bv.IsEmbed = true
+			bv.EmbedKids = embedChildren(g, bv.Embeds[0])
 		}
 		if due, ok := Deadline(b); ok {
 			bv.Due = dates.Format(due)

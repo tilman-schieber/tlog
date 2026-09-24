@@ -85,7 +85,10 @@ const RE = {
   sep: /^\s*\|[\s:|-]+\|\s*$/,
 };
 
-function decorate(text, fences) {
+function decorate(text, fences, embeds = []) {
+  // References are numbered across the whole block but drawn a line at a time,
+  // so the count is shared rather than restarted for each line.
+  const cursor = { i: 0 };
   const out = [];
   const lines = text.split("\n");
   let i = 0;
@@ -94,7 +97,9 @@ function decorate(text, fences) {
 
   const flush = () => {
     if (!plain.length) return;
-    out.push(`<span class="ln">${plain.map(decorateInline).join("\n")}</span>`);
+    out.push(
+      `<span class="ln">${plain.map((l) => decorateInline(l, embeds, cursor)).join("\n")}</span>`
+    );
     plain = [];
   };
 
@@ -231,7 +236,13 @@ function tableHTML(rows) {
 // Inline syntax within one line. Links are lifted out before anything else
 // runs: a #tag inside brackets describes the page being linked to, and an
 // underscore inside a page name is part of the name.
-function decorateInline(text) {
+// embeds are the block's resolved references and cursor counts how many have
+// been drawn. Neither is defaulted in the signature: the test harness lifts
+// these functions by matching braces from the first one, and a brace in the
+// parameter list would end the function before it began.
+function decorateInline(text, embeds, cursor) {
+  embeds = embeds || [];
+  cursor = cursor || { i: 0 };
   const held = [];
   const hold = (html) => {
     held.push(html);
@@ -241,13 +252,44 @@ function decorateInline(text) {
   let out = escapeHTML(text);
 
   // [[Page]], [[Page#^anchor]], [[Page #tag]] — show the name and what it is.
+  //
+  // A block reference shows the block. It used to show the page name, which
+  // told the reader nothing: you point at one block out of a hundred and are
+  // shown the word "Timetable". The resolved text comes from the core, in the
+  // order the references appear, so they are consumed as they are met.
   out = out.replace(/\[\[([^\[\]]+)\]\]/g, (_, inner) => {
     const tags = [];
     let name = inner.replace(/\s+#([A-Za-z][\w/-]*)/g, (m, t) => {
       tags.push(t);
       return "";
     });
+    const anchor = name.includes("#^") ? name.split("#^")[1].trim() : "";
     name = name.split("#^")[0].trim();
+
+    if (anchor) {
+      const e = embeds[cursor.i++];
+      if (e && !e.missing) {
+        // The referenced text is decorated on its own, with no references of
+        // its own to follow: one hop, so a block that points back cannot loop.
+        return hold(
+          `<span class="ref" data-page="${name}" data-anchor="${anchor}">` +
+            decorateInline(e.text) +
+            `</span>`
+        );
+      }
+      if (e) {
+        // Resolved, and there is nothing behind it. Say so rather than drawing
+        // a page name that is a lie — a dangling pointer the reader cannot see
+        // is the worse one.
+        return hold(
+          `<span class="ref missing" data-page="${name}">[[${name}#^${anchor}]]</span>`
+        );
+      }
+      // Nobody resolved anything: a backlink row or an agenda line, which are
+      // drawn from a view that does not carry the text behind a reference.
+      // The page name is what is honestly known there.
+    }
+
     let html = `<span class="link" data-page="${name}">${name}</span>`;
     for (const t of tags) html += `<span class="tag" data-tag="${t}">#${t}</span>`;
     return hold(html);
@@ -370,11 +412,33 @@ function renderOutline() {
     text.spellcheck = false;
     text.dataset.offset = b.offset;
     text.dataset.raw = b.text;
-    text.innerHTML = decorate(b.text, b.fences) || "<br>";
+    text.innerHTML = decorate(b.text, b.fences, b.embeds) || "<br>";
     wireBlock(text, b);
     row.appendChild(text);
 
     out.appendChild(row);
+
+    // A block that is nothing but a reference brings the subtree with it —
+    // which is the whole reason to embed rather than to refer. The rows are
+    // the other page's, so they are shown and not edited: editing them here
+    // would be editing a file this page does not have open.
+    (b.embedKids || []).forEach((kid) => {
+      const line = document.createElement("div");
+      line.className = "block embedded";
+      line.style.marginLeft = (b.depth + kid.depth) * 22 + "px";
+
+      const bullet = document.createElement("span");
+      bullet.className = "bullet";
+      bullet.textContent = "●";
+      line.appendChild(bullet);
+
+      const kt = document.createElement("div");
+      kt.className = "text";
+      kt.innerHTML = decorate(kid.text) || "<br>";
+      kt.onclick = () => openBlock(kid);
+      line.appendChild(kt);
+      out.appendChild(line);
+    });
 
     (b.props || []).filter((p) => p.key.toLowerCase() !== "deadline").forEach((p) => {
       const pr = document.createElement("div");
@@ -1092,6 +1156,16 @@ $("next").onclick = () => shiftDay(1);
 // Navigation happens on mousedown, not click: by the time a click arrives the
 // block has taken focus, swapped itself to raw text and destroyed the very
 // span that was pressed. preventDefault stops that focus from happening.
+// openBlock goes to a block on another page and puts the caret on it, which is
+// what following a reference means.
+async function openBlock(e) {
+  if (!e || !e.rel) return;
+  const p = await call(() => api().OpenRel(e.rel));
+  if (!p) return;
+  focusOffset = e.addr ? Number(String(e.addr).split(":").pop().split("@")[0]) : 0;
+  show(p);
+}
+
 document.addEventListener("mousedown", (e) => {
   const d = e.target.dataset;
   if (!d) return;

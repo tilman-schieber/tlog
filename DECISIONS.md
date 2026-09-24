@@ -454,6 +454,38 @@ structural write and every external edit already passes through. Before the
 outliner was moved onto the core there was no such point, and this fix would
 have had to be repeated at a dozen call sites.
 
+## Showing what a reference points at
+
+**A reference draws as the block, not as the page name.** `[[Page#^anchor]]`
+parsed, resolved and produced backlinks from the start, but it drew as the page
+name — you pointed at one block out of a hundred and were shown the word
+"Timetable". A reference nobody can read is a reference nobody makes, which is
+why this and the `((` that creates them are one feature that arrived in two
+parts.
+
+**Resolution happens in the core.** Finding the block behind an anchor means
+having the whole graph, and an adapter that had the graph would be deciding
+things. The read model carries the resolved text, in the order the references
+appear, and each adapter substitutes them where they stand.
+
+**An embed has no syntax.** A block whose entire text is one reference draws
+that block and its children; a block with prose around a reference stays inline.
+The rule is strict on purpose — one reference and nothing else — because
+inlining a subtree into the middle of a sentence would be nonsense, and because
+the alternative was `{{embed ...}}`, a second construct to learn for something
+the first one already says.
+
+**The embedded subtree is read-only and bounded.** Those rows belong to another
+file: editing one where it is shown would be editing a file this page does not
+have open, so they navigate instead. The depth budget keeps embedding a large
+block from burying the page doing the embedding.
+
+**A dangling reference is drawn as broken rather than as a page name.** A
+pointer the reader cannot see has gone wrong is worse than an ugly one they can.
+Where nothing was resolved at all — a backlink row, an agenda line, views that
+do not carry the text behind a reference — the page name is what is honestly
+known, and that is what is shown.
+
 ## Known gaps
 
 - A name that parses as an ISO date resolves to that day's journal rather than
