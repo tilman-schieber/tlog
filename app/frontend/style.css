@@ -379,9 +379,52 @@ blockquote {
   background: var(--bg);
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.18);
 }
-#complete .item { padding: 4px 8px; border-radius: 5px; cursor: default; }
+#complete { display: flex; gap: 8px; min-width: 190px; }
+#complete .item { padding: 4px 8px; border-radius: 5px; cursor: default; white-space: nowrap; }
 #complete .item.sel { background: var(--sel); }
-#complete .hint { padding: 4px 8px; color: var(--fg-muted); font-size: 12px; }
+#complete .hint { color: var(--fg-muted); font-size: 12px; }
+#complete .cmds { min-width: 168px; max-height: 224px; overflow-y: auto; }
+
+/* The calendar is confirmation, not input: it shows what the shorthand meant. */
+#complete .datepick {
+  min-width: 156px;
+  padding-left: 8px;
+  border-left: 1px solid var(--line);
+}
+#complete .resolved { padding: 2px 4px 6px; font-weight: 600; }
+#complete .calhead {
+  padding: 0 4px 3px;
+  color: var(--fg-muted);
+  font-size: 11px;
+}
+table.cal { border-collapse: collapse; font-size: 11px; }
+table.cal th {
+  padding: 1px 4px;
+  color: var(--fg-muted);
+  font-weight: 500;
+}
+table.cal td {
+  padding: 2px 4px;
+  text-align: right;
+  border-radius: 4px;
+}
+table.cal td.today { outline: 1px solid var(--line); }
+table.cal td.sel { background: var(--accent); color: #fff; font-weight: 600; }
+
+/* A deadline sits beside its block, coloured by how it stands. */
+.due {
+  flex: none;
+  padding-top: 2px;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: default;
+}
+.due.t-overdue { color: var(--danger); font-weight: 600; }
+.due.t-today   { color: var(--todo); font-weight: 600; }
+.due.t-soon    { color: var(--fg-muted); }
+.due.t-later, .due.done { color: var(--fg-muted); opacity: 0.65; }
+.t-overdue { color: var(--danger); }
+.t-today { color: var(--todo); }
 
 #error {
   position: fixed;

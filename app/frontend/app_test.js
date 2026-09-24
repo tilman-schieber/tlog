@@ -35,6 +35,7 @@ eval(lift("function gridHTML"));
 eval(lift("function fenceHTML"));
 eval(lift("function decorate"));
 eval(lift("function linkPrefix"));
+eval(lift("function slashAt"));
 
 let failures = 0;
 function eq(label, got, want) {
@@ -214,6 +215,22 @@ eq("a closed link does not trigger", linkPrefix("see [[Done]] and"), null);
 eq("no brackets", linkPrefix("nothing here"), null);
 eq("a hash switches to tags", linkPrefix("[[Ada #per"), { kind: "tag", prefix: "per" });
 eq("a newline ends it", linkPrefix("[[multi\nline"), null);
+
+// --- the slash trigger -------------------------------------------------------
+
+eq("a slash at the start of a block", slashAt("/tod"),
+  { start: 0, name: "tod", arg: "" });
+eq("a slash after a space", slashAt("Bericht schreiben /todo"),
+  { start: 18, name: "todo", arg: "" });
+eq("everything after the first space is the argument", slashAt("x /deadline nächsten fr"),
+  { start: 2, name: "deadline", arg: "nächsten fr" });
+eq("a bare slash offers the whole menu", slashAt("x /"),
+  { start: 2, name: "", arg: "" });
+
+eq("a slash inside a word is not a command", String(slashAt("und/oder")), "null");
+eq("a url is not a command", String(slashAt("siehe http://x.test/pfad")), "null");
+eq("a path is not a command", String(slashAt("~/src/tlog")), "null");
+eq("no slash at all", String(slashAt("nothing here")), "null");
 
 console.log(failures === 0 ? "frontend: all pass" : `frontend: ${failures} FAILURES`);
 process.exit(failures ? 1 : 0);

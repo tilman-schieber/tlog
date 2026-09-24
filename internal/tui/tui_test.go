@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -689,5 +690,98 @@ func TestCSVFenceBecomesATableInTheOutliner(t *testing.T) {
 	// A csv fence is ordinary markdown; nothing is stored differently.
 	if got := onDisk(t, m); !strings.Contains(got, "```csv") {
 		t.Fatalf("stored wrongly: %q", got)
+	}
+}
+
+func TestSlashTodoMakesATask(t *testing.T) {
+	m := newModel(t)
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "Bericht schreiben /todo")
+	if m.comp == nil || m.comp.cmds == nil {
+		t.Fatal("the slash menu did not open")
+	}
+	if m.comp.cmds[0].Name != "todo" {
+		t.Fatalf("wrong command offered: %+v", m.comp.cmds)
+	}
+	send(t, m, k(tea.KeyEnter))
+	send(t, m, k(tea.KeyEsc))
+
+	got := onDisk(t, m)
+	if !strings.Contains(got, "- [ ] Bericht schreiben") {
+		t.Fatalf("got %q", got)
+	}
+	if strings.Contains(got, "/todo") {
+		t.Fatalf("the command survived into the file: %q", got)
+	}
+}
+
+func TestSlashDeadlineWritesAProperty(t *testing.T) {
+	m := newModel(t)
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "Bot testen /deadline morgen")
+	if m.comp == nil || m.comp.cmds == nil || m.comp.cmds[0].Name != "deadline" {
+		t.Fatalf("deadline not offered: %+v", m.comp)
+	}
+	// The menu shows what the shorthand resolved to, before anything is written.
+	if !strings.Contains(m.comp.items[0], "morgen") {
+		t.Fatalf("no preview of the date: %q", m.comp.items[0])
+	}
+	send(t, m, k(tea.KeyEnter))
+	send(t, m, k(tea.KeyEsc))
+
+	got := onDisk(t, m)
+	if !strings.Contains(got, "Deadline:: ") {
+		t.Fatalf("no deadline written: %q", got)
+	}
+	if strings.Contains(got, "/deadline") || strings.Contains(got, "morgen") {
+		t.Fatalf("the shorthand survived: %q", got)
+	}
+	want := time.Now().AddDate(0, 0, 1).Format("2006-01-02")
+	if !strings.Contains(got, want) {
+		t.Fatalf("expected %s in %q", want, got)
+	}
+}
+
+func TestASlashInProseIsNotACommand(t *testing.T) {
+	m := newModel(t)
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "siehe http://x.test/pfad")
+	if m.comp != nil && m.comp.cmds != nil {
+		t.Fatal("a slash inside a URL opened the command menu")
+	}
+	typeText(t, m, " und/oder")
+	if m.comp != nil && m.comp.cmds != nil {
+		t.Fatal("a slash inside a word opened the command menu")
+	}
+	send(t, m, k(tea.KeyEsc))
+	if got := onDisk(t, m); !strings.Contains(got, "und/oder") {
+		t.Fatalf("the text was mangled: %q", got)
+	}
+}
+
+func TestAnUnknownSlashWordIsLeftAlone(t *testing.T) {
+	m := newModel(t)
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "/frobnicate")
+	if m.comp != nil && m.comp.cmds != nil {
+		t.Fatal("an unknown command should not hold the menu open")
+	}
+	send(t, m, k(tea.KeyEsc))
+	if got := onDisk(t, m); !strings.Contains(got, "/frobnicate") {
+		t.Fatalf("the text was eaten: %q", got)
+	}
+}
+
+func TestSlashMenuCanBeDismissed(t *testing.T) {
+	m := newModel(t)
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "x /todo")
+	send(t, m, k(tea.KeyEsc)) // dismiss the menu
+	if m.comp != nil {
+		t.Fatal("esc should close the menu")
+	}
+	send(t, m, k(tea.KeyEsc)) // leave insert
+	if got := onDisk(t, m); !strings.Contains(got, "/todo") {
+		t.Fatalf("dismissing should leave the literal text: %q", got)
 	}
 }

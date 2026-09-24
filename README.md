@@ -63,6 +63,7 @@ The notes directory is `$TLOG_DIR`, or `~/notes`. Any command takes `-dir`.
 | `space` | toggle the task checkbox |
 | `dd` | delete the block and its children |
 | `[[` | page autocomplete, while typing |
+| `/` | commands: `/todo`, `/deadline fr`, `/table`, `/code` … |
 | `gf` / `gb` | follow the link · what links here, as a list |
 | `enter` | on a reference below the outline: jump to it |
 | `ctrl+p` / `/` | open a page · search every block |
@@ -146,6 +147,46 @@ On Hyprland with an NVIDIA card, WebKitGTK's DMA-BUF renderer can produce a
 blank window; Wails detects the driver and disables it. Build natively rather
 than shipping an AppImage — a bundled, stale `libwayland-client` is the usual
 cause of an empty window on Wayland.
+
+## Tasks and deadlines
+
+`/` in a block opens a command menu, named after Logseq's so the muscle memory
+carries over. The command is typed and then disappears: what stays in the file
+is its effect, never a slash.
+
+| | |
+|---|---|
+| `/todo` `/done` | a checkbox, open or ticked |
+| `/deadline fr` | `Deadline:: 2026-09-25` on the block |
+| `/date morgen` | `[[2026-09-25]]` inline, a link to that day's journal |
+| `/quote` `/code` `/table` | a quotation, a code fence, a `csv` table |
+| `/page` `/tag` | a `[[link]]` or a `#tag`, where completion takes over |
+
+The date argument is typed, not picked. A calendar appears beside the menu
+showing what the shorthand resolved to — confirmation, so a mistyped date is
+caught before it is written, rather than the way you are meant to enter one.
+
+```
+/deadline fr          Freitag
+/deadline 26.9.       the German form you would type anyway
+/deadline morgen      heute · morgen · übermorgen
+/deadline +3d         +3d  +2w  +1m  +1j   (and 3t for Tage)
+/deadline eow         end of week · eom · eoy
+/deadline 2026-10-11  ISO
+```
+
+German and English both work, and whatever you type is stored as ISO — so the
+files sort, grep and still mean the same thing in a year. Nonsense is refused
+rather than guessed at: a silently wrong deadline is worse than being told the
+word was not understood.
+
+A dated block shows its date beside it, red when overdue, yellow when today.
+Finished work is never overdue, however long ago it was due.
+
+```sh
+tlog due          # everything open and dated, soonest first
+tlog due -all     # including what is done
+```
 
 ## Pushing
 

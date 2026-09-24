@@ -115,6 +115,12 @@ Measured rather than guessed:
   nesting mechanism would be two ways to say one thing, and they would disagree.
 - **Transclusion and embeds.** Real value, but block references still have no UI
   for creating them, so there is nothing to embed by hand yet.
+- **A `/query` command.** Logseq has one and it is the door to a whole query
+  language. `tlog due` covers the one query these notes actually want; the rest
+  is `rg`.
+- **Recurring deadlines.** Nothing in the corpus repeats, and a repeat rule is a
+  syntax, a scheduler and a "what does it mean to tick off one instance" problem
+  all at once.
 - **Auto-pull.** Pushing is automatic; pulling is not, and should stay that way.
   A pull can conflict, and resolving a conflict in someone's notes behind their
   back is the same mistake as merging a lost write instead of refusing it.

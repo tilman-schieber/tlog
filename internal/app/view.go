@@ -1,8 +1,11 @@
 package app
 
 import (
+	"sort"
 	"strings"
+	"time"
 
+	"github.com/tilman-schieber/tlog/internal/dates"
 	"github.com/tilman-schieber/tlog/internal/graph"
 	"github.com/tilman-schieber/tlog/internal/markdown"
 	"github.com/tilman-schieber/tlog/internal/store"
@@ -33,6 +36,12 @@ type BlockView struct {
 	Task        string          `json:"task,omitempty"` // "", "open" or "done"
 	HasChildren bool            `json:"hasChildren"`
 	Fences      []FenceView     `json:"fences,omitempty"`
+
+	// A deadline is resolved once, here, so that no adapter has to decide for
+	// itself what "soon" means or how to say "3 Tage überfällig".
+	Due      string `json:"due,omitempty"`
+	DueState string `json:"dueState,omitempty"`
+	DueLabel string `json:"dueLabel,omitempty"`
 }
 
 // RefView is a block elsewhere that mentions this page, or one of its children.
@@ -117,7 +126,7 @@ func (s *Service) viewWith(g *graph.Graph, d *Doc) *PageView {
 	}
 
 	d.Doc.Walk(func(b *markdown.Block) bool {
-		v.Blocks = append(v.Blocks, BlockView{
+		bv := BlockView{
 			Offset:      b.Start,
 			Depth:       b.Depth,
 			Text:        b.Text,
@@ -126,7 +135,16 @@ func (s *Service) viewWith(g *graph.Graph, d *Doc) *PageView {
 			Task:        taskName(b.Task()),
 			HasChildren: len(b.Children) > 0,
 			Fences:      fenceViews(b.Text),
-		})
+		}
+		if due, ok := Deadline(b); ok {
+			bv.Due = dates.Format(due)
+			// Finished work is never overdue, however long ago it was due.
+			if b.Task() != markdown.TaskDone {
+				bv.DueState = string(dates.Status(due, time.Now()))
+				bv.DueLabel = dates.Describe(due, time.Now())
+			}
+		}
+		v.Blocks = append(v.Blocks, bv)
 		return true
 	})
 
@@ -201,6 +219,70 @@ func refViews(r graph.Ref) []RefView {
 	}
 	walk(r.Block.Children, 1)
 	return out
+}
+
+// DueItem is one dated block, addressable so that it can be ticked off from
+// wherever it is listed.
+type DueItem struct {
+	Rel    string `json:"rel"`
+	Page   string `json:"page"`
+	Offset int    `json:"offset"`
+	Hash   string `json:"hash"`
+	Text   string `json:"text"`
+	Due    string `json:"due"`
+	State  string `json:"state"`
+	Label  string `json:"label"`
+	Done   bool   `json:"done"`
+}
+
+// Due lists everything with a deadline, soonest first. Done items are left out
+// unless asked for: an agenda is what is left to do.
+//
+// This is the reason deadlines are worth storing at all. A date nobody can ask
+// about is just text that looks like a date.
+func (s *Service) Due(includeDone bool) ([]DueItem, error) {
+	g, err := s.Graph()
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	var out []DueItem
+	for _, p := range g.Order {
+		p.Doc.Walk(func(b *markdown.Block) bool {
+			due, ok := Deadline(b)
+			if !ok {
+				return true
+			}
+			done := b.Task() == markdown.TaskDone
+			if done && !includeDone {
+				return true
+			}
+			state, label := "", ""
+			if !done {
+				state = string(dates.Status(due, now))
+				label = dates.Describe(due, now)
+			}
+			out = append(out, DueItem{
+				Rel:    p.Rel,
+				Page:   p.Name,
+				Offset: b.Start,
+				Hash:   p.Hash,
+				Text:   strings.TrimSpace(b.TaskBody()),
+				Due:    dates.Format(due),
+				State:  state,
+				Label:  label,
+				Done:   done,
+			})
+			return true
+		})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Due != out[j].Due {
+			return out[i].Due < out[j].Due
+		}
+		return out[i].Page < out[j].Page
+	})
+	return out, nil
 }
 
 // Index lists journals newest first, then pages, then the tags in use.

@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
+	tapp "github.com/tilman-schieber/tlog/internal/app"
+	"github.com/tilman-schieber/tlog/internal/dates"
 	"github.com/tilman-schieber/tlog/internal/markdown"
 	"github.com/tilman-schieber/tlog/internal/store"
 )
@@ -194,7 +197,22 @@ func (m *Model) renderRow(r row, selected, editing bool) []string {
 		out[0] += " " + styleMuted.Render("^"+r.block.Anchor)
 	}
 	for _, p := range r.block.Props {
+		if strings.EqualFold(p.Key, tapp.DeadlineProp) {
+			continue // shown beside the text instead, with how it stands
+		}
 		out = append(out, indent+"  "+styleProp.Render(p.Key+":: "+p.Value))
+	}
+	if due, ok := tapp.Deadline(r.block); ok && !editing {
+		style := styleMuted
+		if r.block.Task() != markdown.TaskDone {
+			switch dates.Status(due, time.Now()) {
+			case dates.Overdue:
+				style = styleError
+			case dates.Today:
+				style = styleTodo
+			}
+		}
+		out[0] += " " + style.Render("⏰ "+dates.Short(due))
 	}
 
 	if editing && m.comp != nil && m.comp.active {
@@ -411,6 +429,7 @@ func (m *Model) helpView() string {
 		{"space", "toggle the task checkbox"},
 		{"dd", "delete the block and its children"},
 		{"[[", "page autocomplete, while typing"},
+		{"/", "commands: /todo, /deadline fr, /table, /code …"},
 		{"gf", "follow the [[link]] in this block"},
 		{"gb", "what links here, as a list"},
 		{"enter", "on a reference below the outline: jump to it"},

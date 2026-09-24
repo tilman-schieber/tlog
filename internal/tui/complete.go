@@ -2,9 +2,12 @@ package tui
 
 import (
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	tapp "github.com/tilman-schieber/tlog/internal/app"
+	"github.com/tilman-schieber/tlog/internal/dates"
 	"github.com/tilman-schieber/tlog/internal/graph"
 )
 
@@ -16,6 +19,12 @@ type completion struct {
 	prefix string
 	items  []string
 	sel    int
+
+	// A slash command is a different kind of completion: it has a menu of its
+	// own, and what it inserts is an effect rather than text.
+	cmds  []tapp.Command
+	arg   string
+	start int // rune offset where the "/" sits
 	// closing is appended when a candidate is accepted: page names finish the
 	// link, tags do not, because you may want to add another.
 	closing string
@@ -30,6 +39,9 @@ const completionLimit = 8
 // updateCompletion re-evaluates the trigger after every keystroke. The trigger
 // is an unclosed [[ to the left of the cursor.
 func (m *Model) updateCompletion() {
+	if m.slashCompletion() {
+		return
+	}
 	prefix, ok := linkPrefix(m.ed.textBefore())
 	if !ok {
 		m.comp = nil
@@ -78,6 +90,74 @@ func (m *Model) currentCompletion() string {
 	return m.comp.items[m.comp.sel]
 }
 
+// slashCompletion opens the command menu when a "/" has been typed at the start
+// of a word. It reports whether it took over.
+func (m *Model) slashCompletion() bool {
+	before := m.ed.textBefore()
+	start, name, arg, ok := slashAt(before)
+	if !ok {
+		return false
+	}
+	cmds := tapp.MatchCommands(name)
+	if len(cmds) == 0 {
+		m.comp = nil
+		return false // let it be ordinary text: not every slash is a command
+	}
+	items := make([]string, 0, len(cmds))
+	for _, c := range cmds {
+		label := c.Title
+		if c.TakesDate() {
+			if d, ok := tapp.PreviewDate(arg); ok {
+				label = c.Title + "  → " + dates.Short(d) + "  " + dates.Describe(d, time.Now())
+			} else {
+				label = c.Title + "  " + c.Hint
+			}
+		} else {
+			label = c.Title + "  " + c.Hint
+		}
+		items = append(items, label)
+	}
+	sel := 0
+	if m.comp != nil && m.comp.cmds != nil && m.comp.sel < len(items) {
+		sel = m.comp.sel
+	}
+	m.comp = &completion{active: true, items: items, cmds: cmds, arg: arg, start: start, sel: sel}
+	return true
+}
+
+// slashAt finds a command being typed to the left of the caret: a "/" at the
+// start of a word, the command name, and anything after the first space as its
+// argument.
+func slashAt(before string) (start int, name, arg string, ok bool) {
+	r := []rune(before)
+	i := len(r) - 1
+	for ; i >= 0; i-- {
+		if r[i] == '/' {
+			break
+		}
+		if r[i] == '\n' {
+			return 0, "", "", false
+		}
+	}
+	if i < 0 {
+		return 0, "", "", false
+	}
+	// A slash only starts a command at the start of a word, so a URL or a path
+	// never opens the menu.
+	if i > 0 && r[i-1] != ' ' && r[i-1] != '\t' {
+		return 0, "", "", false
+	}
+	rest := string(r[i+1:])
+	if strings.ContainsAny(rest, "/\\") {
+		return 0, "", "", false
+	}
+	name, arg, _ = strings.Cut(rest, " ")
+	if name == "" && arg == "" && rest != "" {
+		return 0, "", "", false
+	}
+	return i, name, arg, true
+}
+
 // linkPrefix finds the text typed after the most recent unclosed [[.
 func linkPrefix(before string) (string, bool) {
 	open := strings.LastIndex(before, "[[")
@@ -119,6 +199,10 @@ func (m *Model) completionKey(k string) (bool, tea.Cmd) {
 		}
 		return true, nil
 	case "tab", "enter":
+		if m.comp.cmds != nil {
+			m.runCommand()
+			return true, nil
+		}
 		m.acceptCompletion()
 		return true, nil
 	}
@@ -133,4 +217,68 @@ func (m *Model) acceptCompletion() {
 	}
 	m.ed.replaceBefore(len([]rune(m.comp.prefix)), name+m.comp.closing)
 	m.comp = nil
+}
+
+// runCommand applies the selected slash command to the block being edited. The
+// command and its argument are cut out by the core, so both adapters cut
+// identically.
+func (m *Model) runCommand() {
+	if m.comp == nil || m.comp.sel >= len(m.comp.cmds) || m.edBlock == nil {
+		return
+	}
+	cmd := m.comp.cmds[m.comp.sel]
+
+	text := m.ed.String()
+	from := m.comp.start
+	to := len([]rune(m.ed.textBefore()))
+
+	// The core addresses a block by where it is in the file, so the block has
+	// to be in the file first: a block just created by enter is only in memory,
+	// and its offset is whatever it was when the document was last parsed.
+	index := -1
+	for i, b := range m.doc.Doc.Flatten() {
+		if b == m.edBlock {
+			index = i
+			break
+		}
+	}
+	m.edBlock.Text = text
+	m.save()
+	if m.errMsg != "" {
+		m.comp = nil
+		return
+	}
+	if err := m.load(m.doc.Rel); err != nil {
+		m.errMsg = err.Error()
+		m.comp = nil
+		return
+	}
+	flat := m.doc.Doc.Flatten()
+	if index < 0 || index >= len(flat) {
+		m.errMsg = "lost track of the block the command was typed in"
+		m.comp = nil
+		return
+	}
+
+	res, err := m.svc.RunCommand(
+		tapp.Addr{Rel: m.doc.Rel, Offset: flat[index].Start, Hash: m.doc.Hash},
+		cmd.Name, m.comp.arg, text, from, to,
+	)
+	if err != nil {
+		m.errMsg = err.Error()
+		m.comp = nil
+		return
+	}
+
+	m.comp = nil
+	if lerr := m.load(res.Rel); lerr != nil {
+		m.errMsg = lerr.Error()
+		return
+	}
+	if b := m.doc.Doc.FindByOffset(res.Offset); b != nil {
+		m.focus(b)
+		m.startInsert(true)
+		m.ed.cur = min(res.Caret, len(m.ed.runes))
+	}
+	m.status = "/" + cmd.Name
 }

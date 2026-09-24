@@ -25,6 +25,7 @@ usage:
   tlog open <page>          print the path of a page, creating it if needed
   tlog add [-p page] text   append a block to today's journal, or to a page
   tlog import [-from dir]   import a Logseq graph into the notes directory
+  tlog due [-all]           what is dated and still open, soonest first
   tlog push [-auto on|off]  push the notes now, or set pushing on every commit
   tlog version              print the version
 
@@ -97,6 +98,8 @@ func Main(args []string, stdout, stderr io.Writer) int {
 		return cmdImport(rest, stdout, stderr, svc)
 	case "push":
 		return cmdPush(rest, stdout, stderr, svc)
+	case "due":
+		return cmdDue(rest, stdout, stderr, svc)
 	case "version":
 		fmt.Fprintln(stdout, Version)
 		return 0
@@ -161,6 +164,48 @@ func cmdAdd(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 		fmt.Fprintln(stdout, svc.Store.Abs(rel))
 		return nil
 	})
+}
+
+func cmdDue(args []string, stdout, stderr io.Writer, svc *app.Service) int {
+	fs := flag.NewFlagSet("due", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	all := fs.Bool("all", false, "include what is already done")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	items, err := svc.Due(*all)
+	if err != nil {
+		fmt.Fprintf(stderr, "tlog: %v\n", err)
+		return 1
+	}
+	if len(items) == 0 {
+		fmt.Fprintln(stdout, "nothing dated is open")
+		return 0
+	}
+	for _, it := range items {
+		mark := " "
+		if it.Done {
+			mark = "x"
+		}
+		flag := " "
+		if it.State == "overdue" {
+			flag = "!"
+		} else if it.State == "today" {
+			flag = "*"
+		}
+		fmt.Fprintf(stdout, "%s [%s] %-11s %-18s %s  (%s)\n",
+			flag, mark, it.Due, truncate(it.Label, 18), truncate(it.Text, 60), it.Page)
+	}
+	return 0
+}
+
+func truncate(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n-1]) + "…"
 }
 
 func cmdPush(args []string, stdout, stderr io.Writer, svc *app.Service) int {

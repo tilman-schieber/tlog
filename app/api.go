@@ -9,6 +9,8 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"github.com/tilman-schieber/tlog/internal/dates"
+
 	tapp "github.com/tilman-schieber/tlog/internal/app"
 	"github.com/tilman-schieber/tlog/internal/store"
 )
@@ -25,6 +27,7 @@ type API struct {
 type Edit struct {
 	Page   *tapp.PageView `json:"page"`
 	Offset int            `json:"offset"`
+	Caret  int            `json:"caret,omitempty"` // where a command left the caret
 }
 
 // Root is the notes directory, shown so it is never a mystery where the files
@@ -147,3 +150,99 @@ func (a *API) OpenURL(url string) error {
 		return fmt.Errorf("refusing to open a %q link", u.Scheme)
 	}
 }
+
+// --- slash commands ---------------------------------------------------------
+
+// Commands lists the slash menu. The list lives in the core so the app and the
+// outliner cannot offer different things.
+func (a *API) Commands(prefix string) []tapp.Command { return tapp.MatchCommands(prefix) }
+
+// DatePreview resolves a typed date shorthand for showing in the menu, before
+// anything is written. It answers with an empty string while the text is not
+// yet a date, which is the normal state halfway through typing one.
+type DatePreview struct {
+	ISO   string `json:"iso"`
+	Short string `json:"short"`
+	Label string `json:"label"`
+	State string `json:"state"`
+}
+
+func (a *API) DatePreview(arg string) DatePreview {
+	d, ok := tapp.PreviewDate(arg)
+	if !ok {
+		return DatePreview{}
+	}
+	now := time.Now()
+	return DatePreview{
+		ISO:   dates.Format(d),
+		Short: dates.Short(d),
+		Label: dates.Describe(d, now),
+		State: string(dates.Status(d, now)),
+	}
+}
+
+// Calendar is a month laid out for drawing, Monday first.
+type Calendar struct {
+	Title string   `json:"title"`
+	Days  []CalDay `json:"days"`
+}
+
+// CalDay is one cell. Blank cells pad the start of the month.
+type CalDay struct {
+	Day   int    `json:"day"`
+	ISO   string `json:"iso,omitempty"`
+	Today bool   `json:"today"`
+	Sel   bool   `json:"sel"`
+}
+
+// Month builds the calendar around a date, so that a typed shorthand can be
+// confirmed at a glance rather than trusted.
+func (a *API) Month(iso string) Calendar {
+	now := time.Now()
+	sel, err := time.Parse(dates.Layout, iso)
+	if err != nil {
+		sel = now
+	}
+	first := time.Date(sel.Year(), sel.Month(), 1, 0, 0, 0, 0, sel.Location())
+	lead := (int(first.Weekday()) + 6) % 7 // Monday first
+
+	cal := Calendar{Title: fmt.Sprintf("%s %d", monthNames[first.Month()], first.Year())}
+	for i := 0; i < lead; i++ {
+		cal.Days = append(cal.Days, CalDay{})
+	}
+	for d := first; d.Month() == first.Month(); d = d.AddDate(0, 0, 1) {
+		cal.Days = append(cal.Days, CalDay{
+			Day:   d.Day(),
+			ISO:   dates.Format(d),
+			Today: dates.Format(d) == dates.Format(now),
+			Sel:   dates.Format(d) == dates.Format(sel),
+		})
+	}
+	return cal
+}
+
+var monthNames = map[time.Month]string{
+	time.January: "Januar", time.February: "Februar", time.March: "März",
+	time.April: "April", time.May: "Mai", time.June: "Juni",
+	time.July: "Juli", time.August: "August", time.September: "September",
+	time.October: "Oktober", time.November: "November", time.December: "Dezember",
+}
+
+// RunCommand applies a slash command to a block and cuts the command out of the
+// text, in one write. from and to are rune offsets of the "/command argument"
+// run, and the core does the cutting so both adapters cut identically.
+func (a *API) RunCommand(rel string, offset int, hash, name, arg, text string, from, to int) (*Edit, error) {
+	res, err := a.svc.RunCommand(addr(rel, offset, hash), name, arg, text, from, to)
+	if err != nil {
+		return nil, err
+	}
+	edit, err := a.after(res.Result, nil)
+	if err != nil {
+		return nil, err
+	}
+	edit.Caret = res.Caret
+	return edit, nil
+}
+
+// Due lists everything dated and still open, soonest first.
+func (a *API) Due(includeDone bool) ([]tapp.DueItem, error) { return a.svc.Due(includeDone) }
