@@ -55,7 +55,7 @@ func TestEditsChainWithoutReloading(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e, err = a.NewBlock(e.Page.Rel, e.Offset, e.Page.Hash, "child")
+	e, err = a.NewBlock(e.Page.Rel, e.Offset, e.Page.Hash, "child", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func TestDeleteAndMove(t *testing.T) {
 	a := newAPI(t)
 	p, _ := a.Today()
 	e, _ := a.AppendBlock(p.Rel, p.Hash, "one")
-	e, _ = a.NewBlock(e.Page.Rel, e.Offset, e.Page.Hash, "two")
+	e, _ = a.NewBlock(e.Page.Rel, e.Offset, e.Page.Hash, "two", true)
 
 	e, err := a.Move(e.Page.Rel, e.Offset, e.Page.Hash, -1)
 	if err != nil {

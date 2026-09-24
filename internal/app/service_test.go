@@ -364,7 +364,7 @@ func TestMutationsRefuseAStaleAddress(t *testing.T) {
 		"SetText":  func() error { _, err := s.SetText(a, "x"); return err },
 		"Indent":   func() error { _, err := s.Indent(a); return err },
 		"Delete":   func() error { _, err := s.DeleteBlock(a); return err },
-		"Insert":   func() error { _, err := s.InsertAfter(a, "x"); return err },
+		"Insert":   func() error { _, err := s.InsertAfter(a, "x", true); return err },
 		"Toggle":   func() error { _, err := s.ToggleTask(a); return err },
 		"Property": func() error { _, err := s.SetProperty(a, "k", "v"); return err },
 	} {
@@ -415,7 +415,7 @@ func TestInsertAfterNestsUnderABlockWithChildren(t *testing.T) {
 	if _, err := s.Indent(addrOf(t, s, rel, 1)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.InsertAfter(addrOf(t, s, rel, 0), "new first child"); err != nil {
+	if _, err := s.InsertAfter(addrOf(t, s, rel, 0), "new first child", true); err != nil {
 		t.Fatal(err)
 	}
 	if got := body(t, s, rel); got != "- parent\n  - new first child\n  - child\n" {

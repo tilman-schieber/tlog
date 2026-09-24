@@ -170,15 +170,20 @@ func (s *Service) DeleteBlock(a Addr) (*Result, error) {
 	return res, nil
 }
 
-// InsertAfter adds a sibling below a block. When the block has children the new
-// one becomes the first of them, which is what an outliner does.
-func (s *Service) InsertAfter(a Addr, text string) (*Result, error) {
+// InsertAfter adds a block below another one.
+//
+// asChild makes it the first child instead, which is what an outliner does when
+// the block above has children you can see. The adapter decides rather than the
+// core, because the answer turns on whether those children are *visible* —
+// collapse is view state, and a core that guessed would disagree with whichever
+// adapter guessed differently. It used to, which is why this is a parameter.
+func (s *Service) InsertAfter(a Addr, text string, asChild bool) (*Result, error) {
 	d, b, err := s.Resolve(a)
 	if err != nil {
 		return nil, err
 	}
 	nb := &markdown.Block{Text: text}
-	if len(b.Children) > 0 {
+	if asChild && len(b.Children) > 0 {
 		b.Children = append([]*markdown.Block{nb}, b.Children...)
 		nb.Parent = b
 		d.Doc.Reindex()
@@ -228,4 +233,65 @@ type staleErr struct {
 
 func (e *staleErr) Error() string {
 	return fmt.Sprintf("%s changed on disk (expected %s, found %s); re-read and retry", e.rel, e.expected, e.actual)
+}
+
+// SplitBlock ends a block at the caret and starts the next one with the rest.
+//
+// It is one method rather than SetText followed by InsertAfter because enter is
+// the most frequent key in an outliner: two calls would be two writes, two
+// commits, and a window in which the file can move between them, leaving half
+// the split behind.
+//
+// asChild says where the new block goes when the old one has children. The
+// adapter decides, because the answer depends on whether those children are
+// *visible* — collapse is view state and the core has never been told about it.
+func (s *Service) SplitBlock(a Addr, before, after string, asChild bool) (*Result, error) {
+	d, b, err := s.Resolve(a)
+	if err != nil {
+		return nil, err
+	}
+	b.Text = before
+	nb := &markdown.Block{Text: after}
+	if asChild && len(b.Children) > 0 {
+		b.Children = append([]*markdown.Block{nb}, b.Children...)
+		nb.Parent = b
+		d.Doc.Reindex()
+	} else if err := d.Doc.InsertAfter(b, nb); err != nil {
+		return nil, err
+	}
+	return s.commit(d, nb)
+}
+
+// MergeIntoPrevious joins a block onto the one above it in the file and removes
+// it — what backspace at the start of a block means in an outliner.
+//
+// Refused when the block has children: they would have nowhere to go, and
+// picking a place for them silently is worse than saying so.
+func (s *Service) MergeIntoPrevious(a Addr) (*Result, error) {
+	d, b, err := s.Resolve(a)
+	if err != nil {
+		return nil, err
+	}
+	if len(b.Children) > 0 {
+		return nil, fmt.Errorf("cannot merge a block that has children — outdent them first")
+	}
+
+	flat := d.Doc.Flatten()
+	idx := -1
+	for i, x := range flat {
+		if x == b {
+			idx = i
+			break
+		}
+	}
+	if idx <= 0 {
+		return nil, fmt.Errorf("nothing above to merge into")
+	}
+	prev := flat[idx-1]
+
+	prev.Text += b.Text
+	if err := d.Doc.Remove(b); err != nil {
+		return nil, err
+	}
+	return s.commit(d, prev)
 }

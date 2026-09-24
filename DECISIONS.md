@@ -151,6 +151,27 @@ both the app and a future `--json` CLI render. That the GUI needed no new
 concepts is the clearest evidence the adapter boundary was drawn in the right
 place.
 
+This entry was written before it was true. The mutations moved into the core
+*for the GUI*; the outliner went on reaching into `markdown.Document` and
+`graph.Graph` for another day, which left the read model and the CAS layer
+reachable from exactly one of the three adapters — the opposite of the claim.
+Two adapters drifting apart is what that costs: Enter on a block with collapsed
+children made a sibling in the outliner and a first child in the app. The
+outliner was migrated afterwards, and the paragraph is kept with its correction
+rather than quietly fixed, because a design note that no longer describes the
+code is worse than none.
+
+**Splitting a block is one operation, not two.** Enter is the most frequent key
+in an outliner, and writing it as set-the-text then insert-after is two writes,
+two commits, and a window in which the file can move between them and leave half
+the split on disk. `SplitBlock` and `MergeIntoPrevious` take one load and one
+save, so the pair is atomic or it is refused.
+
+**Collapse is view state, so the core does not read it.** `InsertAfter` and
+`SplitBlock` take an explicit `asChild bool`: the adapter has seen whether the
+children are on screen and decides; the core never guesses from whether a block
+*has* children. It used to guess, which is why this is a parameter.
+
 ## Rendering
 
 **Rendering is not the dialect.** Quotes, ordered and bulleted lists, tables,

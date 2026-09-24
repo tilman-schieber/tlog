@@ -89,8 +89,23 @@ func (a *API) SetText(rel string, offset int, hash, text string) (*Edit, error) 
 	return a.after(a.svc.SetText(addr(rel, offset, hash), text))
 }
 
-func (a *API) NewBlock(rel string, offset int, hash, text string) (*Edit, error) {
-	return a.after(a.svc.InsertAfter(addr(rel, offset, hash), text))
+// NewBlock adds a block below another. asChild is the frontend's call, because
+// only it knows whether the children of the block above are collapsed.
+func (a *API) NewBlock(rel string, offset int, hash, text string, asChild bool) (*Edit, error) {
+	return a.after(a.svc.InsertAfter(addr(rel, offset, hash), text, asChild))
+}
+
+// SplitBlock ends a block at the caret and starts the next one with the rest,
+// in one write. Enter used to be SetText followed by NewBlock, which is two
+// writes and a window where the file can move between them.
+func (a *API) SplitBlock(rel string, offset int, hash, before, after string, asChild bool) (*Edit, error) {
+	return a.after(a.svc.SplitBlock(addr(rel, offset, hash), before, after, asChild))
+}
+
+// MergeIntoPrevious joins a block onto the one above it — backspace at the
+// start of a block, which the window could not do at all before.
+func (a *API) MergeIntoPrevious(rel string, offset int, hash string) (*Edit, error) {
+	return a.after(a.svc.MergeIntoPrevious(addr(rel, offset, hash)))
 }
 
 func (a *API) AppendBlock(rel, hash, text string) (*Edit, error) {
