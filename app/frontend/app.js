@@ -57,8 +57,17 @@ async function checkSync() {
 
 // --- rendering --------------------------------------------------------------
 
+// Quotes are escaped as well as angle brackets, and that is not optional:
+// decorateInline escapes the whole block once and then splices pieces of the
+// result into quoted attributes — data-page, data-url, data-lang. A page name
+// containing a quote would otherwise close the attribute and let the rest of
+// the name become attributes of that span, which is an event handler away from
+// running. Your own notes are the injection vector, and notes get pasted into.
 const escapeHTML = (s) =>
-  s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  s.replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+  );
 
 // Rendering a block for reading. The block being edited shows raw text instead:
 // the caret has to land where the characters actually are, and what you type is

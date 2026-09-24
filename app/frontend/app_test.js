@@ -25,7 +25,10 @@ function lift(decl) {
 }
 
 const escapeHTML = (s) =>
-  s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  s.replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+  );
 
 // `const` declared inside eval stays inside it; `var` reaches this module.
 eval(lift("const RE =").replace(/^const /, "var "));
@@ -260,6 +263,73 @@ eq(
   JSON.stringify(refPrefix("f((x)) and ((lect")),
   '{"kind":"ref","prefix":"lect"}'
 );
+
+// --- nothing in a note may become markup -------------------------------------
+//
+// decorateInline escapes the block once and then splices the result into
+// quoted attributes, so an unescaped quote in a page name, a URL or a fence
+// language closed the attribute and the rest of the name became attributes of
+// that span. [[a" autofocus onfocus="alert(1)]] did exactly that, and the
+// notes it would come from are the ones you paste things into.
+
+// attrsOf reads the attribute names a tag actually carries, respecting quoted
+// values — a quote inside a value is not a delimiter, which is the whole point
+// and what the previous version of this test got wrong.
+function attrsOf(tag) {
+  const names = [];
+  let i = 0;
+  while (i < tag.length && !/\s/.test(tag[i])) i++; // the tag name
+  while (i < tag.length) {
+    while (i < tag.length && /[\s/]/.test(tag[i])) i++;
+    let name = "";
+    while (i < tag.length && !/[\s=/>]/.test(tag[i])) name += tag[i++];
+    if (name) names.push(name.toLowerCase());
+    while (i < tag.length && /\s/.test(tag[i])) i++;
+    if (tag[i] !== "=") continue;
+    i++;
+    while (i < tag.length && /\s/.test(tag[i])) i++;
+    const q = tag[i];
+    if (q === '"' || q === "'") {
+      i++;
+      while (i < tag.length && tag[i] !== q) i++;
+      i++;
+    } else {
+      while (i < tag.length && !/[\s>]/.test(tag[i])) i++;
+    }
+  }
+  return names;
+}
+
+const TAGS = /^(span|strong|em|del|code|pre|img|table|thead|tbody|tr|th|td|blockquote|hr|h[1-6]|ol|ul|li|br)$/;
+const ATTRS = /^(class|data-page|data-url|data-tag|data-lang|src|alt|loading)$/;
+
+for (const probe of [
+  `[[a" autofocus onfocus="alert(1)]]`,
+  `[[a" onmouseover="alert(1)]]`,
+  `[[Page #t" onmouseover="alert(1)]]`,
+  `#tag" onmouseover="alert(1)`,
+  `[label](http://x/" onmouseover="alert(1))`,
+  `![alt](http://x/" onerror="alert(1))`,
+  `![a" onerror="alert(1)](http://x/y)`,
+  `http://x.com/"onmouseover=alert(1)`,
+  "```csv\" onx=\"y\ndata\n```",
+  "```js\" onx=\"y\ncode\n```",
+  `<img src=x onerror=alert(1)>`,
+  `<script>alert(1)</script>`,
+  `<span class="link" data-page="x">fake</span>`,
+]) {
+  const out = decorate(probe);
+  const bad = [];
+  for (const m of out.matchAll(/<([^>]*)>/g)) {
+    const tag = m[1].replace(/^\//, "");
+    const name = (tag.match(/^[a-zA-Z0-9]+/) || [""])[0].toLowerCase();
+    if (!TAGS.test(name)) bad.push("tag <" + name + ">");
+    for (const a of attrsOf(tag)) if (!ATTRS.test(a)) bad.push("attr " + a);
+  }
+  eq("no markup escapes from " + JSON.stringify(probe), bad.join(", "), "");
+}
+
+eq("a quote in text is an entity", escapeHTML('say "hi"'), "say &quot;hi&quot;");
 
 console.log(failures === 0 ? "frontend: all pass" : `frontend: ${failures} FAILURES`);
 process.exit(failures ? 1 : 0);
