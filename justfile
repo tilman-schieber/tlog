@@ -7,6 +7,23 @@ test:
     node --check app/frontend/app.js
     node app/frontend/app_test.js
 
+# What CI runs, so a red build is reproducible here rather than only on GitHub.
+# -race is not optional: the watcher runs a sweep goroutine and the store keeps
+# a map of what it wrote.
+ci:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    unformatted=$(gofmt -l .)
+    if [ -n "$unformatted" ]; then echo "not gofmt'd:"; echo "$unformatted"; exit 1; fi
+    go vet ./...
+    go test -race -count=1 ./...
+    node --check app/frontend/app.js
+    node app/frontend/app_test.js
+    for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
+      GOOS=${target%/*} GOARCH=${target#*/} go build -o /dev/null ./cmd/tlog
+    done
+    echo "ci: all pass"
+
 # Install the CLI and the outliner into ~/.local/bin (on PATH)
 install:
     GOBIN="$HOME/.local/bin" go install ./cmd/tlog

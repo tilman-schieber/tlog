@@ -1,5 +1,7 @@
 # tlog
 
+[![CI](https://github.com/tilman-schieber/tlog/actions/workflows/ci.yml/badge.svg)](https://github.com/tilman-schieber/tlog/actions/workflows/ci.yml)
+
 A markdown-first knowledge outliner for the terminal, with a desktop app. Journals, nested blocks,
 `[[page links]]` and backlinks — in plain files you can `cat`, `rg`, `nvim` and
 `git` without tlog running at all.

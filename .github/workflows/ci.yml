@@ -1,0 +1,89 @@
+# Two jobs, split by one fact: exactly one package (./app) depends on Wails,
+# and on Linux that needs gtk3 and webkit2gtk headers whose package names have
+# moved twice between Ubuntu releases. macOS builds it against the system SDK
+# with nothing to install, so the desktop adapter is checked there and Linux
+# checks everything else. Nothing is skipped; it is only checked where it is
+# cheap to check.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Linux — core, CLI and outliner
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Formatting is a fact about the tree, not an opinion to argue about in
+      # review. gofmt -l prints what it would change; anything printed fails.
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "these files are not gofmt'd:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Packages under test
+        id: pkgs
+        run: echo "list=$(go list ./... | grep -v '/tlog/app$' | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
+
+      - name: go vet
+        run: go vet ${{ steps.pkgs.outputs.list }}
+
+      # -race is not optional here: the watcher runs a sweep goroutine and the
+      # store keeps a map of what it wrote.
+      - name: go test -race
+        run: go test -race -count=1 ${{ steps.pkgs.outputs.list }}
+
+      # The frontend has no build step on purpose, so this is the whole of it:
+      # the file must parse, and its pure helpers must behave.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Frontend
+        run: |
+          node --check app/frontend/app.js
+          node app/frontend/app_test.js
+
+      # The release targets, so a GOOS-specific mistake is caught on the commit
+      # that made it rather than at release time.
+      - name: Cross-compile the CLI
+        run: |
+          for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
+            GOOS=${target%/*} GOARCH=${target#*/} go build -o /dev/null ./cmd/tlog
+          done
+
+  desktop:
+    name: macOS — the desktop adapter
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # ./app is the only package Linux skips, so this is where it is built and
+      # where the 40 bound API methods are tested.
+      - name: Build and test everything
+        run: |
+          go build ./...
+          go test -race -count=1 ./...
