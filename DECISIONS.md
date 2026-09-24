@@ -151,6 +151,99 @@ both the app and a future `--json` CLI render. That the GUI needed no new
 concepts is the clearest evidence the adapter boundary was drawn in the right
 place.
 
+## Rendering
+
+**Rendering is not the dialect.** Quotes, ordered and bulleted lists, tables,
+headings, rules, images and fenced code are all ordinary markdown living inside
+a block's text. Every one of them was added by teaching the adapters to draw,
+and not one changed how a file is stored — so the round-trip invariant never
+moved and no existing note was touched.
+
+**Markdown is rendered while reading and raw while writing.** The block under
+the caret shows the characters that are actually in the file, because the caret
+has to land where they are and what you type is what is stored. Hiding syntax
+while editing it is how round-trip guarantees die.
+
+**Measure the corpus before adding syntax.** Two of the guesses that drove the
+first pass were wrong: "zero headings" was a bad regex (they are written as
+`- # Heading`, the bullet's own text, so `^\s*#` never matched — there are 34),
+and "68 horizontal rules" was 56 frontmatter delimiters plus 12 real ones.
+Tables turned out to be used in five files. The habit is cheap and it has paid
+twice.
+
+**`csv` fences instead of pipe tables.** A pipe table must be re-aligned by hand
+every time a cell changes; rows of values need not be. The separator is detected
+rather than assumed, because a spreadsheet exported on a German-locale machine
+uses semicolons and nobody should have to care. It stays ordinary markdown:
+anything that does not know about tlog shows a code block, which is a readable
+thing to show.
+
+**Highlighting lives in Go, not JavaScript.** A JS library would serve only the
+desktop app, need a build step, and leave the outliner plain. A Go tokenizer
+serves both and a `--json` caller too. `chroma` was rejected: two hundred
+languages against one code fence in the corpus would roughly double the 8.4 MB
+bundle. The invariant is that tokens must reassemble into exactly the input, for
+every language and for half-pasted code — notes are full of half-pasted code,
+and a highlighter that drops a character silently corrupts what you read.
+
+## Commands, tasks and deadlines
+
+**Slash commands, named after Logseq's.** One extensible surface rather than a
+trigger per feature, and the muscle memory carries over. An `@` trigger for
+dates was designed first and dropped: it would have spent a character on one
+feature and left the next one homeless.
+
+**A command disappears when it runs.** What stays in the file is its effect —
+`/todo` leaves a checkbox, `/deadline fr` leaves a property, neither leaves a
+slash. The menu and the text-cutting both live in `internal/app`, so the two
+adapters cannot cut differently.
+
+**A deadline is a property, not an inline date link.** `[[2026-09-25]]` reads
+better and would give the day's journal its backlinks for free, but
+
+    - [ ] Rückmeldung zum Protokoll von [[2026-09-20]]
+
+is a past date that is emphatically not a deadline, and an agenda built on "task
+plus date link" would scream about it. Implicit is wrong here. The property is
+spelled `Deadline` to match what the corpus already had; reading accepts any
+casing and `due` as well.
+
+**Dates are typed, and the calendar only confirms.** `/dl fr` is eight
+keystrokes and no picker beats that, so the calendar shows what the shorthand
+resolved to rather than being the way in. German and English are both accepted
+because these notes are both, and everything is stored as ISO so the files sort,
+grep and mean the same thing in a year. Unparseable input is refused rather than
+guessed at: a silently wrong deadline is worse than being told the word was not
+understood.
+
+**"nächsten Freitag" is defined, not inferred.** It is always one week after
+plain "Freitag". The phrase is genuinely ambiguous in speech, and a rule that is
+written down beats one that is clever.
+
+**Finished work is never overdue**, however long ago it was due.
+
+**`tlog due` is why deadlines are stored at all.** A date nobody can ask about
+is just text that looks like a date. Run against the real corpus for the first
+time it surfaced something seven days overdue, which is the whole argument.
+
+## Pushing
+
+**Pushing is opt in, per notes directory.** The setting lives in the notes
+repository as `tlog.autopush`, not in tlog: whether a directory's contents leave
+the machine is a property of that directory, so a freshly created one never
+pushes by surprise, and turning it on without a remote is refused rather than
+quietly ignored.
+
+**A failed push is never a failed save.** The commit protects the notes; the
+push sits on top. Failure reads "committed, but not pushed" and the commit
+stands. A push that failed in the background is surfaced in both adapters,
+because a failure nobody sees is the same as no backup at all.
+
+**It never forces and never merges**, and it is bounded at twenty seconds. A
+rejected push means the remote moved; resolving that is a decision, and the same
+rule applies as to a lost write — refuse and report rather than merge behind
+someone's back. Auto-pull is not built for exactly that reason.
+
 ## Scope
 
 V0.1 is the smallest thing worth using daily: import, journals, nested multi-line

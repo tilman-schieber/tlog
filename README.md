@@ -41,7 +41,10 @@ tlog open "Project Foo"       # print a page's path, creating it if needed
 tlog add "buy milk"           # append a block to today's journal
 tlog add -p "Project Foo" "implement the parser"
 echo "note" | tlog add        # append from a pipe
+tlog due                      # what is dated and still open, soonest first
 tlog import                   # one-time import from a Logseq graph
+tlog push                     # send the notes to their remote
+tlog help                     # all of it, and `tlog version`
 
 nvim "$(tlog today)"          # the point: it is just a file
 rg '#research' ~/notes
