@@ -217,9 +217,7 @@ func (m *Model) activateRow() bool {
 		return true
 	case rowRef:
 		m.goTo(r.rel)
-		if b := m.doc.Doc.FindByOffset(r.offset); b != nil {
-			m.focus(b)
-		}
+		m.focusOffset(r.offset)
 		return true
 	}
 	return false
@@ -393,13 +391,13 @@ func (m *Model) normalKey(msg tea.KeyMsg, k string) (tea.Model, tea.Cmd) {
 		m.startInsert(false)
 
 	case "tab":
-		m.structural(func(d *markdown.Document, b *markdown.Block) bool { return d.Indent(b) })
+		m.structural(m.svc.Indent)
 	case "shift+tab":
-		m.structural(func(d *markdown.Document, b *markdown.Block) bool { return d.Outdent(b) })
+		m.structural(m.svc.Outdent)
 	case "alt+up", "K":
-		m.structural(func(d *markdown.Document, b *markdown.Block) bool { return d.MoveUp(b) })
+		m.structural(func(a app.Addr) (*app.Result, error) { return m.svc.Move(a, -1) })
 	case "alt+down", "J":
-		m.structural(func(d *markdown.Document, b *markdown.Block) bool { return d.MoveDown(b) })
+		m.structural(func(a app.Addr) (*app.Result, error) { return m.svc.Move(a, 1) })
 
 	case "d":
 		m.pendingD = true
@@ -462,22 +460,126 @@ func (m *Model) expandOrChild() {
 	}
 }
 
-// structural applies a tree operation and saves. Structural changes rewrite the
-// file, which is safe because it is already canonical.
-func (m *Model) structural(fn func(*markdown.Document, *markdown.Block) bool) {
-	b := m.current()
-	if b == nil {
-		return
-	}
-	if !fn(m.doc.Doc, b) {
-		return
-	}
-	m.save()
-	m.buildRows()
-	m.focus(b)
+// --- the core ---------------------------------------------------------------
+
+// addrOf addresses the block under the cursor for the core: where it starts in
+// the file, and the hash of the file that offset was computed against. The core
+// refuses an address computed against a file that has since moved, which is how
+// the outliner cannot clobber an edit made in another editor.
+//
+// It is only meaningful while memory and disk agree about the *shape* of the
+// file. They always do: every structural change goes through the core, which
+// writes and hands back a fresh offset. The text being typed is the one thing
+// that is allowed to differ, and text does not move the block it is in.
+func (m *Model) addrOf(b *markdown.Block) app.Addr {
+	return app.Addr{Rel: m.doc.Rel, Offset: b.Start, Hash: m.doc.Hash}
 }
 
-// focus puts the cursor back on a block after the rows were rebuilt.
+// ensureOnDisk makes the address of a block mean something before one is taken.
+//
+// Browsing to a day with no file must create nothing, so load shows a blank
+// bullet that exists only in memory — and the core addresses a block by where
+// it is *in the file*. The first real operation on such a page has to put it
+// there. Writing is skipped when the file already says exactly this, which is
+// the case every other time.
+func (m *Model) ensureOnDisk() bool {
+	if markdown.Hash(markdown.Render(m.doc.Doc)) == m.doc.Hash {
+		return true
+	}
+	m.save()
+	return m.errMsg == ""
+}
+
+// addrFrom turns the result of one mutation into the address for the next, so
+// two steps can be chained without a round trip through the rows.
+func addrFrom(res *app.Result) app.Addr {
+	return app.Addr{Rel: res.Rel, Offset: res.Offset, Hash: res.Hash}
+}
+
+// structural sends the block under the cursor through a core mutation. Every
+// structural change in the outliner goes through here, so the outliner and the
+// desktop app cannot come to disagree about what indent means.
+func (m *Model) structural(fn func(app.Addr) (*app.Result, error)) {
+	b := m.current()
+	if b == nil || !m.ensureOnDisk() {
+		return
+	}
+	m.apply(fn(m.addrOf(b)))
+}
+
+// apply takes the outcome of a core mutation: it re-reads the file the core has
+// just rewritten and puts the cursor back on the block the core says it moved.
+func (m *Model) apply(res *app.Result, err error) bool {
+	if err != nil {
+		m.fail(err)
+		return false
+	}
+	if err := m.reloadFromDisk(); err != nil {
+		m.errMsg = err.Error()
+		return false
+	}
+	m.errMsg = ""
+	m.focusOffset(res.Offset)
+	// A push that failed happened in the background, so it has to be said
+	// somewhere or it is the same as not happening at all.
+	if sync := m.svc.Sync(); sync.LastErr != "" {
+		m.status = "not pushed: " + sync.LastErr
+	}
+	return true
+}
+
+// fail separates the three things that can go wrong, because they want three
+// different reactions. A move that does not exist — outdenting a top-level
+// block — is not an error: nothing broke and nothing is lost, so it belongs in
+// the status line. A file that moved underneath is the one worth shouting
+// about. Anything else is a real failure.
+func (m *Model) fail(err error) {
+	if app.Refused(err) {
+		m.status = err.Error()
+		return
+	}
+	var conflict *store.ErrConflict
+	if asConflict(err, &conflict) || app.Stale(err) {
+		m.stale = true
+		m.errMsg = "file changed on disk — press R to reload (your edit is not saved)"
+		return
+	}
+	m.errMsg = err.Error()
+}
+
+// reloadFromDisk re-reads the file after the core rewrote it, keeping the view
+// where it is. load is for arriving at a page; this is for staying on one.
+func (m *Model) reloadFromDisk() error {
+	d, page, err := m.svc.Open(m.doc.Rel)
+	if err != nil {
+		return err
+	}
+	m.doc, m.page = d, page
+	m.stale = false
+	if len(m.doc.Doc.Blocks) == 0 {
+		m.doc.Doc.AppendChild(nil, &markdown.Block{})
+	}
+	m.buildRows()
+	return nil
+}
+
+// focusOffset puts the cursor on the block starting at an offset. Reloading
+// replaces every block pointer, so after a write a block is found by where it
+// is rather than by which object it was.
+func (m *Model) focusOffset(off int) {
+	for i, r := range m.rows {
+		if r.kind == rowBlock && r.block.Start == off {
+			m.cur = i
+			return
+		}
+	}
+	// The block exists but is hidden under a collapsed parent, or the file is
+	// now empty. Either way, stay somewhere valid.
+	m.cur = max(0, min(m.cur, len(m.rows)-1))
+}
+
+// focus puts the cursor on a particular block, for the callers that have the
+// object rather than an offset.
 func (m *Model) focus(b *markdown.Block) {
 	for i, r := range m.rows {
 		if r.block == b {
@@ -489,36 +591,24 @@ func (m *Model) focus(b *markdown.Block) {
 
 func (m *Model) deleteBlock() {
 	b := m.current()
-	if b == nil {
+	if b == nil || !m.ensureOnDisk() {
 		return
 	}
-	if len(m.rows) == 1 {
-		b.Text = ""
-		b.Props = nil
-		b.Anchor = ""
-		m.save()
-		m.buildRows()
+	// Deleting the last block leaves an empty file, and load puts the blank
+	// bullet back on screen — the same state a page is in before anything has
+	// been written to it.
+	if !m.apply(m.svc.DeleteBlock(m.addrOf(b))) {
 		return
 	}
-	if err := m.doc.Doc.Remove(b); err != nil {
-		m.errMsg = err.Error()
-		return
-	}
-	m.save()
-	m.buildRows()
-	m.cur = min(m.cur, len(m.rows)-1)
 	m.status = "block deleted — git has the previous version"
 }
 
 func (m *Model) toggleTask() {
 	b := m.current()
-	if b == nil {
+	if b == nil || !m.ensureOnDisk() {
 		return
 	}
-	if !b.ToggleTask() {
-		b.MakeTask()
-	}
-	m.save()
+	m.apply(m.svc.ToggleTask(m.addrOf(b)))
 }
 
 // --- editing ----------------------------------------------------------------
@@ -567,32 +657,48 @@ func (m *Model) newSibling(above bool) {
 		m.startInsert(true)
 		return
 	}
-	nb := &markdown.Block{}
+	if !m.ensureOnDisk() {
+		return
+	}
+	var res *app.Result
 	var err error
 	switch {
 	case b == nil:
-		m.doc.Doc.AppendChild(nil, nb)
+		res, err = m.svc.AppendBlock(m.doc.Rel, m.doc.Hash, "")
 	case above:
-		err = m.doc.Doc.InsertBefore(b, nb)
+		res, err = m.svc.InsertBefore(m.addrOf(b), "")
 	default:
-		// A new block under a block with visible children becomes its first
-		// child, which is what an outliner does and what Enter should feel like.
-		if len(b.Children) > 0 && !m.collapsed[m.currentPath()] {
-			b.Children = append([]*markdown.Block{nb}, b.Children...)
-			nb.Parent = b
-			m.doc.Doc.Reindex()
-		} else {
-			err = m.doc.Doc.InsertAfter(b, nb)
-		}
+		// A new block under a block with *visible* children becomes its first
+		// child, which is what an outliner does and what Enter should feel
+		// like. Whether they are visible is the outliner's business, so it
+		// answers that question rather than letting the core guess.
+		res, err = m.svc.InsertAfter(m.addrOf(b), "", m.hasVisibleChildren(b))
 	}
-	if err != nil {
-		m.errMsg = err.Error()
+	if !m.apply(res, err) {
 		return
 	}
-	m.buildRows()
-	m.focus(nb)
-	m.ed = newEditor("")
-	m.edBlock = nb
+	m.editHere(0)
+}
+
+// hasVisibleChildren answers the one question the core is not allowed to ask,
+// because collapse is view state and only the view knows it.
+func (m *Model) hasVisibleChildren(b *markdown.Block) bool {
+	return len(b.Children) > 0 && !m.collapsed[m.currentPath()]
+}
+
+// editHere opens the editor on the block under the cursor, with the caret at a
+// rune offset. Every write reloads the file, so the block to type into is
+// whichever one the core put the cursor on, not the one we were holding.
+func (m *Model) editHere(caret int) {
+	b := m.current()
+	if b == nil {
+		m.mode = modeNormal
+		m.ed, m.edBlock, m.comp = nil, nil, nil
+		return
+	}
+	m.edBlock = b
+	m.ed = newEditor(b.Text)
+	m.ed.cur = max(0, min(caret, len(m.ed.runes)))
 	m.mode = modeInsert
 	m.comp = nil
 }
@@ -609,25 +715,16 @@ func (m *Model) insertKey(msg tea.KeyMsg, k string) (tea.Model, tea.Cmd) {
 
 	case "enter":
 		// Enter ends this block and starts the next one: the dominant action
-		// costs one keypress.
+		// costs one keypress, and one write — splitting is a single core
+		// operation precisely because this is the key people hold down.
 		before, after := m.ed.split()
-		m.edBlock.Text = before
-		m.save()
-		nb := &markdown.Block{Text: after}
-		if len(m.edBlock.Children) > 0 && !m.collapsed[m.currentPath()] {
-			m.edBlock.Children = append([]*markdown.Block{nb}, m.edBlock.Children...)
-			nb.Parent = m.edBlock
-			m.doc.Doc.Reindex()
-		} else if err := m.doc.Doc.InsertAfter(m.edBlock, nb); err != nil {
-			m.errMsg = err.Error()
+		asChild := m.hasVisibleChildren(m.edBlock)
+		if !m.ensureOnDisk() {
 			return m, nil
 		}
-		m.save()
-		m.buildRows()
-		m.focus(nb)
-		m.edBlock = nb
-		m.ed = newEditor(after)
-		m.ed.cur = 0
+		if m.apply(m.svc.SplitBlock(m.addrOf(m.edBlock), before, after, asChild)) {
+			m.editHere(0)
+		}
 		return m, nil
 
 	case "alt+enter", "ctrl+j", "shift+enter":
@@ -683,10 +780,10 @@ func (m *Model) insertKey(msg tea.KeyMsg, k string) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "tab":
-		m.commitInsertKeepingPlace(func(b *markdown.Block) { m.doc.Doc.Indent(b) })
+		m.structuralWhileTyping(m.svc.Indent)
 		return m, nil
 	case "shift+tab":
-		m.commitInsertKeepingPlace(func(b *markdown.Block) { m.doc.Doc.Outdent(b) })
+		m.structuralWhileTyping(m.svc.Outdent)
 		return m, nil
 	}
 
@@ -702,21 +799,31 @@ func (m *Model) insertKey(msg tea.KeyMsg, k string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// commitInsertKeepingPlace applies a structural change without leaving INSERT,
-// so Tab still indents while typing.
-func (m *Model) commitInsertKeepingPlace(fn func(*markdown.Block)) {
-	b := m.edBlock
-	if b == nil {
+// structuralWhileTyping applies a core mutation without leaving INSERT, so Tab
+// still indents mid-sentence. The text has to reach the file first: the core
+// addresses a block by where it is, and half-typed text lives only here.
+func (m *Model) structuralWhileTyping(fn func(app.Addr) (*app.Result, error)) {
+	caret := m.ed.cur
+	a, ok := m.commitText()
+	if !ok {
 		return
 	}
-	b.Text = m.ed.String()
-	cur := m.ed.cur
-	fn(b)
-	m.save()
-	m.buildRows()
-	m.focus(b)
-	m.ed = newEditor(b.Text)
-	m.ed.cur = min(cur, len(m.ed.runes))
+	if m.apply(fn(a)) {
+		m.editHere(caret)
+	}
+}
+
+// commitText writes what is being typed and returns the block's address in the
+// file as it now stands, for a second operation to be addressed against.
+func (m *Model) commitText() (app.Addr, bool) {
+	if m.edBlock == nil {
+		return app.Addr{}, false
+	}
+	m.edBlock.Text = m.ed.String()
+	if !m.ensureOnDisk() {
+		return app.Addr{}, false
+	}
+	return m.addrOf(m.edBlock), true
 }
 
 // mergeIntoPrevious is what backspace at the very start of a block does: join
@@ -725,24 +832,18 @@ func (m *Model) mergeIntoPrevious() {
 	if m.cur == 0 || m.edBlock == nil {
 		return
 	}
-	prev := m.rows[m.cur-1].block
-	if len(m.edBlock.Children) > 0 {
-		m.status = "cannot merge a block that has children — outdent them first"
+	// Where the caret should land afterwards: the seam between the two texts.
+	at := 0
+	if prev := m.rows[m.cur-1]; prev.kind == rowBlock {
+		at = len([]rune(prev.block.Text))
+	}
+	a, ok := m.commitText()
+	if !ok {
 		return
 	}
-	text := m.ed.String()
-	at := len([]rune(prev.Text))
-	prev.Text += text
-	if err := m.doc.Doc.Remove(m.edBlock); err != nil {
-		m.errMsg = err.Error()
-		return
+	if m.apply(m.svc.MergeIntoPrevious(a)) {
+		m.editHere(at)
 	}
-	m.save()
-	m.buildRows()
-	m.focus(prev)
-	m.edBlock = prev
-	m.ed = newEditor(prev.Text)
-	m.ed.cur = at
 }
 
 // --- navigation -------------------------------------------------------------
@@ -922,9 +1023,7 @@ func (m *Model) pickerKey(msg tea.KeyMsg, k string) (tea.Model, tea.Cmd) {
 		}
 		m.goTo(item.rel)
 		if item.offset > 0 {
-			if b := m.doc.Doc.FindByOffset(item.offset); b != nil {
-				m.focus(b)
-			}
+			m.focusOffset(item.offset)
 		}
 		return m, nil
 	case "backspace":

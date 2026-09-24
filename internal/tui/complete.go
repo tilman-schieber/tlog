@@ -257,53 +257,21 @@ func (m *Model) runCommand() {
 	from := m.comp.start
 	to := len([]rune(m.ed.textBefore()))
 
-	// The core addresses a block by where it is in the file, so the block has
-	// to be in the file first: a block just created by enter is only in memory,
-	// and its offset is whatever it was when the document was last parsed.
-	index := -1
-	for i, b := range m.doc.Doc.Flatten() {
-		if b == m.edBlock {
-			index = i
-			break
-		}
-	}
-	m.edBlock.Text = text
-	m.save()
-	if m.errMsg != "" {
-		m.comp = nil
-		return
-	}
-	if err := m.load(m.doc.Rel); err != nil {
-		m.errMsg = err.Error()
-		m.comp = nil
-		return
-	}
-	flat := m.doc.Doc.Flatten()
-	if index < 0 || index >= len(flat) {
-		m.errMsg = "lost track of the block the command was typed in"
-		m.comp = nil
-		return
-	}
-
-	res, err := m.svc.RunCommand(
-		tapp.Addr{Rel: m.doc.Rel, Offset: flat[index].Start, Hash: m.doc.Hash},
-		cmd.Name, arg, text, from, to,
-	)
-	if err != nil {
-		m.errMsg = err.Error()
-		m.comp = nil
-		return
-	}
-
+	// The command runs against the file, so what has been typed goes in first.
+	a, ok := m.commitText()
 	m.comp = nil
-	if lerr := m.load(res.Rel); lerr != nil {
-		m.errMsg = lerr.Error()
+	if !ok {
 		return
 	}
-	if b := m.doc.Doc.FindByOffset(res.Offset); b != nil {
-		m.focus(b)
-		m.startInsert(true)
-		m.ed.cur = min(res.Caret, len(m.ed.runes))
+
+	res, err := m.svc.RunCommand(a, cmd.Name, arg, text, from, to)
+	if err != nil {
+		m.fail(err)
+		return
 	}
+	if !m.apply(res.Result, nil) {
+		return
+	}
+	m.editHere(res.Caret)
 	m.status = "/" + cmd.Name
 }

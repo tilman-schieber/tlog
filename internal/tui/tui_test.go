@@ -913,3 +913,71 @@ func TestSettingsSayWhatWillNotTakeEffectYet(t *testing.T) {
 		t.Fatalf("a reformat should be announced: %q", m.settings.msg)
 	}
 }
+
+func TestAnImpossibleMoveIsSaidQuietly(t *testing.T) {
+	// Outdenting a top-level block is not a failure: nothing broke and nothing
+	// was lost. It belongs in the status line, not in the error line.
+	m := newModel(t)
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "top")
+	send(t, m, k(tea.KeyEsc))
+	before := onDisk(t, m)
+
+	send(t, m, tea.KeyMsg{Type: tea.KeyShiftTab})
+	if m.errMsg != "" {
+		t.Fatalf("a move that does not exist was raised as an error: %q", m.errMsg)
+	}
+	if !strings.Contains(m.status, "top level") {
+		t.Fatalf("it was not said at all: status %q", m.status)
+	}
+	if onDisk(t, m) != before {
+		t.Fatal("a refused move wrote to the file")
+	}
+}
+
+func TestEnterUnderCollapsedChildrenMakesASibling(t *testing.T) {
+	// The core used to decide this from whether the block *had* children, so
+	// the outliner and the app disagreed about a block whose children were
+	// hidden. The adapter that can see the screen decides now.
+	m := newModel(t)
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "parent")
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "child")
+	send(t, m, k(tea.KeyTab), k(tea.KeyEsc))
+
+	m.cur = 0
+	send(t, m, k(tea.KeyLeft)) // collapse: the child is off screen
+	if len(m.rows) != 1 {
+		t.Fatalf("collapse did not hide the child: %d rows", len(m.rows))
+	}
+
+	send(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
+	typeText(t, m, "next")
+	send(t, m, k(tea.KeyEsc))
+
+	if got := onDisk(t, m); got != "- parent\n  - child\n\n- next\n" {
+		t.Fatalf("the new block went where it could not be seen: %q", got)
+	}
+}
+
+func TestTabWhileTypingKeepsTheCaretWhereItWas(t *testing.T) {
+	m := newModel(t)
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "parent")
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "child")
+	send(t, m, k(tea.KeyLeft), k(tea.KeyLeft), k(tea.KeyTab))
+
+	if m.mode != modeInsert {
+		t.Fatal("tab left insert mode")
+	}
+	if m.ed.cur != 3 {
+		t.Fatalf("the caret moved: %d", m.ed.cur)
+	}
+	typeText(t, m, "!")
+	send(t, m, k(tea.KeyEsc))
+	if got := onDisk(t, m); got != "- parent\n  - chi!ld\n" {
+		t.Fatalf("got %q", got)
+	}
+}

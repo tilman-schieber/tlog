@@ -1,10 +1,40 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/tilman-schieber/tlog/internal/markdown"
 )
+
+// RefusedError is a move that does not exist: outdenting a block that is
+// already at the top level, merging the first block into nothing. It is not a
+// failure — nothing broke and nothing was lost, the key simply had nowhere to
+// go — and an adapter should say so quietly rather than raise an alarm.
+//
+// The distinction belongs here because the core is what knows it. Left to the
+// adapters, each would have to guess from the wording of a message.
+type RefusedError struct{ Msg string }
+
+func (e *RefusedError) Error() string { return e.Msg }
+
+func refuse(format string, a ...any) error {
+	return &RefusedError{Msg: fmt.Sprintf(format, a...)}
+}
+
+// Refused reports whether a mutation was declined because the move does not
+// exist, as opposed to having gone wrong.
+func Refused(err error) bool {
+	var r *RefusedError
+	return errors.As(err, &r)
+}
+
+// Stale reports whether a mutation was refused because the file had moved on
+// since the address was computed — the one failure that means "re-read".
+func Stale(err error) bool {
+	var e *staleErr
+	return errors.As(err, &e)
+}
 
 // Block mutations live here rather than in any adapter. Each one takes an
 // address carrying the hash of the file it was computed against, so a caller
@@ -97,7 +127,7 @@ func (s *Service) SetProperty(a Addr, key, value string) (*Result, error) {
 func (s *Service) Indent(a Addr) (*Result, error) {
 	return s.mutate(a, func(d *markdown.Document, b *markdown.Block) error {
 		if !d.Indent(b) {
-			return fmt.Errorf("nothing above to nest under")
+			return refuse("nothing above to nest under")
 		}
 		return nil
 	})
@@ -107,7 +137,7 @@ func (s *Service) Indent(a Addr) (*Result, error) {
 func (s *Service) Outdent(a Addr) (*Result, error) {
 	return s.mutate(a, func(d *markdown.Document, b *markdown.Block) error {
 		if !d.Outdent(b) {
-			return fmt.Errorf("already at the top level")
+			return refuse("already at the top level")
 		}
 		return nil
 	})
@@ -126,7 +156,7 @@ func (s *Service) Move(a Addr, delta int) (*Result, error) {
 			return nil
 		}
 		if !ok {
-			return fmt.Errorf("no sibling in that direction")
+			return refuse("no sibling in that direction")
 		}
 		return nil
 	})
@@ -273,7 +303,7 @@ func (s *Service) MergeIntoPrevious(a Addr) (*Result, error) {
 		return nil, err
 	}
 	if len(b.Children) > 0 {
-		return nil, fmt.Errorf("cannot merge a block that has children — outdent them first")
+		return nil, refuse("cannot merge a block that has children — outdent them first")
 	}
 
 	flat := d.Doc.Flatten()
@@ -285,7 +315,7 @@ func (s *Service) MergeIntoPrevious(a Addr) (*Result, error) {
 		}
 	}
 	if idx <= 0 {
-		return nil, fmt.Errorf("nothing above to merge into")
+		return nil, refuse("nothing above to merge into")
 	}
 	prev := flat[idx-1]
 
