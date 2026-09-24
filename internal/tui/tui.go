@@ -86,7 +86,7 @@ type Model struct {
 // Run starts the outliner on a file, defaulting to today's journal.
 func Run(svc *app.Service, rel string) error {
 	if rel == "" {
-		rel = svc.TodayRel()
+		rel = svc.StartupRel()
 	}
 	m := &Model{svc: svc, collapsed: map[string]bool{}}
 	if err := m.load(rel); err != nil {

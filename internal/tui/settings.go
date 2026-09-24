@@ -6,7 +6,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	tapp "github.com/tilman-schieber/tlog/internal/app"
-	"github.com/tilman-schieber/tlog/internal/config"
 )
 
 // The settings screen. It edits the same list `tlog config` prints and the
@@ -21,7 +20,7 @@ type settings struct {
 }
 
 func (m *Model) openSettings() {
-	m.settings = &settings{items: tapp.Settings(m.svc.Cfg)}
+	m.settings = &settings{items: m.svc.Settings()}
 	m.mode = modeSettings
 	if m.svc.CfgErr != nil {
 		m.settings.msg = m.svc.CfgErr.Error()
@@ -64,12 +63,8 @@ func (m *Model) settingsKey(msg tea.KeyMsg, k string) (tea.Model, tea.Cmd) {
 	case "enter", " ":
 		it := s.items[s.sel]
 		if it.Kind == "bool" {
-			cfg, err := tapp.ToggleSetting(m.svc.Cfg, it.Key)
-			if err != nil {
-				s.msg = err.Error()
-				return m, nil
-			}
-			m.saveSettings(cfg)
+			note, err := m.svc.ToggleSetting(it.Key)
+			m.afterSetting(note, err)
 			return m, nil
 		}
 		// Anything else is typed, starting from what it is now.
@@ -79,30 +74,23 @@ func (m *Model) settingsKey(msg tea.KeyMsg, k string) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) applySetting(key, value string) {
-	cfg, err := tapp.SetSetting(m.svc.Cfg, key, value)
+	note, err := m.svc.SetSetting(key, value)
+	m.afterSetting(note, err)
+}
+
+// afterSetting refreshes the screen and says what will not take effect yet,
+// rather than letting a setting look applied when it is not.
+func (m *Model) afterSetting(note string, err error) {
 	if err != nil {
 		m.settings.msg = err.Error()
 		return
 	}
-	m.saveSettings(cfg)
-}
-
-// saveSettings writes the file and says what will not take effect until later,
-// rather than letting a setting look applied when it is not.
-func (m *Model) saveSettings(cfg config.Config) {
-	before := m.svc.Cfg
-	if err := m.svc.Reconfigure(cfg); err != nil {
-		m.settings.msg = err.Error()
+	m.settings.items = m.svc.Settings()
+	if note != "" {
+		m.settings.msg = "gespeichert — " + note
 		return
 	}
-	m.settings.items = tapp.Settings(m.svc.Cfg)
-	m.settings.msg = "gespeichert in " + m.svc.ConfigPath()
-	if cfg.Notes != before.Notes || cfg.Attachments.Dir != before.Attachments.Dir {
-		m.settings.msg = "gespeichert — wirkt beim nächsten Start"
-	}
-	if cfg.Format.BlankLines != before.Format.BlankLines {
-		m.settings.msg = "gespeichert — Dateien werden beim nächsten Schreiben neu formatiert"
-	}
+	m.settings.msg = "gespeichert"
 }
 
 func (m *Model) settingsView() string {
@@ -125,6 +113,9 @@ func (m *Model) settingsView() string {
 		}
 
 		line := padRight(it.Key, 22) + value
+		if it.Source == "notes" {
+			line = padRight(it.Key, 22) + value
+		}
 		if i == s.sel {
 			b.WriteString(styleSelected.Render(" "+padRight(stripANSI(line), 46)) + "\n")
 			b.WriteString("   " + styleMuted.Render(it.Hint) + "\n")

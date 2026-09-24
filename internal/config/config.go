@@ -22,6 +22,7 @@ import (
 // Config is the whole of it.
 type Config struct {
 	Notes       string      `toml:"notes"`
+	Startup     string      `toml:"startup"`
 	Attachments Attachments `toml:"attachments"`
 	Git         Git         `toml:"git"`
 	Format      Format      `toml:"format"`
@@ -42,9 +43,15 @@ type Attachments struct {
 
 // Git is how eagerly the notes are committed.
 type Git struct {
-	// Debounce is how long writing must be idle before a commit. Pushing is a
-	// property of the notes directory and lives in its own git config as
-	// tlog.autopush, so that a copy of the notes carries the answer with it.
+	// AutoCommit commits as you write. With it off nothing is committed until
+	// something asks — `tlog push`, or quitting the outliner.
+	AutoCommit bool `toml:"autocommit"`
+	// Debounce is how long writing must be idle before a commit.
+	//
+	// Pushing and the remote are not here. They belong to the notes directory
+	// and live in its own git config, so that a copy of the notes carries the
+	// answer with it and there is never a second place saying otherwise. Both
+	// are still shown and set through tlog's settings.
 	Debounce string `toml:"debounce"`
 }
 
@@ -73,8 +80,9 @@ type Dates struct {
 func Default() Config {
 	return Config{
 		Notes:       "~/notes",
+		Startup:     "today",
 		Attachments: Attachments{Dir: "~/.att"},
-		Git:         Git{Debounce: "30s"},
+		Git:         Git{AutoCommit: true, Debounce: "30s"},
 		Format:      Format{BlankLines: true},
 		Deadline:    Deadline{Property: "Deadline"},
 		Dates:       Dates{EndOfWeek: "friday"},
@@ -214,6 +222,9 @@ func (c Config) render() string {
 `)
 	fmt.Fprintf(&b, "notes = %q\n\n", c.Notes)
 
+	b.WriteString("# What opens on start: today's journal, or whatever was written last.\n")
+	fmt.Fprintf(&b, "startup = %q\n\n", c.Startup)
+
 	b.WriteString(`[attachments]
 # The shelf, shared with att. $ATT_DIR overrides it.
 `)
@@ -229,12 +240,22 @@ func (c Config) render() string {
 	fmt.Fprintf(&b, "lowercase = %v\n\n", c.Attachments.Lowercase)
 
 	b.WriteString(`[git]
-# How long writing must be idle before the notes are committed.
-# Pushing is a property of the notes directory rather than of tlog, so it
-# lives in that repository's own config as tlog.autopush — a copy of the
-# notes then carries the answer with it. Set it with: tlog push -auto on
+# Commit as you write. With this off nothing is committed until something
+# asks: tlog push, or quitting the outliner.
 `)
-	fmt.Fprintf(&b, "debounce = %q\n\n", c.Git.Debounce)
+	fmt.Fprintf(&b, "autocommit = %v\n", c.Git.AutoCommit)
+	b.WriteString(`
+# How long writing must be idle before a commit.
+`)
+	fmt.Fprintf(&b, "debounce = %q\n", c.Git.Debounce)
+	b.WriteString(`
+# Pushing and the remote are deliberately not here. They belong to the notes
+# directory and live in its own git config — tlog.autopush and remote.origin —
+# so that a copy of the notes carries the answer with it and there is never a
+# second place saying otherwise. Both are shown and set through tlog's
+# settings, or with: tlog config git.remote <url>
+`)
+	b.WriteString("\n")
 
 	b.WriteString(`[format]
 # A blank line between top-level blocks. Changing this reformats each file

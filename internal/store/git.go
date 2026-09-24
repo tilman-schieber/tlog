@@ -36,19 +36,20 @@ type Git struct {
 	root    string
 	enabled bool
 
-	mu       sync.Mutex
-	touched  map[string]bool
-	timer    *time.Timer
-	wait     time.Duration
-	autopush bool
-	lastErr  error
+	mu         sync.Mutex
+	touched    map[string]bool
+	timer      *time.Timer
+	wait       time.Duration
+	autopush   bool
+	autocommit bool
+	lastErr    error
 }
 
 // NewGit prepares the notes directory for versioning, initialising a
 // repository if there is not one already. When git is unavailable the
 // committer degrades to doing nothing rather than failing writes.
 func NewGit(root string) *Git {
-	g := &Git{root: root, touched: map[string]bool{}, wait: DebounceDefault}
+	g := &Git{root: root, touched: map[string]bool{}, wait: DebounceDefault, autocommit: true}
 	if _, err := exec.LookPath("git"); err != nil {
 		return g
 	}
@@ -82,6 +83,57 @@ func (g *Git) SetAutoPush(on bool) error {
 	g.autopush = on
 	g.mu.Unlock()
 	return nil
+}
+
+// Remote is where the notes are pushed, or empty when nowhere.
+func (g *Git) Remote() string {
+	if !g.Enabled() {
+		return ""
+	}
+	out, err := output(g.root, "remote", "get-url", "origin")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
+}
+
+// SetRemote points the notes at a remote, adding or replacing origin. An empty
+// url removes it, and takes pushing down with it rather than leaving a setting
+// that cannot do anything.
+func (g *Git) SetRemote(url string) error {
+	if !g.Enabled() {
+		return fmt.Errorf("no git repository in the notes directory")
+	}
+	url = strings.TrimSpace(url)
+	if url == "" {
+		if g.Remote() != "" {
+			_ = run(g.root, "remote", "remove", "origin")
+		}
+		return g.SetAutoPush(false)
+	}
+	if g.Remote() == "" {
+		return run(g.root, "remote", "add", "origin", url)
+	}
+	return run(g.root, "remote", "set-url", "origin", url)
+}
+
+// AutoCommit reports whether writing is committed as it happens.
+func (g *Git) AutoCommit() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.autocommit
+}
+
+// SetAutoCommit turns the debounced commit on or off. With it off nothing is
+// committed until something asks — `tlog push`, or quitting the outliner.
+func (g *Git) SetAutoCommit(on bool) {
+	g.mu.Lock()
+	g.autocommit = on
+	if !on && g.timer != nil {
+		g.timer.Stop()
+		g.timer = nil
+	}
+	g.mu.Unlock()
 }
 
 // HasRemote reports whether there is anywhere to push to.
@@ -183,6 +235,10 @@ func (g *Git) Touch(rel string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.touched[rel] = true
+	if !g.autocommit {
+		// Still remembered, so an explicit commit later picks it up.
+		return
+	}
 	if g.timer != nil {
 		g.timer.Stop()
 	}

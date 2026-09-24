@@ -34,7 +34,12 @@ type Edit struct {
 // actually are.
 func (a *API) Root() string { return a.svc.Store.Root }
 
-func (a *API) Today() (*tapp.PageView, error) { return a.svc.ViewToday() }
+// Today is what the app opens on, which `startup` decides: today's journal, or
+// whatever was written last.
+func (a *API) Today() (*tapp.PageView, error) { return a.svc.View(a.svc.StartupRel()) }
+
+// Journal today, whatever the startup setting says.
+func (a *API) TodayJournal() (*tapp.PageView, error) { return a.svc.ViewToday() }
 
 func (a *API) OpenRel(rel string) (*tapp.PageView, error) { return a.svc.View(rel) }
 
@@ -288,7 +293,7 @@ func (a *API) ConfigPath() string { return a.svc.ConfigPath() }
 
 // Settings describes the current configuration, the same list `tlog config`
 // prints and the outliner edits.
-func (a *API) Settings() []tapp.Setting { return tapp.Settings(a.svc.Cfg) }
+func (a *API) Settings() []tapp.Setting { return a.svc.Settings() }
 
 // SetSetting changes one value and writes the file. What cannot take effect
 // until a restart says so rather than looking applied.
@@ -298,20 +303,9 @@ type SettingResult struct {
 }
 
 func (a *API) SetSetting(key, value string) (*SettingResult, error) {
-	before := a.svc.Cfg
-	cfg, err := tapp.SetSetting(before, key, value)
+	note, err := a.svc.SetSetting(key, value)
 	if err != nil {
 		return nil, err
 	}
-	if err := a.svc.Reconfigure(cfg); err != nil {
-		return nil, err
-	}
-	res := &SettingResult{Settings: tapp.Settings(a.svc.Cfg)}
-	switch {
-	case cfg.Notes != before.Notes || cfg.Attachments.Dir != before.Attachments.Dir:
-		res.Note = "wirkt beim nächsten Start"
-	case cfg.Format.BlankLines != before.Format.BlankLines:
-		res.Note = "Dateien werden beim nächsten Schreiben neu formatiert"
-	}
-	return res, nil
+	return &SettingResult{Settings: a.svc.Settings(), Note: note}, nil
 }

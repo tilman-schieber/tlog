@@ -214,13 +214,31 @@ comments are replaced; values are not.
 | | |
 |---|---|
 | `notes` | where the notes live — `$TLOG_DIR` overrides |
+| `startup` | open today's journal, or whatever was written last |
 | `attachments.dir` | the shelf shared with att — `$ATT_DIR` overrides |
 | `attachments.sanitize` | tidy filenames on the way in |
 | `attachments.lowercase` | …and lowercase them |
+| `git.autocommit` | commit as you write |
 | `git.debounce` | how long writing must be idle before a commit |
+| `git.autopush` | push after every commit — *kept in the notes repo* |
+| `git.remote` | where pushing goes — *kept in the notes repo* |
 | `format.blank_lines` | a blank line between top-level blocks |
 | `deadline.property` | `Deadline` or `due`, whichever you prefer |
 | `dates.end_of_week` | what `eow` means: friday or sunday |
+
+Two of those are **not** in tlog's config file, and the menus say so. Pushing
+and the remote belong to the notes directory and live in its own git config, as
+`tlog.autopush` and `remote.origin` — so a copy of the notes carries the answers
+with it and no second file can disagree about where your notes go. They are
+shown and changed here like everything else:
+
+```sh
+tlog config git.remote git@gitlab.example:you/notes.git
+tlog config git.autopush true
+```
+
+Clearing the remote turns pushing off with it, rather than leaving a switch that
+cannot do anything.
 
 Most of tlog is deliberately *not* configurable. ISO dates, files as the source
 of truth, compare-and-swap writes and the small dialect are decisions rather

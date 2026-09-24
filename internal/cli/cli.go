@@ -186,8 +186,17 @@ func cmdConfig(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 			fmt.Fprint(stdout, "  (not written yet — these are the defaults)")
 		}
 		fmt.Fprintln(stdout)
-		for _, s := range app.Settings(svc.Cfg) {
-			fmt.Fprintf(stdout, "%-24s %-10s  %s\n", s.Key, s.Value, s.Hint)
+		for _, st := range svc.Settings() {
+			where := ""
+			if st.Source == "notes" {
+				where = "  [notes repo]"
+			}
+			value := st.Value
+			if value == "" {
+				value = "—"
+			}
+			fmt.Fprintf(stdout, "%-24s %s%s\n", st.Key, value, where)
+			fmt.Fprintf(stdout, "%-24s %s\n", "", st.Hint)
 		}
 		if svc.CfgErr != nil {
 			fmt.Fprintf(stderr, "\ntlog: %v\n", svc.CfgErr)
@@ -200,18 +209,14 @@ func cmdConfig(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 		return 2
 	}
 
-	cfg, err := app.SetSetting(svc.Cfg, args[0], strings.Join(args[1:], " "))
+	note, err := svc.SetSetting(args[0], strings.Join(args[1:], " "))
 	if err != nil {
 		fmt.Fprintf(stderr, "tlog: %v\n", err)
 		return 2
 	}
-	if err := svc.Reconfigure(cfg); err != nil {
-		fmt.Fprintf(stderr, "tlog: %v\n", err)
-		return 1
-	}
 	fmt.Fprintf(stdout, "%s is now %s\n", args[0], strings.Join(args[1:], " "))
-	if args[0] == "notes" || args[0] == "attachments.dir" {
-		fmt.Fprintln(stdout, "(takes effect next time tlog starts)")
+	if note != "" {
+		fmt.Fprintf(stdout, "(%s)\n", note)
 	}
 	return 0
 }

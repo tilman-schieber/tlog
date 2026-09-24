@@ -5,6 +5,7 @@ package app
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -39,6 +40,7 @@ func New(root string) (*Service, error) {
 	}
 	g := store.NewGit(s.Root)
 	g.SetDebounce(cfg.DebounceDuration())
+	g.SetAutoCommit(cfg.Git.AutoCommit)
 	markdown.SetBlankLines(cfg.Format.BlankLines)
 	return &Service{Store: s, Git: g, Cfg: cfg, CfgErr: cfgErr}, nil
 }
@@ -52,8 +54,35 @@ func (s *Service) Reconfigure(cfg config.Config) error {
 	s.Cfg = cfg
 	s.CfgErr = nil
 	s.Git.SetDebounce(cfg.DebounceDuration())
+	s.Git.SetAutoCommit(cfg.Git.AutoCommit)
 	markdown.SetBlankLines(cfg.Format.BlankLines)
 	return nil
+}
+
+// StartupRel is what to open: today's journal, or whatever was written last.
+// "last" needs no state file — the most recently changed note is the answer.
+func (s *Service) StartupRel() string {
+	if !strings.EqualFold(s.Cfg.Startup, "last") {
+		return s.TodayRel()
+	}
+	rels, err := s.Store.List()
+	if err != nil {
+		return s.TodayRel()
+	}
+	newest, best := "", time.Time{}
+	for _, rel := range rels {
+		st, err := os.Stat(s.Store.Abs(rel))
+		if err != nil {
+			continue
+		}
+		if st.ModTime().After(best) {
+			newest, best = rel, st.ModTime()
+		}
+	}
+	if newest == "" {
+		return s.TodayRel()
+	}
+	return newest
 }
 
 // ConfigPath is where the settings live, shown so it is never a mystery.

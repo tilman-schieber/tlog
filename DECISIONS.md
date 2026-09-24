@@ -252,6 +252,14 @@ comments. Hand-written ones are replaced; values never are.
 on the service and shown, not returned from startup, and an unusable value falls
 back to the default rather than failing.
 
+**Some settings are not tlog's to keep.** Pushing and the remote live in the
+notes repository's own git config, not in `config.toml`. Where your notes go is
+a property of that directory: a copy of them carries the answer along, and there
+is never a second file to disagree. They are still shown and changed through
+tlog's settings, marked with where they are kept — display and storage are
+different questions, and answering them separately is what avoids two sources of
+truth for one fact.
+
 **A setting that cannot take effect yet says so.** Changing the notes directory
 waits for a restart; changing `blank_lines` reformats files on their next write.
 Both are announced rather than left to be discovered.
