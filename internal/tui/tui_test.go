@@ -317,7 +317,6 @@ func TestBacklinksListsTheReferringBlock(t *testing.T) {
 	send(t, m, k(tea.KeyEsc))
 
 	typeText(t, m, "gf")
-	m.rebuildGraph()
 	typeText(t, m, "gb")
 
 	if m.mode != modeBacklinks {
@@ -380,8 +379,6 @@ func TestSearchFindsBlocksAcrossFiles(t *testing.T) {
 	if _, err := m.svc.AddToPage("Notes", "use sqlite as a disposable cache"); err != nil {
 		t.Fatal(err)
 	}
-	m.rebuildGraph()
-
 	send(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	typeText(t, m, "sqlite")
 	if len(m.pick.filtered) != 1 {

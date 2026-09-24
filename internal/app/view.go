@@ -101,6 +101,21 @@ func (s *Service) View(rel string) (*PageView, error) {
 	return s.viewWith(g, d), nil
 }
 
+// Open loads a file for editing together with the read model for drawing it.
+// An outliner needs both — the document to mutate, and what the rest of the
+// notes say about it — and this costs one graph build rather than two.
+func (s *Service) Open(rel string) (*Doc, *PageView, error) {
+	d, err := s.Load(rel)
+	if err != nil {
+		return nil, nil, err
+	}
+	g, err := s.Graph()
+	if err != nil {
+		return nil, nil, err
+	}
+	return d, s.viewWith(g, d), nil
+}
+
 // ViewPage is View by page name, creating the page if following a link there
 // for the first time.
 func (s *Service) ViewPage(name string) (*PageView, error) {
@@ -285,28 +300,39 @@ func (s *Service) Due(includeDone bool) ([]DueItem, error) {
 	return out, nil
 }
 
-// Index lists journals newest first, then pages, then the tags in use.
-func (s *Service) Index() (*Index, error) {
+// Lookup is a snapshot of the notes directory, for answering many questions
+// about it at once: a search box that filters as you type, or a completion menu
+// that reopens on every character.
+//
+// It is not a cache. There is no index in tlog and a stale answer would be
+// worse than a slow one, so a Lookup is built explicitly, held for as long as a
+// picker is open, and thrown away — its lifetime is visible at the call site
+// rather than being something the core keeps honest behind your back.
+type Lookup struct{ g *graph.Graph }
+
+// Lookup takes the snapshot.
+func (s *Service) Lookup() (*Lookup, error) {
 	g, err := s.Graph()
 	if err != nil {
 		return nil, err
 	}
-	idx := &Index{Pages: g.PageNames(), Tags: g.TagNames()}
-	for _, p := range g.Journals() {
+	return &Lookup{g: g}, nil
+}
+
+// Index lists journals newest first, then pages, then the tags in use.
+func (l *Lookup) Index() *Index {
+	idx := &Index{Pages: l.g.PageNames(), Tags: l.g.TagNames()}
+	for _, p := range l.g.Journals() {
 		idx.Journals = append(idx.Journals, p.Name)
 	}
-	return idx, nil
+	return idx
 }
 
 // Search finds blocks matching every term, with addresses safe to mutate
 // through.
-func (s *Service) Search(query string, limit int) ([]SearchHit, error) {
-	g, err := s.Graph()
-	if err != nil {
-		return nil, err
-	}
+func (l *Lookup) Search(query string, limit int) []SearchHit {
 	var out []SearchHit
-	for _, h := range g.Search(query, limit) {
+	for _, h := range l.g.Search(query, limit) {
 		out = append(out, SearchHit{
 			Rel:    h.Page.Rel,
 			Page:   h.Page.Name,
@@ -315,24 +341,65 @@ func (s *Service) Search(query string, limit int) ([]SearchHit, error) {
 			Text:   strings.TrimSpace(h.Block.FirstLine()),
 		})
 	}
-	return out, nil
+	return out
 }
 
-// CompletePages ranks page names for a [[link]] prefix, including pages that
-// have been linked to but not yet created.
-func (s *Service) CompletePages(prefix string, limit int) ([]string, error) {
-	g, err := s.Graph()
+// Pages ranks page names for a [[link]] prefix, including pages that have been
+// linked to but not yet created.
+func (l *Lookup) Pages(prefix string, limit int) []string {
+	return graph.FuzzyRank(l.g.LinkTargets(), prefix, limit)
+}
+
+// Tags ranks the tags in use for a #tag prefix.
+func (l *Lookup) Tags(prefix string, limit int) []string {
+	return graph.FuzzyRank(l.g.TagNames(), prefix, limit)
+}
+
+// Backlinks are the blocks elsewhere that mention a page, flattened with their
+// children the way a page shows them.
+func (l *Lookup) Backlinks(name string) []RefView {
+	var out []RefView
+	for _, r := range l.g.Backlinks(name) {
+		out = append(out, refViews(r)...)
+	}
+	return out
+}
+
+// The one-shot forms below are the same questions asked once, for a caller that
+// has no picker to hold open.
+
+// Index lists journals newest first, then pages, then the tags in use.
+func (s *Service) Index() (*Index, error) {
+	l, err := s.Lookup()
 	if err != nil {
 		return nil, err
 	}
-	return graph.FuzzyRank(g.LinkTargets(), prefix, limit), nil
+	return l.Index(), nil
+}
+
+// Search finds blocks matching every term.
+func (s *Service) Search(query string, limit int) ([]SearchHit, error) {
+	l, err := s.Lookup()
+	if err != nil {
+		return nil, err
+	}
+	return l.Search(query, limit), nil
+}
+
+// CompletePages ranks page names for a [[link]] prefix.
+func (s *Service) CompletePages(prefix string, limit int) ([]string, error) {
+	l, err := s.Lookup()
+	if err != nil {
+		return nil, err
+	}
+	return l.Pages(prefix, limit), nil
 }
 
 // CompleteTags ranks the tags in use for a #tag prefix.
 func (s *Service) CompleteTags(prefix string, limit int) ([]string, error) {
-	g, err := s.Graph()
+	l, err := s.Lookup()
 	if err != nil {
 		return nil, err
 	}
-	return graph.FuzzyRank(g.TagNames(), prefix, limit), nil
+	return l.Tags(prefix, limit), nil
 }

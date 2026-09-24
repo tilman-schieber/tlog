@@ -8,7 +8,6 @@ import (
 
 	tapp "github.com/tilman-schieber/tlog/internal/app"
 	"github.com/tilman-schieber/tlog/internal/dates"
-	"github.com/tilman-schieber/tlog/internal/graph"
 )
 
 // completion is the [[page]] autocomplete. It is driven from the same graph the
@@ -48,11 +47,10 @@ func (m *Model) updateCompletion() {
 		m.comp = nil
 		return
 	}
-	if m.g == nil {
-		m.rebuildGraph()
-	}
-	if m.g == nil {
-		m.rebuildGraph()
+	l := m.snapshot()
+	if l == nil {
+		m.comp = nil
+		return
 	}
 	// A # after the page name starts a tag: [[Andreas #person]] says what
 	// Andreas is, at the moment you first mention them.
@@ -61,7 +59,7 @@ func (m *Model) updateCompletion() {
 		m.comp = &completion{
 			active: true,
 			prefix: tagPrefix,
-			items:  graph.FuzzyRank(m.g.TagNames(), tagPrefix, completionLimit),
+			items:  l.Tags(tagPrefix, completionLimit),
 		}
 		return
 	}
@@ -71,7 +69,7 @@ func (m *Model) updateCompletion() {
 	// An empty candidate list still opens the popup, showing a hint instead of
 	// nothing: on a fresh notes directory there is nothing to suggest, and
 	// silence there is indistinguishable from the feature not existing.
-	items := graph.FuzzyRank(m.g.LinkTargets(), prefix, completionLimit)
+	items := l.Pages(prefix, completionLimit)
 	sel, moved := 0, false
 	if m.comp != nil && m.comp.active && m.comp.moved {
 		for i, it := range items {

@@ -74,8 +74,8 @@ func (m *Model) header() string {
 		kind = "journal"
 	}
 	left := styleTitle.Render(title) + " " + styleMuted.Render(kind)
-	if m.g != nil {
-		for _, t := range m.g.PageTags(title) {
+	if m.page != nil {
+		for _, t := range m.page.Tags {
 			left += " " + styleTag.Render("#"+t)
 		}
 	}

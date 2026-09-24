@@ -4,13 +4,12 @@ package tui
 
 import (
 	"fmt"
-	"strings"
+	"path/filepath"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/tilman-schieber/tlog/internal/app"
-	"github.com/tilman-schieber/tlog/internal/graph"
 	"github.com/tilman-schieber/tlog/internal/markdown"
 	"github.com/tilman-schieber/tlog/internal/store"
 )
@@ -51,9 +50,9 @@ type row struct {
 // Model is the outliner state.
 type Model struct {
 	svc *app.Service
-	g   *graph.Graph
 
 	doc  *app.Doc
+	page *app.PageView // what the rest of the notes say about this file
 	rows []row
 	cur  int
 	top  int
@@ -69,8 +68,11 @@ type Model struct {
 	pick *picker
 	comp *completion
 
-	backlinks []graph.Ref
-	settings  *settings
+	settings *settings
+
+	// look is a snapshot held only while a picker is open, so that filtering as
+	// you type does not rebuild the graph on every keystroke.
+	look *app.Lookup
 
 	history []string
 	status  string
@@ -102,31 +104,32 @@ func Run(svc *app.Service, rel string) error {
 
 func (m *Model) Init() tea.Cmd { return nil }
 
-// load reads a file and rebuilds the graph. At the corpus sizes this targets,
-// reparsing everything is cheaper than keeping an index honest.
+// load reads a file for editing together with what the rest of the notes say
+// about it. Both come from the core in one graph build.
 func (m *Model) load(rel string) error {
-	d, err := m.svc.Load(rel)
+	d, page, err := m.svc.Open(rel)
 	if err != nil {
 		return err
 	}
-	m.doc = d
+	m.doc, m.page = d, page
 	m.stale = false
 	if len(m.doc.Doc.Blocks) == 0 {
 		m.doc.Doc.AppendChild(nil, &markdown.Block{})
 	}
 	m.cur, m.top = 0, 0
-	m.rebuildGraph()
 	m.buildRows()
 	return nil
 }
 
-func (m *Model) rebuildGraph() {
-	g, err := m.svc.Graph()
+// refresh re-reads what the notes say about the current file, after something
+// changed the links or tags in it.
+func (m *Model) refresh() {
+	page, err := m.svc.View(m.doc.Rel)
 	if err != nil {
 		m.errMsg = err.Error()
 		return
 	}
-	m.g = g
+	m.page = page
 }
 
 func (m *Model) buildRows() {
@@ -153,71 +156,38 @@ func (m *Model) buildRows() {
 // Seeing them on the page is the whole point of having a graph — going to a
 // person and finding every mention already there beats remembering to search.
 func (m *Model) buildSections() {
-	if m.g == nil {
+	if m.page == nil {
 		return
 	}
-	name := store.PageName(m.doc.Rel)
-
-	if tagged := m.g.PagesWithTag(name); len(tagged) > 0 {
-		m.rows = append(m.rows, row{kind: rowHeader, text: fmt.Sprintf("%d pages tagged #%s", len(tagged), name)})
+	if tagged := m.page.Tagged; len(tagged) > 0 {
+		m.rows = append(m.rows, row{kind: rowHeader,
+			text: fmt.Sprintf("%d pages tagged #%s", len(tagged), m.page.Title)})
 		for _, p := range tagged {
 			m.rows = append(m.rows, row{kind: rowLink, text: p, depth: 0})
 		}
 	}
 
-	refs := m.g.Backlinks(name)
+	refs := m.page.Refs
 	if len(refs) == 0 {
 		return
 	}
-	m.rows = append(m.rows, row{kind: rowHeader, text: fmt.Sprintf("%d linked references", len(refs))})
+	heads := 0
+	for _, r := range refs {
+		if r.Head {
+			heads++
+		}
+	}
+	m.rows = append(m.rows, row{kind: rowHeader, text: fmt.Sprintf("%d linked references", heads)})
 	last := ""
 	for _, r := range refs {
-		if r.From.Name != last {
-			last = r.From.Name
-			m.rows = append(m.rows, row{kind: rowLink, text: r.From.Name, rel: r.From.Rel, depth: 0})
+		if r.Head && r.Page != last {
+			last = r.Page
+			m.rows = append(m.rows, row{kind: rowLink, text: r.Page, rel: r.Rel, depth: 0})
 		}
-		m.rows = append(m.rows, refRows(r, 1)...)
+		m.rows = append(m.rows, row{
+			kind: rowRef, text: r.Text, rel: r.Rel, offset: r.Offset, depth: r.Depth + 1,
+		})
 	}
-}
-
-// refRowBudget caps how much of one reference's subtree is shown, so that a
-// deeply nested day does not bury the rest of the list.
-const refRowBudget = 12
-
-// refRows renders a referring block together with its children. The children
-// are the point: a mention is usually the parent bullet of a name, and showing
-// only that line says nothing but the name you already navigated to.
-func refRows(r graph.Ref, depth int) []row {
-	out := []row{{
-		kind:   rowRef,
-		text:   strings.TrimSpace(r.Block.FirstLine()),
-		rel:    r.From.Rel,
-		offset: r.Block.Start,
-		depth:  depth,
-	}}
-	budget := refRowBudget
-	var walk func(bs []*markdown.Block, d int)
-	walk = func(bs []*markdown.Block, d int) {
-		for _, c := range bs {
-			if budget <= 0 {
-				return
-			}
-			budget--
-			out = append(out, row{
-				kind:   rowRef,
-				text:   strings.TrimSpace(c.FirstLine()),
-				rel:    r.From.Rel,
-				offset: c.Start,
-				depth:  d,
-			})
-			walk(c.Children, d+1)
-		}
-	}
-	walk(r.Block.Children, depth+1)
-	if budget <= 0 {
-		out = append(out, row{kind: rowRef, text: "…", rel: r.From.Rel, offset: r.Block.Start, depth: depth + 1})
-	}
-	return out
 }
 
 func (m *Model) rowKind() rowKind {
@@ -293,7 +263,7 @@ func (m *Model) save() {
 	}
 	// Links and tags just changed, and the sections below the outline are
 	// derived from them.
-	m.rebuildGraph()
+	m.refresh()
 }
 
 func asConflict(err error, target **store.ErrConflict) bool {
@@ -849,45 +819,61 @@ func (m *Model) openLink(l markdown.Link) {
 }
 
 func (m *Model) openBacklinks() {
-	name := store.PageName(m.doc.Rel)
-	m.backlinks = m.g.Backlinks(name)
-	if len(m.backlinks) == 0 {
+	name := m.page.Title
+	var items []pickItem
+	for _, r := range m.page.Refs {
+		if !r.Head {
+			continue // the list is of mentions, not of every line under one
+		}
+		items = append(items, pickItem{
+			label: r.Page, detail: r.Text, rel: r.Rel, offset: r.Offset,
+		})
+	}
+	if len(items) == 0 {
 		m.status = "nothing links to " + name
 		return
-	}
-	items := make([]pickItem, 0, len(m.backlinks))
-	for _, r := range m.backlinks {
-		items = append(items, pickItem{
-			label:  r.From.Name,
-			detail: strings.TrimSpace(r.Block.FirstLine()),
-			rel:    r.From.Rel,
-			offset: r.Block.Start,
-		})
 	}
 	m.pick = newPicker("backlinks to "+name, items)
 	m.mode = modeBacklinks
 }
 
+// snapshot takes the lookup a picker filters against, so that typing does not
+// rebuild the graph on every character. It is dropped when the picker closes.
+func (m *Model) snapshot() *app.Lookup {
+	if m.look != nil {
+		return m.look
+	}
+	l, err := m.svc.Lookup()
+	if err != nil {
+		m.errMsg = err.Error()
+		return nil
+	}
+	m.look = l
+	return l
+}
+
 func (m *Model) openPalette() {
-	if m.g == nil {
-		m.rebuildGraph()
+	l := m.snapshot()
+	if l == nil {
+		return
 	}
+	idx := l.Index()
 	var items []pickItem
-	for _, p := range m.g.Journals() {
-		items = append(items, pickItem{label: p.Name, detail: "journal", rel: p.Rel})
+	for _, name := range idx.Journals {
+		items = append(items, pickItem{label: name, detail: "journal",
+			rel: filepath.Join(store.JournalsDir, name+".md")})
 	}
-	for _, name := range m.g.PageNames() {
-		if p, ok := m.g.Page(name); ok {
-			items = append(items, pickItem{label: p.Name, detail: "page", rel: p.Rel})
-		}
+	for _, name := range idx.Pages {
+		items = append(items, pickItem{label: name, detail: "page",
+			rel: filepath.Join(store.PagesDir, name+".md")})
 	}
 	m.pick = newPicker("open", items)
 	m.mode = modePalette
 }
 
 func (m *Model) openSearch() {
-	if m.g == nil {
-		m.rebuildGraph()
+	if m.snapshot() == nil {
+		return
 	}
 	m.pick = newPicker("search", nil)
 	m.pick.live = true
@@ -895,15 +881,15 @@ func (m *Model) openSearch() {
 }
 
 func (m *Model) refreshSearch() {
-	q := m.pick.query.String()
-	hits := m.g.Search(q, 200)
+	l := m.snapshot()
+	if l == nil {
+		return
+	}
+	hits := l.Search(m.pick.query.String(), 200)
 	items := make([]pickItem, 0, len(hits))
 	for _, h := range hits {
 		items = append(items, pickItem{
-			label:  strings.TrimSpace(h.Block.FirstLine()),
-			detail: h.Page.Name,
-			rel:    h.Page.Rel,
-			offset: h.Offset,
+			label: h.Text, detail: h.Page, rel: h.Rel, offset: h.Offset,
 		})
 	}
 	m.pick.items = items
@@ -915,7 +901,7 @@ func (m *Model) pickerKey(msg tea.KeyMsg, k string) (tea.Model, tea.Cmd) {
 	switch k {
 	case "esc", "ctrl+c":
 		m.mode = modeNormal
-		m.pick = nil
+		m.pick, m.look = nil, nil
 		return m, nil
 	case "up", "ctrl+p":
 		m.pick.move(-1)
@@ -926,7 +912,7 @@ func (m *Model) pickerKey(msg tea.KeyMsg, k string) (tea.Model, tea.Cmd) {
 	case "enter":
 		item, ok := m.pick.selected()
 		m.mode = modeNormal
-		m.pick = nil
+		m.pick, m.look = nil, nil
 		if !ok {
 			return m, nil
 		}

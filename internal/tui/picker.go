@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"github.com/tilman-schieber/tlog/internal/graph"
+	"github.com/tilman-schieber/tlog/internal/fuzzy"
 	"github.com/tilman-schieber/tlog/internal/markdown"
 )
 
@@ -46,8 +46,8 @@ func (p *picker) filter() {
 	}
 	var hits []scored
 	for _, it := range p.items {
-		best, ok := graph.FuzzyMatch(it.label, q)
-		if s, ok2 := graph.FuzzyMatch(it.detail, q); ok2 && s-4 > best {
+		best, ok := fuzzy.Match(it.label, q)
+		if s, ok2 := fuzzy.Match(it.detail, q); ok2 && s-4 > best {
 			best, ok = s-4, true
 		}
 		if ok {
