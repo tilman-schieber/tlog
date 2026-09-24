@@ -264,3 +264,59 @@ func TestPropWithoutAKeyIsRefused(t *testing.T) {
 		t.Fatalf("a refused command wrote anyway: %q", got)
 	}
 }
+
+func TestAliasCommandAddsANameAndKeepsTheOnesThere(t *testing.T) {
+	s := newSvc(t)
+	rel, _ := s.AddToPage("Ada Lovelace", "the first programmer")
+
+	if _, err := s.RunCommand(addrOf(t, s, rel, 0), "alias", "Ada", "the first programmer /alias Ada", 21, 31); err != nil {
+		t.Fatal(err)
+	}
+	if got := body(t, s, rel); !strings.Contains(got, "aliases: Ada") {
+		t.Fatalf("got %q", got)
+	}
+
+	// A second alias joins the first rather than replacing it.
+	if _, err := s.RunCommand(addrOf(t, s, rel, 0), "alias", "Countess", "x", 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	if got := body(t, s, rel); !strings.Contains(got, "aliases: Ada, Countess") {
+		t.Fatalf("the first alias was lost: %q", got)
+	}
+
+	// And the whole point: the other name now finds her.
+	got, exists, err := s.ResolvePage("Ada")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !exists || got != rel {
+		t.Fatalf("[[Ada]] resolved to %q (exists=%v), not %q", got, exists, rel)
+	}
+}
+
+func TestAliasingTheSameNameTwiceChangesNothing(t *testing.T) {
+	s := newSvc(t)
+	rel, _ := s.AddToPage("Ada Lovelace", "note")
+	if _, err := s.RunCommand(addrOf(t, s, rel, 0), "alias", "Ada", "note", 4, 4); err != nil {
+		t.Fatal(err)
+	}
+	first := body(t, s, rel)
+	if _, err := s.RunCommand(addrOf(t, s, rel, 0), "alias", "ada", "note", 4, 4); err != nil {
+		t.Fatal(err)
+	}
+	if body(t, s, rel) != first {
+		t.Fatalf("a duplicate alias was added: %q", body(t, s, rel))
+	}
+}
+
+func TestAliasWithoutANameIsRefused(t *testing.T) {
+	s := newSvc(t)
+	rel, _ := s.AddToPage("Ada Lovelace", "note")
+	before := body(t, s, rel)
+	if _, err := s.RunCommand(addrOf(t, s, rel, 0), "alias", "", "note", 4, 4); err == nil {
+		t.Fatal("an empty alias was accepted")
+	}
+	if body(t, s, rel) != before {
+		t.Fatal("a refused command wrote anyway")
+	}
+}

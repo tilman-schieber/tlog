@@ -1200,3 +1200,47 @@ func TestParensInProseAreNotAReference(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestALinkByAliasOpensThePageItNames(t *testing.T) {
+	m := newModel(t)
+	if _, err := m.svc.AddToPage("Ada Lovelace", "the first programmer"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.svc.Store.Write("pages/Ada Lovelace.md",
+		[]byte("---\naliases: Ada\n---\n\n- the first programmer\n"), ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.load(m.doc.Rel); err != nil {
+		t.Fatal(err)
+	}
+
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "lunch with [[Ada]]")
+	send(t, m, k(tea.KeyEsc))
+
+	// gf follows the link under the cursor.
+	typeText(t, m, "gf")
+	if m.doc.Rel != "pages/Ada Lovelace.md" {
+		t.Fatalf("[[Ada]] went to %q", m.doc.Rel)
+	}
+	// And the mention is hers, listed under her real name.
+	found := false
+	for _, r := range m.rows {
+		if r.kind == rowRef && strings.Contains(r.text, "lunch") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("the aliased mention is not in her backlinks: %+v", m.rows)
+	}
+	// The header says what else she is called.
+	if !strings.Contains(m.header(), "Ada") {
+		t.Fatalf("the header does not mention the alias: %q", m.header())
+	}
+	files, _ := m.svc.Store.List()
+	for _, f := range files {
+		if f == "pages/Ada.md" {
+			t.Fatal("following the alias created a second page")
+		}
+	}
+}

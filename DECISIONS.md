@@ -380,6 +380,25 @@ file mid-write from an editor that does not write atomically, and briefly show a
 truncated version. It corrects itself within one interval, and the CAS write
 protects the file itself. fsnotify has the same problem, sooner.
 
+## Aliases
+
+**An alias is a name, not a page.** It resolves to the canonical name when a
+reference is *recorded* and when one is *looked up*, so a page has exactly one
+set of backlinks however it was written. Merging two sets at read time would
+have been the other way to do it, and would have left `[[Ada]]` and
+`[[Ada Lovelace]]` as two things that mostly agree.
+
+**A real page always wins its own name.** If `Ada Lovelace` claims the alias
+`Grace` and a `Grace` page exists, the alias is dropped. A line of frontmatter
+must not be able to make a file on disk unreachable.
+
+**Resolution only builds the graph when it has to.** `Service.ResolvePage`
+answers from the filesystem first; only a name with no file behind it asks
+whether some page answers to it. Following a link to a page that exists — the
+overwhelmingly common case — costs nothing. That the check lives in the service
+and not in `store` is deliberate: the store owns bytes and filenames, and what a
+name *means* is interpretation.
+
 ## Known gaps
 
 - A name that parses as an ISO date resolves to that day's journal rather than

@@ -78,6 +78,11 @@ func (m *Model) header() string {
 		for _, t := range m.page.Tags {
 			left += " " + styleTag.Render("#"+t)
 		}
+		// The other names this page answers to, so a [[link]] that worked is
+		// not a mystery when you arrive.
+		if a := m.page.Aliases; len(a) > 0 {
+			left += " " + styleMuted.Render("auch: "+strings.Join(a, ", "))
+		}
 	}
 	right := ""
 	switch m.mode {

@@ -52,6 +52,7 @@ var commands = []Command{
 	{Name: "tag", Title: "Tag", Hint: "Tag einfügen"},
 	{Name: "file", Title: "Anhang", Hint: "Datei aus ~/.att einfügen", Arg: "attachment", aliases: []string{"anhang", "att", "attach"}},
 	{Name: "prop", Title: "Property", Hint: "Eigenschaft setzen: /prop status offen", Arg: "text", aliases: []string{"property", "eigenschaft"}},
+	{Name: "alias", Title: "Alias", Hint: "Zweitname für diese Seite: /alias Ada", Arg: "text", aliases: []string{"aka", "zweitname"}},
 }
 
 // Commands returns the whole menu, in the order it is shown.
@@ -160,6 +161,19 @@ func (s *Service) RunCommand(a Addr, name, arg, text string, from, to int) (*Com
 		}
 	}
 
+	// An alias is a property of the page rather than of a block, so it goes in
+	// the frontmatter — the same place tags: goes, read the same way.
+	var alias string
+	if cmd.Name == "alias" {
+		alias = strings.TrimSpace(arg)
+		if alias == "" {
+			return nil, fmt.Errorf("which name? try /alias Ada")
+		}
+		if strings.ContainsAny(alias, "[]#\n") {
+			return nil, fmt.Errorf("%q cannot be a page name", alias)
+		}
+	}
+
 	insert := ""
 	if cmd.TakesAttachment() {
 		found, err := s.Attachments(arg, 1)
@@ -193,7 +207,7 @@ func (s *Service) RunCommand(a Addr, name, arg, text string, from, to int) (*Com
 		caret = from + len([]rune(insert)) - 4 // on the empty line inside the fence
 	}
 
-	res, err := s.mutate(a, func(_ *markdown.Document, b *markdown.Block) error {
+	res, err := s.mutate(a, func(d *markdown.Document, b *markdown.Block) error {
 		b.Text = newText
 		switch cmd.Name {
 		case "todo":
@@ -224,6 +238,8 @@ func (s *Service) RunCommand(a Addr, name, arg, text string, from, to int) (*Com
 			} else {
 				b.SetProp(propKey, propVal)
 			}
+		case "alias":
+			addAlias(d, alias)
 		}
 		return nil
 	})
@@ -264,4 +280,25 @@ func Deadline(b *markdown.Block) (time.Time, bool) {
 		}
 	}
 	return time.Time{}, false
+}
+
+// addAlias appends a name to the page's aliases, leaving the ones already there
+// alone — a second alias must not take the first one's place.
+func addAlias(d *markdown.Document, alias string) {
+	var names []string
+	for _, fm := range d.Frontmatter {
+		if strings.EqualFold(fm.Key, "aliases") || strings.EqualFold(fm.Key, "alias") {
+			for _, n := range strings.Split(fm.Value, ",") {
+				if n = strings.TrimSpace(n); n != "" {
+					names = append(names, n)
+				}
+			}
+		}
+	}
+	for _, n := range names {
+		if strings.EqualFold(n, alias) {
+			return // already one of this page's names
+		}
+	}
+	d.SetFrontmatter("aliases", strings.Join(append(names, alias), ", "))
 }

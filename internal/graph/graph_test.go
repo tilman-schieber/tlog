@@ -242,3 +242,94 @@ func TestTagNamesForCompletion(t *testing.T) {
 		t.Fatalf("tag names: %v", names)
 	}
 }
+
+// --- aliases -----------------------------------------------------------------
+//
+// An alias is another name for the same page, so that [[Ada]] finds Ada
+// Lovelace. It is resolved when a reference is recorded and when one is looked
+// up, which is what gives a page one set of backlinks however it was named.
+
+func aliasGraph(t *testing.T) *Graph {
+	t.Helper()
+	return build(t, map[string]string{
+		"pages/Ada Lovelace.md":  "---\naliases: Ada, Countess Lovelace\n---\n\n- the first programmer\n",
+		"journals/2026-09-24.md": "- lunch with [[Ada]]\n- and later [[Ada Lovelace]]\n",
+	})
+}
+
+func TestAnAliasResolvesToThePage(t *testing.T) {
+	g := aliasGraph(t)
+	p, ok := g.Page("Ada")
+	if !ok || p.Name != "Ada Lovelace" {
+		t.Fatalf("got %+v, %v", p, ok)
+	}
+	if real, was := g.Canonical("countess lovelace"); !was || real != "Ada Lovelace" {
+		t.Fatalf("got %q, %v", real, was)
+	}
+	if real, was := g.Canonical("Ada Lovelace"); was || real != "Ada Lovelace" {
+		t.Fatalf("a real name is not an alias: %q, %v", real, was)
+	}
+}
+
+func TestBothNamesReachTheSameBacklinks(t *testing.T) {
+	g := aliasGraph(t)
+	byReal := g.Backlinks("Ada Lovelace")
+	if len(byReal) != 2 {
+		t.Fatalf("a mention by either name belongs to her: %d", len(byReal))
+	}
+	if len(g.Backlinks("Ada")) != len(byReal) {
+		t.Fatal("asking by the alias gave a different answer")
+	}
+}
+
+func TestAnAliasedMentionIsNotAnUnresolvedLink(t *testing.T) {
+	g := aliasGraph(t)
+	for _, r := range g.UnresolvedLinks() {
+		if strings.EqualFold(r.Link.Page, "Ada") {
+			t.Fatal("[[Ada]] was reported as a page that does not exist")
+		}
+	}
+}
+
+func TestBothNamesComplete(t *testing.T) {
+	g := aliasGraph(t)
+	var hasReal, hasAlias bool
+	for _, n := range g.LinkTargets() {
+		switch strings.ToLower(n) {
+		case "ada lovelace":
+			hasReal = true
+		case "ada":
+			hasAlias = true
+		}
+	}
+	if !hasReal || !hasAlias {
+		t.Fatalf("completion offers real=%v alias=%v", hasReal, hasAlias)
+	}
+}
+
+func TestAPageAlwaysBeatsAnAliasForItsOwnName(t *testing.T) {
+	// Otherwise a line of frontmatter could make a real file unreachable.
+	g := build(t, map[string]string{
+		"pages/Ada Lovelace.md":  "---\naliases: Grace\n---\n\n- the first programmer\n",
+		"pages/Grace.md":         "- Grace Hopper\n",
+		"journals/2026-09-24.md": "- [[Grace]]\n",
+	})
+	p, ok := g.Page("Grace")
+	if !ok || p.Name != "Grace" {
+		t.Fatalf("the alias shadowed a real page: %+v", p)
+	}
+	if len(g.Backlinks("Grace")) != 1 {
+		t.Fatalf("the mention went to the wrong page: %+v", g.Backlinks("Grace"))
+	}
+	if len(g.Backlinks("Ada Lovelace")) != 0 {
+		t.Fatal("the mention was stolen by the alias")
+	}
+}
+
+func TestAliasesListsTheOtherNames(t *testing.T) {
+	g := aliasGraph(t)
+	got := g.Aliases("Ada Lovelace")
+	if len(got) != 2 || got[0] != "ada" || got[1] != "countess lovelace" {
+		t.Fatalf("got %+v", got)
+	}
+}

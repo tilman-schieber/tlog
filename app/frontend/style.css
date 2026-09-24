@@ -583,3 +583,9 @@ table.cal td.sel { background: var(--accent); color: #fff; font-weight: 600; }
   color: var(--todo);
   font-weight: 600;
 }
+
+.alsoknown {
+  color: var(--fg-muted);
+  font-size: 12px;
+  margin-left: 8px;
+}

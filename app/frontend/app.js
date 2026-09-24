@@ -285,6 +285,14 @@ function render() {
     el.onclick = () => open_(t);
     tags.appendChild(el);
   });
+  // The other names this page answers to, so a [[link]] that worked is not a
+  // mystery when you arrive.
+  if ((page.aliases || []).length) {
+    const el = document.createElement("span");
+    el.className = "alsoknown";
+    el.textContent = "auch: " + page.aliases.join(", ");
+    tags.appendChild(el);
+  }
 
   // Drawing a page is also how the agenda is left: every way of navigating
   // ends up here, so putting it in one place means no route can forget.

@@ -154,6 +154,15 @@ blank window; Wails detects the driver and disables it. Build natively rather
 than shipping an AppImage — a bundled, stale `libwayland-client` is the usual
 cause of an empty window on Wayland.
 
+## Other names for a page
+
+`aliases: Ada, Countess Lovelace` in a page's frontmatter — or `/alias Ada` on
+it — makes `[[Ada]]` mean Ada Lovelace. Both names complete, both resolve, and
+the mention lands in her backlinks whichever one was written, because a page has
+one set of references however it was named. A page on disk always beats an
+alias for its own name, so a line of frontmatter can never make a file
+unreachable.
+
 ## Referring to one block
 
 `((` opens a chooser of blocks — the same search the palette runs, so whatever
@@ -184,6 +193,7 @@ is its effect, never a slash.
 | `/file report` | a link to an attachment, chosen from the shelf |
 | `/page` `/tag` | a `[[link]]` or a `#tag`, where completion takes over |
 | `/prop status offen` | `status:: offen` on the block; no value removes it |
+| `/alias Ada` | another name this page answers to |
 
 The date argument is typed, not picked. A calendar appears beside the menu
 showing what the shorthand resolved to — confirmation, so a mistyped date is

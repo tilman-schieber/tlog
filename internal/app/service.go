@@ -172,7 +172,24 @@ func (s *Service) Sync() SyncStatus {
 // already exists. The page name is the filename, so there is never more than
 // one page with a given name.
 func (s *Service) ResolvePage(name string) (rel string, exists bool, err error) {
-	return s.Store.ResolvePage(name)
+	rel, exists, err = s.Store.ResolvePage(name)
+	if err != nil || exists {
+		return rel, exists, err
+	}
+	// No file by that name. Before deciding to create one, ask whether an
+	// existing page answers to it: aliases: Ada on "Ada Lovelace" means
+	// [[Ada]] is her, not a new page.
+	//
+	// The graph is only built on this branch, so the ordinary case — following
+	// a link to a page that exists — costs nothing.
+	g, gerr := graph.Build(s.Store)
+	if gerr != nil {
+		return rel, exists, nil // no aliases available; the name stands
+	}
+	if real, was := g.Canonical(name); was {
+		return s.Store.ResolvePage(real)
+	}
+	return rel, exists, nil
 }
 
 // OpenPage resolves a page, creating an empty file for it if it does not exist.

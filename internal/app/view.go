@@ -62,6 +62,7 @@ type PageView struct {
 	Hash      string      `json:"hash"`
 	IsJournal bool        `json:"isJournal"`
 	Tags      []string    `json:"tags"`
+	Aliases   []string    `json:"aliases,omitempty"` // other names this page answers to
 	Blocks    []BlockView `json:"blocks"`
 	Tagged    []string    `json:"tagged"`
 	Refs      []RefView   `json:"refs"`
@@ -137,6 +138,7 @@ func (s *Service) viewWith(g *graph.Graph, d *Doc) *PageView {
 		Hash:      d.Hash,
 		IsJournal: store.IsJournal(d.Rel),
 		Tags:      g.PageTags(title),
+		Aliases:   g.Aliases(title),
 		Tagged:    g.PagesWithTag(title),
 	}
 
