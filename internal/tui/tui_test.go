@@ -352,8 +352,18 @@ func TestAnExternalEditIsRefusedRatherThanClobbered(t *testing.T) {
 		t.Fatalf("the external edit was clobbered: %q", got)
 	}
 
-	// R reloads and clears the condition.
-	send(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
+	// R reloads — but the edit it would throw away is still only in memory, so
+	// the first press asks rather than discarding it silently.
+	r := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}}
+	m.Update(r)
+	if m.rows[0].block.Text == "theirs" {
+		t.Fatal("R discarded an unsaved edit without asking")
+	}
+	if !strings.Contains(m.status, "again") {
+		t.Fatalf("R gave no warning: %q", m.status)
+	}
+
+	m.Update(r)
 	if m.stale || m.rows[0].block.Text != "theirs" {
 		t.Fatalf("reload failed: stale=%v text=%q", m.stale, m.rows[0].block.Text)
 	}
@@ -979,5 +989,134 @@ func TestTabWhileTypingKeepsTheCaretWhereItWas(t *testing.T) {
 	send(t, m, k(tea.KeyEsc))
 	if got := onDisk(t, m); got != "- parent\n  - chi!ld\n" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+// --- noticing an edit made somewhere else ------------------------------------
+//
+// changedMsg is delivered straight to Update, so every branch is driven with no
+// filesystem watcher, no goroutine and no clock.
+
+func changed(t *testing.T, m *Model, rel string) changedMsg {
+	t.Helper()
+	f, err := m.svc.Store.Read(rel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return changedMsg{Rel: rel, Hash: f.Hash, Exists: len(f.Data) > 0}
+}
+
+func externalWrite(t *testing.T, m *Model, rel, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(m.svc.Store.Abs(rel)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(m.svc.Store.Abs(rel), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAnEditMadeElsewhereAppearsWithoutPressingR(t *testing.T) {
+	m := newModel(t)
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "mine")
+	send(t, m, k(tea.KeyEsc))
+
+	externalWrite(t, m, m.doc.Rel, "- mine\n\n- from nvim\n")
+	m.Update(changed(t, m, m.doc.Rel))
+
+	if len(m.rows) != 2 || m.rows[1].block.Text != "from nvim" {
+		t.Fatalf("the outliner did not pick it up: %d rows", len(m.rows))
+	}
+	if m.errMsg != "" {
+		t.Fatalf("a reload is not an error: %q", m.errMsg)
+	}
+}
+
+func TestTypingSurvivesAChangeUnderneath(t *testing.T) {
+	m := newModel(t)
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "mine")
+	send(t, m, k(tea.KeyEsc))
+
+	// Mid-word, with the text not yet folded back into the block.
+	m.startInsert(true)
+	typeText(t, m, " half-typed")
+	externalWrite(t, m, m.doc.Rel, "- theirs\n")
+	m.Update(changed(t, m, m.doc.Rel))
+
+	if m.ed.String() != "mine half-typed" {
+		t.Fatalf("typing was discarded: %q", m.ed.String())
+	}
+	if !m.stale || m.status == "" {
+		t.Fatalf("nothing was said about it: stale=%v status=%q", m.stale, m.status)
+	}
+}
+
+func TestOurOwnWriteIsNotAnExternalEdit(t *testing.T) {
+	// The loop has to terminate. Reloading on our own save would fight the
+	// caret on every keystroke.
+	m := newModel(t)
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "mine")
+	send(t, m, k(tea.KeyEsc))
+
+	before := m.doc
+	m.Update(changed(t, m, m.doc.Rel))
+	if m.doc != before {
+		t.Fatal("the outliner reloaded on its own write")
+	}
+	if m.status == "reloaded — changed on disk" {
+		t.Fatal("and said so")
+	}
+}
+
+func TestAChangeToAnotherFileRefreshesTheSections(t *testing.T) {
+	m := newModel(t)
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "a note")
+	send(t, m, k(tea.KeyEsc))
+
+	// Someone links to today's journal from a page tlog has never loaded.
+	name := strings.TrimSuffix(filepath.Base(m.doc.Rel), ".md")
+	externalWrite(t, m, "pages/Elsewhere.md", "- see [["+name+"]]\n")
+	m.Update(changed(t, m, "pages/Elsewhere.md"))
+
+	found := false
+	for _, r := range m.rows {
+		if r.kind == rowRef && strings.Contains(r.text, "see") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("the new backlink did not appear")
+	}
+}
+
+func TestAChangeElsewhereWaitsUntilYouStopTyping(t *testing.T) {
+	m := newModel(t)
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "a note")
+	send(t, m, k(tea.KeyEsc))
+	rows := len(m.rows)
+
+	m.startInsert(true)
+	name := strings.TrimSuffix(filepath.Base(m.doc.Rel), ".md")
+	externalWrite(t, m, "pages/Elsewhere.md", "- see [["+name+"]]\n")
+	m.Update(changed(t, m, "pages/Elsewhere.md"))
+
+	if len(m.rows) != rows {
+		t.Fatal("the screen moved under the caret mid-word")
+	}
+	if !m.graphDirty {
+		t.Fatal("the refresh was dropped rather than deferred")
+	}
+
+	send(t, m, k(tea.KeyEsc))
+	if len(m.rows) <= rows {
+		t.Fatal("leaving insert mode did not catch up")
+	}
+	if m.graphDirty {
+		t.Fatal("still marked dirty after catching up")
 	}
 }

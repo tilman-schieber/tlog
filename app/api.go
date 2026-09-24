@@ -30,6 +30,36 @@ type Edit struct {
 	Caret  int            `json:"caret,omitempty"` // where a command left the caret
 }
 
+// startWatching tells the window when a file changes on disk, so an edit made
+// in nvim or by a git pull shows up without anyone asking for it.
+//
+// The event carries only what changed; the frontend decides whether that means
+// anything for the page it is showing. It needs no new bound method to act on
+// it — OpenRel already means "this page as it now stands".
+func (a *API) startWatching(ctx context.Context) {
+	if !a.svc.Cfg.Watch.Enabled {
+		return
+	}
+	ch := a.svc.Watch(ctx)
+	if ch == nil {
+		return // WatchErr is set; the window works, it just will not notice
+	}
+	go func() {
+		for c := range ch {
+			// Our own save, coming back round. Reloading on it would replace
+			// the page under the caret after every keystroke.
+			if a.svc.Ours(c) {
+				continue
+			}
+			runtime.EventsEmit(a.ctx, "notes:changed", map[string]any{
+				"rel":    c.Rel,
+				"hash":   c.Hash,
+				"exists": c.Exists,
+			})
+		}
+	}()
+}
+
 // Root is the notes directory, shown so it is never a mystery where the files
 // actually are.
 func (a *API) Root() string { return a.svc.Store.Root }

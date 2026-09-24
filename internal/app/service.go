@@ -25,6 +25,11 @@ type Service struct {
 	// CfgErr is a broken config file, kept rather than returned: a typo in a
 	// setting must not stop someone writing a note.
 	CfgErr error
+
+	// WatchErr is a file watcher that would not start, kept for the same
+	// reason: not noticing someone else's edits is a smaller problem than
+	// refusing to open.
+	WatchErr error
 }
 
 // New opens the notes directory, creating it and its git repository if needed.

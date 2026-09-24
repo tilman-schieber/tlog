@@ -28,6 +28,7 @@ type Config struct {
 	Format      Format      `toml:"format"`
 	Deadline    Deadline    `toml:"deadline"`
 	Dates       Dates       `toml:"dates"`
+	Watch       Watch       `toml:"watch"`
 }
 
 // Attachments is the shelf shared with att.
@@ -69,6 +70,17 @@ type Deadline struct {
 	Property string `toml:"property"`
 }
 
+// Watch is how tlog notices an edit made somewhere else.
+type Watch struct {
+	// Enabled makes the outliner and the window redraw when a file changes on
+	// disk — from nvim, from another tlog, from a git pull. Unsaved typing is
+	// never discarded for it.
+	Enabled bool `toml:"enabled"`
+	// Interval is how often the notes directory is checked. It is a poll
+	// rather than a subscription, deliberately; see internal/watch.
+	Interval string `toml:"interval"`
+}
+
 // Dates is how typed shorthand is understood.
 type Dates struct {
 	// EndOfWeek is what "eow" means. A week ends when the work does, for most
@@ -86,6 +98,7 @@ func Default() Config {
 		Format:      Format{BlankLines: true},
 		Deadline:    Deadline{Property: "Deadline"},
 		Dates:       Dates{EndOfWeek: "friday"},
+		Watch:       Watch{Enabled: true, Interval: "1s"},
 	}
 }
 
@@ -156,6 +169,16 @@ func (c Config) DebounceDuration() time.Duration {
 	d, err := time.ParseDuration(c.Git.Debounce)
 	if err != nil || d <= 0 {
 		return 30 * time.Second
+	}
+	return d
+}
+
+// WatchInterval is how often to look, falling back to the default rather than
+// failing on a value nobody can parse.
+func (c Config) WatchInterval() time.Duration {
+	d, err := time.ParseDuration(c.Watch.Interval)
+	if err != nil || d <= 0 {
+		return time.Second
 	}
 	return d
 }
@@ -256,6 +279,18 @@ func (c Config) render() string {
 # settings, or with: tlog config git.remote <url>
 `)
 	b.WriteString("\n")
+
+	b.WriteString(`[watch]
+# Pick up edits made somewhere else — nvim, another tlog, a git pull — and
+# redraw. What you are typing is never discarded for it: if the file moves
+# under an unsaved edit you are told, and nothing is reloaded.
+#
+# It is a poll rather than a subscription, and the debounce is by content:
+# a burst of writes collapses into one change, and a write that restores
+# identical bytes is not a change at all.
+`)
+	fmt.Fprintf(&b, "enabled = %v\n", c.Watch.Enabled)
+	fmt.Fprintf(&b, "interval = %q\n\n", c.Watch.Interval)
 
 	b.WriteString(`[format]
 # A blank line between top-level blocks. Changing this reformats each file

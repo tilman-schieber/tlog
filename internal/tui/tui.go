@@ -3,6 +3,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -79,8 +80,18 @@ type Model struct {
 	errMsg  string
 	stale   bool
 
+	// graphDirty says a file other than this one changed while typing, so the
+	// sections below the outline are out of date. Redrawing them mid-word
+	// would move what is on screen under the caret, so it waits for esc.
+	graphDirty bool
+
+	// changes is the stream of external edits, nil when watching is off. A nil
+	// channel blocks forever, which is exactly the old behaviour.
+	changes <-chan app.Change
+
 	pendingG bool
 	pendingD bool
+	pendingR bool
 
 	quitting bool
 }
@@ -94,6 +105,19 @@ func Run(svc *app.Service, rel string) error {
 	if err := m.load(rel); err != nil {
 		return err
 	}
+
+	// Watching is what makes nvim and the outliner usable on the same file at
+	// the same time. It stops when the outliner does; a watcher that will not
+	// start leaves WatchErr set and a nil channel, which is the old behaviour.
+	if svc.Cfg.Watch.Enabled {
+		ctx, stop := context.WithCancel(context.Background())
+		defer stop()
+		m.changes = svc.Watch(ctx)
+		if svc.WatchErr != nil {
+			m.status = "not watching for outside edits: " + svc.WatchErr.Error()
+		}
+	}
+
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	_, err := p.Run()
 	if cerr := svc.Commit(); cerr != nil && err == nil {
@@ -102,7 +126,7 @@ func Run(svc *app.Service, rel string) error {
 	return err
 }
 
-func (m *Model) Init() tea.Cmd { return nil }
+func (m *Model) Init() tea.Cmd { return watchCmd(m.changes) }
 
 // load reads a file for editing together with what the rest of the notes say
 // about it. Both come from the core in one graph build.
@@ -279,6 +303,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyMsg:
 		return m.key(msg)
+	case changedMsg:
+		m.changed(msg)
+		// Wait for the next one. Each change schedules the next wait, so the
+		// stream stays a stream.
+		return m, watchCmd(m.changes)
 	}
 	return m, nil
 }
@@ -328,6 +357,9 @@ func (m *Model) normalKey(msg tea.KeyMsg, k string) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	if m.pendingR && k != "R" {
+		m.pendingR = false
+	}
 	if m.pendingD {
 		m.pendingD = false
 		if k == "d" {
@@ -348,6 +380,14 @@ func (m *Model) normalKey(msg tea.KeyMsg, k string) (tea.Model, tea.Cmd) {
 		m.openSettings()
 		return m, nil
 	case "R":
+		// Reloading throws away whatever is not on disk, so it asks first —
+		// the same two-key confirmation as dd.
+		if m.dirty() && !m.pendingR {
+			m.pendingR = true
+			m.status = "your edit is not saved — R again to discard it"
+			return m, nil
+		}
+		m.pendingR = false
 		if err := m.load(m.doc.Rel); err != nil {
 			m.errMsg = err.Error()
 		} else {
@@ -642,6 +682,10 @@ func (m *Model) commitInsert() {
 	m.ed = nil
 	m.edBlock = nil
 	m.comp = nil
+	if m.graphDirty {
+		m.graphDirty = false
+		m.refresh()
+	}
 	m.buildRows()
 }
 

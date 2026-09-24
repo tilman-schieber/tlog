@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tilman-schieber/tlog/internal/markdown"
@@ -40,6 +41,32 @@ var ErrBadPageName = errors.New("invalid page name")
 // Store is a notes directory.
 type Store struct {
 	Root string
+
+	// What tlog itself last wrote, per file. A watcher comparing the bytes on
+	// disk against this can tell an edit made in nvim from tlog's own save,
+	// and from the rewrite git does on a checkout. It belongs here rather than
+	// in the watcher because every write goes through Write — the importer and
+	// the anchor writer included — and none of them should have to remember.
+	mu    sync.Mutex
+	wrote map[string]string
+}
+
+// Wrote reports the hash tlog last wrote to a file, and whether it wrote one
+// at all in this process.
+func (s *Store) Wrote(rel string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	h, ok := s.wrote[rel]
+	return h, ok
+}
+
+func (s *Store) noteWrite(rel, hash string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.wrote == nil {
+		s.wrote = map[string]string{}
+	}
+	s.wrote[rel] = hash
 }
 
 // DefaultRoot is $TLOG_DIR, or ~/notes.
@@ -222,6 +249,7 @@ func (s *Store) Write(rel string, data []byte, ifMatch string) error {
 		if err := os.Remove(abs); err != nil && !os.IsNotExist(err) {
 			return err
 		}
+		s.noteWrite(rel, markdown.Hash(nil))
 		return nil
 	}
 
@@ -246,7 +274,11 @@ func (s *Store) Write(rel string, data []byte, ifMatch string) error {
 	if err := os.Chmod(tmpName, 0o644); err != nil {
 		return err
 	}
-	return os.Rename(tmpName, abs)
+	if err := os.Rename(tmpName, abs); err != nil {
+		return err
+	}
+	s.noteWrite(rel, markdown.Hash(data))
+	return nil
 }
 
 // List returns every markdown file in the store, journals first (newest to

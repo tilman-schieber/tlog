@@ -1069,6 +1069,48 @@ if (window.runtime && window.runtime.OnFileDropOff) {
   window.addEventListener("dragleave", () => document.body.classList.remove("dropping"));
 }
 
+// --- noticing an edit made somewhere else -----------------------------------
+
+// shouldReload decides what a change on disk means for what is on screen. It is
+// a plain function taking the three things that matter, so it can be tested
+// without a window, a watcher or a file.
+//
+//   - a file we are not looking at: the sidebar and the backlinks may have
+//     moved, so refresh the index but leave the page alone
+//   - the page we are looking at, unchanged bytes: our own write, coming back
+//   - the page we are looking at, while a block has focus: never. What is being
+//     typed has not reached the file, and a redraw would take it away
+//   - otherwise: reload
+function shouldReload(ev, page, editing) {
+  if (!ev || !page) return "none";
+  if (ev.rel !== page.rel) return "index";
+  if (ev.hash === page.hash) return "none";
+  if (editing) return "stale";
+  return "page";
+}
+
+if (window.runtime && window.runtime.EventsOn) {
+  window.runtime.EventsOn("notes:changed", async (ev) => {
+    const editing =
+      document.activeElement && document.activeElement.classList.contains("text");
+    switch (shouldReload(ev, page, editing)) {
+      case "index":
+        await refreshIndex();
+        // The page's own backlinks come from the same graph, so they are stale
+        // too — but redrawing is only safe when nothing has focus.
+        if (!editing) show(await call(() => api().OpenRel(page.rel)));
+        break;
+      case "page":
+        show(await call(() => api().OpenRel(page.rel)));
+        await refreshIndex();
+        break;
+      case "stale":
+        fail("This page changed on disk. Click away to save what you typed.");
+        break;
+    }
+  });
+}
+
 (async function start() {
   const root = await call(() => api().Root());
   if (root) $("root").textContent = root;

@@ -36,6 +36,7 @@ eval(lift("function fenceHTML"));
 eval(lift("function decorate"));
 eval(lift("function linkPrefix"));
 eval(lift("function slashAt"));
+eval(lift("function shouldReload"));
 
 let failures = 0;
 function eq(label, got, want) {
@@ -232,5 +233,20 @@ eq("a url is not a command", String(slashAt("siehe http://x.test/pfad")), "null"
 eq("a path is not a command", String(slashAt("~/src/tlog")), "null");
 eq("no slash at all", String(slashAt("nothing here")), "null");
 
+// --- noticing an edit made somewhere else -----------------------------------
+
+{
+  const page = { rel: "journals/2026-09-24.md", hash: "aaa" };
+  const ev = (rel, hash) => ({ rel, hash, exists: true });
+
+  eq("a change to another file refreshes the index, not the page", shouldReload(ev("pages/Other.md", "zzz"), page, false), "index");
+  eq("our own write is not a reason to redraw", shouldReload(ev(page.rel, "aaa"), page, false), "none");
+  eq("someone else's write to this page reloads it", shouldReload(ev(page.rel, "bbb"), page, false), "page");
+  eq("a block has focus, so what is typed there must not be taken away", shouldReload(ev(page.rel, "bbb"), page, true), "stale");
+  eq("no event, nothing to do", shouldReload(null, page, false), "none");
+  eq("no page open yet", shouldReload(ev(page.rel, "bbb"), null, false), "none");
+}
+
 console.log(failures === 0 ? "frontend: all pass" : `frontend: ${failures} FAILURES`);
 process.exit(failures ? 1 : 0);
+

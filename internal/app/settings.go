@@ -61,6 +61,12 @@ func (s *Service) Settings() []Setting {
 		{"git.remote", remote, "text",
 			"Wohin gepusht wird", remoteNote, "notes"},
 
+		{"watch.enabled", boolStr(c.Watch.Enabled), "bool",
+			"Änderungen von aussen übernehmen",
+			"Getipptes wird nie verworfen — nur gemeldet", "config"},
+		{"watch.interval", c.Watch.Interval, "duration",
+			"Wie oft nachgesehen wird", "", "config"},
+
 		{"format.blank_lines", boolStr(c.Format.BlankLines), "bool",
 			"Leerzeile zwischen Blöcken",
 			"formatiert jede Datei beim nächsten Schreiben neu", "config"},
@@ -121,6 +127,8 @@ func consequence(before, after config.Config) string {
 		return "wirkt beim nächsten Start"
 	case after.Format.BlankLines != before.Format.BlankLines:
 		return "Dateien werden beim nächsten Schreiben neu formatiert"
+	case after.Watch != before.Watch:
+		return "wirkt beim nächsten Start"
 	}
 	return ""
 }
@@ -161,6 +169,18 @@ func setConfigValue(c config.Config, key, v string) (config.Config, error) {
 			return c, fmt.Errorf("%q is not a delay; try 30s or 2m", v)
 		}
 		c.Git.Debounce = v
+	case "watch.enabled":
+		b, err := parseBool(v)
+		if err != nil {
+			return c, err
+		}
+		c.Watch.Enabled = b
+	case "watch.interval":
+		d, err := time.ParseDuration(v)
+		if err != nil || d <= 0 {
+			return c, fmt.Errorf("%q is not an interval; try 1s or 500ms", v)
+		}
+		c.Watch.Interval = v
 	case "format.blank_lines":
 		b, err := parseBool(v)
 		if err != nil {

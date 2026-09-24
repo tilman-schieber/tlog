@@ -74,7 +74,7 @@ The notes directory is `$TLOG_DIR`, or `~/notes`. Any command takes `-dir`.
 | `ctrl+p` / `/` | open a page · search every block |
 | `t` / `[` `]` | today · previous, next day |
 | `backspace` | back to where you came from |
-| `R` | reload after an external edit |
+| `R` | reload from disk (asks again if you have unsaved typing) |
 | `,` | settings |
 | `?` / `q` | help · quit |
 
@@ -222,6 +222,8 @@ comments are replaced; values are not.
 | `git.debounce` | how long writing must be idle before a commit |
 | `git.autopush` | push after every commit — *kept in the notes repo* |
 | `git.remote` | where pushing goes — *kept in the notes repo* |
+| `watch.enabled` | pick up edits made in another editor |
+| `watch.interval` | how often the notes directory is checked |
 | `format.blank_lines` | a blank line between top-level blocks |
 | `deadline.property` | `Deadline` or `due`, whichever you prefer |
 | `dates.end_of_week` | what `eow` means: friday or sunday |

@@ -347,14 +347,45 @@ system, full CommonMark, Datalog, a theme engine.
 `noto` collides with Google's Noto font family: permanently un-googleable, and it
 reads as a typo. The tool is `tlog`.
 
+## Watching the files
+
+**Poll, do not subscribe.** On macOS fsnotify is kqueue: one file descriptor per
+watched file, no recursion, and re-registration after every atomic rename — and
+every write here *is* an atomic rename. It would also need a hand-written list
+of things to ignore: `.git`, `.tlog-*.tmp`, editor swap files, nvim's `4913`
+probe. `store.List` already answers "what is a note" for the whole program, so
+the watcher asks it instead of keeping a second opinion. A stat sweep of the
+corpus costs tens of microseconds against the 8 ms graph rebuild a save already
+pays, so the simpler thing is also the faster one at this size.
+
+**Debounce by content, not by time.** An atomic rename, an in-place write, a
+swap file and a `git checkout` then collapse into one question: are the bytes at
+this path different from last time? A burst of writes becomes one change for
+free, and a write that restores identical bytes emits nothing. The cost is up to
+one interval of latency, which nobody can feel.
+
+**tlog recognises its own writes,** because `store.Write` records the hash it
+wrote. That is what makes the loop provably terminate: without it every save
+would come back as an external edit and move the page under the caret. It lives
+in the store rather than the watcher so that the importer and the anchor writer
+get it without remembering to.
+
+**Typing is never discarded.** When the file changes while a block is being
+edited, both surfaces say so and reload nothing. The compare-and-swap write was
+already the protection; this only adds the warning. `R` in the outliner used to
+discard an unsaved edit silently, and now asks first.
+
+The risk worth writing down rather than engineering around: a poll can read a
+file mid-write from an editor that does not write atomically, and briefly show a
+truncated version. It corrects itself within one interval, and the CAS write
+protects the file itself. fsnotify has the same problem, sooner.
+
 ## Known gaps
 
 - A name that parses as an ISO date resolves to that day's journal rather than
   to a page, so `[[2026-09-17]]` and `tlog open 2026-09-17` go where you mean.
   A page cannot therefore be named after a date; nothing else claims a name.
 - Block references have a syntax and a graph, but no UI for creating them.
-- The outliner does not watch the filesystem; an external edit is caught by the
-  checksum on the next write, and `R` reloads. A watcher is V0.2.
 - `Outdent` moves a block to just after its parent and leaves its following
   siblings where they were. Some outliners instead adopt those siblings as
   children. Predictable was preferred over clever.
