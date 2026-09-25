@@ -120,6 +120,13 @@ function ok(label, cond, detail) {
     pretendToBeVisual: true,
     url: "http://localhost/",
   });
+  // The stylesheet is linked, not inlined, and jsdom does not fetch it. It has
+  // to be here: whether an element is actually hidden is a question about the
+  // cascade, and [hidden] loses to any id selector that sets display.
+  const style = dom.window.document.createElement("style");
+  style.textContent = fs.readFileSync(path.join(here, "style.css"), "utf8");
+  dom.window.document.head.appendChild(style);
+
   const w = dom.window;
   w.go = { main: { API } };
   w.runtime = undefined;
@@ -143,6 +150,11 @@ function ok(label, cond, detail) {
 
   const $ = (id) => w.document.getElementById(id);
   ok("the page comes up without throwing", errors.length === 0, errors.join("\n  "));
+
+  // Not "the attribute is set" — whether it is actually off the screen.
+  const shown = (id) => w.getComputedStyle($(id)).display !== "none";
+  ok("the settings sheet is not covering the page", !shown("settings"));
+  ok("the completion popup is not floating over the page", !shown("complete"));
   ok("the title is drawn", $("title").textContent === "2026-09-25", $("title").textContent);
   ok("the outline is drawn", $("outline").children.length > 0);
   ok("the sidebar is filled", $("pages").children.length === 2);

@@ -17,6 +17,15 @@
   --danger: #c1362c;
 }
 
+/* hidden has to win.
+   The browser's own rule is [hidden] { display: none }, which any id selector
+   outranks — and #settings and #complete both set display. So the settings
+   sheet was displayed from the moment the window opened, a dimmed backdrop
+   and an empty panel over a page nobody could see. */
+[hidden] {
+  display: none !important;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #1e1e1e;
