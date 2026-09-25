@@ -57,10 +57,19 @@ jobs:
         with:
           node-version: '22'
 
+      # jsdom is installed rather than vendored, and the smoke test skips
+      # without it: the repository stays free of npm, and the shipped page is
+      # still plain JS the WebView loads with no build step.
+      - name: Frontend test dependency
+        run: npm install --no-save --prefix "$RUNNER_TEMP/js" jsdom
+
       - name: Frontend
+        env:
+          NODE_PATH: ${{ runner.temp }}/js/node_modules
         run: |
           node --check app/frontend/app.js
           node app/frontend/app_test.js
+          node app/frontend/smoke_test.js
 
       # The release targets, so a GOOS-specific mistake is caught on the commit
       # that made it rather than at release time.

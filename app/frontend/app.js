@@ -86,6 +86,10 @@ const RE = {
 };
 
 function decorate(text, fences, embeds = []) {
+  // A missing field must not take the page down with it. Three separate
+  // crashes have started as one absent property and ended as a window that
+  // draws nothing at all, and a renderer is the wrong place to find out.
+  if (typeof text !== "string") text = text == null ? "" : String(text);
   // References are numbered across the whole block but drawn a line at a time,
   // so the count is shared rather than restarted for each line.
   const cursor = { i: 0 };
@@ -412,7 +416,9 @@ function renderOutline() {
     text.spellcheck = false;
     text.dataset.offset = b.offset;
     text.dataset.raw = b.text;
-    text.innerHTML = decorate(b.text, b.fences, b.embeds) || "<br>";
+    // The checkbox is drawn beside the block, so the marker is not repeated in
+    // the text. What is stored still has it, and focusing shows that.
+    text.innerHTML = decorate(b.task ? b.body : b.text, b.fences, b.embeds) || "<br>";
     wireBlock(text, b);
     row.appendChild(text);
 
@@ -493,9 +499,12 @@ function renderRefs() {
     }
     if (!group) return;
     const line = document.createElement("div");
-    line.className = "refline";
+    line.className = "refline" + (r.task === "done" ? " done" : "");
     line.style.marginLeft = r.depth * 16 + "px";
-    line.innerHTML = decorate(r.text) || "&nbsp;";
+    // A mention that is a task shows as one. The marker is replaced by the box
+    // rather than printed beside it, the same as in the outline.
+    const box = r.task ? (r.task === "done" ? "☑ " : "☐ ") : "";
+    line.innerHTML = box + (decorate(r.task ? r.body : r.text) || "&nbsp;");
     line.onclick = (e) => {
       if (e.target.dataset.page) return; // an inline link wins
       openRel(r.rel);
@@ -1016,9 +1025,15 @@ async function shiftDay(delta) {
   show(await call(() => api().Journal(page.rel, delta)));
 }
 
+// markActive is called from refreshIndex, which runs before the first page is
+// open — so there may not be a page yet. Reading page.rel here threw on every
+// cold start with anything in the sidebar, which aborted start() before it
+// could open today's journal: the window came up with an empty pane, and
+// clicking any page in the sidebar was what appeared to fix it.
 function markActive() {
+  const rel = page ? page.rel : null;
   document.querySelectorAll("#nav li").forEach((li) => {
-    li.classList.toggle("active", li.dataset.rel === page.rel);
+    li.classList.toggle("active", rel !== null && li.dataset.rel === rel);
   });
 }
 

@@ -522,6 +522,15 @@ appear in Logseq. Keep using Logseq until you decide to stop.
 
 ## Development
 
+The frontend has no build step; its tests are plain node:
+
+```sh
+node app/frontend/app_test.js     # the pure helpers
+node app/frontend/smoke_test.js   # boots the page against a stubbed API
+npm install jsdom                 # the smoke test skips without it
+```
+
+
 ```sh
 just test    # go vet, go test, and the frontend's own tests
 ```

@@ -31,10 +31,15 @@ type BlockView struct {
 	// Addr is what a caller needs in order to change this block: the file, the
 	// offset and the hash the offset was computed against, in one string.
 	// Everything that can be acted on carries one, so nobody assembles it.
-	Addr        Addr            `json:"addr"`
-	Offset      int             `json:"offset"`
-	Depth       int             `json:"depth"`
-	Text        string          `json:"text"`
+	Addr   Addr   `json:"addr"`
+	Offset int    `json:"offset"`
+	Depth  int    `json:"depth"`
+	Text   string `json:"text"`
+	// Body is the text without the task marker, for an adapter that draws the
+	// checkbox itself. The window drew both and every task read "☐ [ ] …";
+	// the outliner stripped it with a regex of its own, which is two places
+	// knowing what a task marker looks like and one of them being wrong.
+	Body        string          `json:"body,omitempty"`
 	Anchor      string          `json:"anchor,omitempty"`
 	Props       []markdown.Prop `json:"props,omitempty"`
 	Task        string          `json:"task,omitempty"` // "", "open" or "done"
@@ -60,6 +65,8 @@ type BlockView struct {
 // RefView is a block elsewhere that mentions this page, or one of its children.
 type RefView struct {
 	Addr   Addr   `json:"addr"`
+	Task   string `json:"task,omitempty"` // "", "open" or "done"
+	Body   string `json:"body,omitempty"` // the text without the task marker
 	Page   string `json:"page"`
 	Rel    string `json:"rel"`
 	Offset int    `json:"offset"`
@@ -163,6 +170,7 @@ func (s *Service) viewWith(g *graph.Graph, d *Doc) *PageView {
 			Offset:      b.Start,
 			Depth:       b.Depth,
 			Text:        b.Text,
+			Body:        b.TaskBody(),
 			Anchor:      b.Anchor,
 			Props:       b.Props,
 			Task:        taskName(b.Task()),
@@ -231,6 +239,8 @@ func taskName(t markdown.TaskState) string {
 func refViews(r graph.Ref) []RefView {
 	out := []RefView{{
 		Addr:   Addr{Rel: r.From.Rel, Offset: r.Block.Start, Hash: r.From.Hash},
+		Task:   taskName(r.Block.Task()),
+		Body:   strings.TrimSpace(firstLine(r.Block.TaskBody())),
 		Page:   r.From.Name,
 		Rel:    r.From.Rel,
 		Offset: r.Block.Start,
@@ -248,6 +258,8 @@ func refViews(r graph.Ref) []RefView {
 			budget--
 			out = append(out, RefView{
 				Addr:   Addr{Rel: r.From.Rel, Offset: c.Start, Hash: r.From.Hash},
+				Task:   taskName(c.Task()),
+				Body:   strings.TrimSpace(firstLine(c.TaskBody())),
 				Page:   r.From.Name,
 				Rel:    r.From.Rel,
 				Offset: c.Start,
@@ -430,4 +442,13 @@ func (s *Service) CompleteTags(prefix string, limit int) ([]string, error) {
 		return nil, err
 	}
 	return l.Tags(prefix, limit), nil
+}
+
+// firstLine is the first line of a multi-line block, for the one-line-per-row
+// listings below the outline.
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return s[:i]
+	}
+	return s
 }

@@ -13,9 +13,13 @@ import (
 
 // Prop is a single key:: value block property, or a key: value frontmatter
 // entry. Order is preserved because these files are read by humans.
+// The tags are not decoration: Prop travels in the read model like everything
+// else, and without them it went over the wire as Key/Value while every other
+// type used lowercase. The window reads p.key, got undefined, and threw while
+// drawing — so no page with a block property could be drawn at all.
 type Prop struct {
-	Key   string
-	Value string
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 // Block is the unit of editing. Its Text may span several lines: everything

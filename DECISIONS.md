@@ -486,6 +486,28 @@ Where nothing was resolved at all — a backlink row, an agenda line, views that
 do not carry the text behind a reference — the page name is what is honestly
 known, and that is what is shown.
 
+## Testing the window
+
+**The page is booted in a test, not only its helpers.** `app_test.js` checks the
+pure functions — `decorate`, `slashAt`, `shouldReload` — and has found real
+bugs, but it never ran the page. Three crashes lived in `app.js` from the first
+commit and survived every change since, because each one left the window drawing
+an empty pane rather than failing anything: `markActive` read `page.rel` before
+the first page was open; `markdown.Prop` had no json tags, so the wire said
+`Key`/`Value` while the frontend read `p.key`; and a task drew its checkbox
+beside the `[ ]` it was meant to replace.
+
+**jsdom is installed, not vendored, and the test skips without it.** The
+repository stays free of npm and the shipped page is still plain JS the WebView
+loads with no build step. A missing test dependency is not a failing test, so it
+says so and passes; CI installs it and it runs there.
+
+**An exception in the page is recorded rather than allowed to end the process.**
+A throw in `start()` surfaces as a rejected promise, which by default kills node
+before a single assertion has run — the failure is real but the report is a
+stack trace and nothing else. Two of the three bugs above were found that way,
+and the second one was only legible after this.
+
 ## Known gaps
 
 - A name that parses as an ISO date resolves to that day's journal rather than
