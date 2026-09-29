@@ -712,3 +712,66 @@ table.cal td.sel { background: var(--accent); color: #fff; font-weight: 600; }
   color: var(--fg-muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
+
+/* A folded block keeps its bullet and gains a ring, so the outline does not
+   jump between two different glyphs as things open and shut. */
+.block .bullet.haskids { cursor: default; }
+.block .bullet.folded {
+  color: var(--fg);
+  box-shadow: 0 0 0 3px var(--sel);
+  border-radius: 50%;
+}
+
+/* --- what tlog has said ---------------------------------------------------- */
+
+/* A note is a receipt for something you just watched happen, so it is quiet
+   and it goes away. An error stays until dismissed, because the thing it
+   describes is the thing you were not watching. */
+#error {
+  cursor: default;
+  background: var(--fg);
+}
+
+#error.bad { background: var(--danger); }
+
+#log {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.28);
+}
+#log .sheet {
+  width: min(560px, 92vw);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--bg);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.3);
+}
+#log header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+#log h2 { margin: 0; font-size: 14px; }
+#loglist {
+  margin: 0;
+  padding: 8px 16px 16px;
+  overflow-y: auto;
+  list-style: none;
+  font-size: 13px;
+}
+.logline { display: flex; gap: 10px; padding: 4px 0; }
+.logline .when {
+  flex: none;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+.logline.error { color: var(--danger); }

@@ -15,12 +15,52 @@ let completion = null;
 
 // --- plumbing ---------------------------------------------------------------
 
-function fail(err) {
+// What the window has said, newest last. A failed push used to appear for six
+// seconds and then be gone with no way to get it back — if you were looking at
+// the other screen when it happened, it never happened.
+const notices = [];
+
+// say puts a line in the corner. A notice fades, because it is the receipt for
+// something you just did and watched happen. An error does not, because the
+// thing it is telling you about is the thing you were not watching.
+function say(text, kind) {
+  const line = { text: String(text), kind: kind || "note", at: new Date() };
+  notices.push(line);
+  if (notices.length > 200) notices.shift();
+
   const box = $("error");
-  box.textContent = String(err && err.message ? err.message : err);
+  box.className = kind === "error" ? "bad" : "";
+  box.textContent = line.text;
   box.hidden = false;
-  clearTimeout(fail.timer);
-  fail.timer = setTimeout(() => (box.hidden = true), 6000);
+  clearTimeout(say.timer);
+  if (kind !== "error") say.timer = setTimeout(() => (box.hidden = true), 4000);
+  renderLog();
+}
+
+function fail(err) {
+  say(err && err.message ? err.message : err, "error");
+}
+
+// The log is everything said so far, reachable from the corner. Dismissing a
+// message should not be the same as destroying it.
+function renderLog() {
+  const list = $("loglist");
+  if (!list) return;
+  list.innerHTML = "";
+  for (const n of [...notices].reverse()) {
+    const li = document.createElement("li");
+    li.className = "logline " + n.kind;
+    const t = String(n.at.getHours()).padStart(2, "0") + ":" +
+      String(n.at.getMinutes()).padStart(2, "0");
+    li.innerHTML = `<span class="when">${t}</span><span>${escapeHTML(n.text)}</span>`;
+    list.appendChild(li);
+  }
+  if (notices.length === 0) {
+    const li = document.createElement("li");
+    li.className = "hint";
+    li.textContent = "Nothing has gone wrong yet.";
+    list.appendChild(li);
+  }
 }
 
 async function call(fn) {
@@ -52,7 +92,7 @@ function applied(edit, caret = null) {
 // A push happens in the background after a commit; if it failed, say so.
 async function checkSync() {
   const st = await call(() => api().Sync());
-  if (st && st.lastError) fail("not pushed: " + st.lastError);
+  if (st && st.lastError) fail("Not pushed: " + st.lastError);
 }
 
 // --- rendering --------------------------------------------------------------
@@ -367,6 +407,46 @@ function render() {
   }
 }
 
+// Which blocks are folded, per page, by the text of the block rather than by
+// where it sits. The outliner learned this the hard way: a position renumbers
+// the moment anything moves, and the fold ends up on whatever took that slot.
+// Text survives a move, an indent and a delete, which is every operation that
+// renumbers. Editing the text loses that block's own fold and no other.
+//
+// Folding is view state and the core is not told about it — an anchor written
+// to mark a folded row would be a file changed by looking at it.
+const folded = new Map(); // rel -> Set of block texts
+
+function foldsFor(rel) {
+  if (!folded.has(rel)) folded.set(rel, new Set());
+  return folded.get(rel);
+}
+
+function isFolded(b) {
+  return page ? foldsFor(page.rel).has(b.text) : false;
+}
+
+function toggleFold(b) {
+  const set = foldsFor(page.rel);
+  if (set.has(b.text)) set.delete(b.text);
+  else set.add(b.text);
+  renderOutline();
+}
+
+// hiddenUnder walks the flat block list and reports which offsets are inside a
+// folded subtree. The list is flat with a depth on each block, so a subtree is
+// the run that follows a block at a greater depth than it.
+function hiddenUnder(blocks) {
+  const hide = new Set();
+  for (let i = 0; i < blocks.length; i++) {
+    if (!blocks[i].hasChildren || !isFolded(blocks[i])) continue;
+    for (let j = i + 1; j < blocks.length && blocks[j].depth > blocks[i].depth; j++) {
+      hide.add(blocks[j].offset);
+    }
+  }
+  return hide;
+}
+
 function renderOutline() {
   const out = $("outline");
   out.innerHTML = "";
@@ -381,7 +461,10 @@ function renderOutline() {
     return;
   }
 
+  const hidden = hiddenUnder(page.blocks);
+
   page.blocks.forEach((b) => {
+    if (hidden.has(b.offset)) return;
     const row = document.createElement("div");
     row.className = "block" + (b.task === "done" ? " done" : "");
     row.style.marginLeft = b.depth * 22 + "px";
@@ -394,12 +477,19 @@ function renderOutline() {
         applied(await call(() => api().ToggleTask(page.rel, b.offset, page.hash)));
       row.appendChild(check);
     } else {
+      // A block with children folds on a click and turns into a task on a
+      // shift-click: folding is the thing you do to a parent all day, and
+      // making one a task is the thing you do to it once.
+      const kids = b.hasChildren;
+      const shut = kids && isFolded(b);
       const bullet = document.createElement("span");
-      bullet.className = "bullet" + (b.hasChildren ? " haskids" : "");
+      bullet.className = "bullet" + (kids ? " haskids" : "") + (shut ? " folded" : "");
       bullet.textContent = "●";
-      bullet.title = "Make this a task";
-      bullet.onclick = async () =>
+      bullet.title = kids ? "Fold (shift-click to make a task)" : "Make this a task";
+      bullet.onclick = async (e) => {
+        if (kids && !e.shiftKey) return toggleFold(b);
         applied(await call(() => api().ToggleTask(page.rel, b.offset, page.hash)));
+      };
       row.appendChild(bullet);
     }
 
@@ -429,7 +519,7 @@ function renderOutline() {
     // which is the whole reason to embed rather than to refer. The rows are
     // the other page's, so they are shown and not edited: editing them here
     // would be editing a file this page does not have open.
-    (b.embedKids || []).forEach((kid) => {
+    (isFolded(b) ? [] : b.embedKids || []).forEach((kid) => {
       const line = document.createElement("div");
       line.className = "block embedded";
       line.style.marginLeft = (b.depth + kid.depth) * 22 + "px";
@@ -644,7 +734,9 @@ function wireBlock(el, b) {
       if (first) {
         if (raw(el) === "") {
           e.preventDefault();
-          applied(await call(() => api().DeleteBlock(page.rel, b.offset, page.hash)));
+          const gone = await call(() => api().DeleteBlock(page.rel, b.offset, page.hash));
+          if (gone) say("Block deleted — git has the previous version");
+          applied(gone);
         }
         return;
       }
@@ -1222,6 +1314,13 @@ $("next").onclick = () => shiftDay(1);
 $("back").onclick = () => goBack();
 $("fwd").onclick = () => goForward();
 $("closehelp").onclick = () => ($("help").hidden = true);
+$("closelog").onclick = () => ($("log").hidden = true);
+// Dismissing a message and losing it are different things.
+$("error").onclick = () => {
+  $("error").hidden = true;
+  renderLog();
+  $("log").hidden = false;
+};
 
 // Navigation happens on mousedown, not click: by the time a click arrives the
 // block has taken focus, swapped itself to raw text and destroyed the very
@@ -1270,6 +1369,7 @@ const KEYS = [
   { key: "ArrowRight", mod: true, alt: true, label: "Next day", run: () => shiftDay(1) },
   { key: ",", mod: true, label: "Settings", run: openSettings },
   { key: "/", mod: true, label: "Keyboard shortcuts", run: toggleHelp },
+  { key: "m", mod: true, shift: true, label: "Messages", run: openLog },
 ];
 
 function focusSearch() {
@@ -1280,6 +1380,7 @@ function focusSearch() {
 document.addEventListener("keydown", (e) => {
   // Escape backs out of whatever is covering the page, innermost first.
   if (e.key === "Escape") {
+    if (!$("log").hidden) return void ($("log").hidden = true);
     if (!$("help").hidden) return void ($("help").hidden = true);
     if (!$("settings").hidden) return void ($("settings").hidden = true);
     if (!$("agenda").hidden && page) return void show(page);
@@ -1296,6 +1397,11 @@ document.addEventListener("keydown", (e) => {
     return;
   }
 });
+
+function openLog() {
+  renderLog();
+  $("log").hidden = false;
+}
 
 // toggleHelp shows the table above rather than a list written out by hand,
 // which would be a second place to keep in step and the one that goes stale.

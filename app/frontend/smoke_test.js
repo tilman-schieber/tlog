@@ -226,6 +226,45 @@ function ok(label, cond, detail) {
   ok("re-opening the current page does not stack up history",
     (await w.eval("history.length")) === depth);
 
+  // --- folding ------------------------------------------------------------
+  //
+  // The window could not fold anything: hasChildren changed a bullet's colour
+  // and nothing else, so a long journal had to be read in full. Driven by
+  // clicking the bullet, which is how anyone else would do it.
+  await w.eval(`openRel("journals/2026-09-25.md")`);
+  await new Promise((r) => setTimeout(r, 100));
+  const rows = () => $("outline").querySelectorAll(".block").length;
+  const parentBullet = () => $("outline").querySelector(".block .bullet.haskids");
+  const before = rows();
+  ok("the child is on screen to begin with", $("outline").textContent.includes("she will send"));
+  ok("a parent has a foldable bullet", parentBullet() !== null);
+
+  parentBullet().click();
+  await new Promise((r) => setTimeout(r, 50));
+  ok("folding hides the subtree", rows() < before, `${rows()} of ${before}`);
+  ok("and the child is gone", !$("outline").textContent.includes("she will send"));
+  ok("the parent is still there", $("outline").textContent.includes("meeting with"));
+  ok("the bullet says it is folded", $("outline").querySelector(".bullet.folded") !== null);
+
+  parentBullet().click();
+  await new Promise((r) => setTimeout(r, 50));
+  ok("unfolding brings it back", rows() === before);
+  ok("and the child is back", $("outline").textContent.includes("she will send"));
+
+  // A fold belongs to the block, not to the row it happened to be on.
+  parentBullet().click();
+  await new Promise((r) => setTimeout(r, 50));
+  await w.eval(`openRel("pages/Timetable.md")`);
+  await new Promise((r) => setTimeout(r, 100));
+  ok("a fold does not follow you to another page",
+    $("outline").querySelector(".bullet.folded") === null);
+  await w.eval("goBack()");
+  await new Promise((r) => setTimeout(r, 100));
+  ok("and is still there when you come back",
+    $("outline").querySelector(".bullet.folded") !== null);
+  parentBullet().click();
+  await new Promise((r) => setTimeout(r, 50));
+
   // --- the keyboard -------------------------------------------------------
   await w.eval("toggleHelp()");
   ok("the keyboard sheet opens", $("help").hidden === false);
@@ -235,6 +274,39 @@ function ok(label, cond, detail) {
     $("helplist").textContent.includes("Agenda"));
   await w.eval("toggleHelp()");
   ok("and closes again", $("help").hidden === true);
+
+  // --- what the window says ------------------------------------------------
+  //
+  // An error used to appear for six seconds and then be gone with no way to
+  // get it back. If you were looking at the other screen when the push failed,
+  // it never happened.
+  $("help").hidden = true;
+  $("log").hidden = true;
+
+  await w.eval(`say("a quiet receipt")`);
+  ok("a note is shown", $("error").hidden === false);
+  ok("a note is not styled as a failure", !$("error").classList.contains("bad"));
+
+  // A note removes itself, and the timer it sets is the evidence.
+  ok("a note schedules its own disappearance", (await w.eval("!!say.timer")) === true);
+
+  await w.eval("clearTimeout(say.timer); say.timer = undefined");
+  await w.eval(`fail(new Error("push rejected"))`);
+  ok("an error is shown", $("error").hidden === false);
+  ok("an error is styled as one", $("error").classList.contains("bad"));
+  ok("an error says what happened", $("error").textContent.includes("push rejected"));
+  ok("an error does not schedule its own disappearance",
+    (await w.eval("say.timer")) === undefined);
+
+  $("error").click();
+  await new Promise((r) => setTimeout(r, 50));
+  ok("dismissing an error opens the log rather than losing it", $("log").hidden === false);
+  ok("the log has both lines", $("loglist").textContent.includes("push rejected") &&
+    $("loglist").textContent.includes("a quiet receipt"));
+  ok("the log is newest first",
+    $("loglist").textContent.indexOf("push rejected") <
+      $("loglist").textContent.indexOf("a quiet receipt"));
+  $("log").hidden = true;
 
   console.log(failures === 0 ? "frontend smoke: all pass" : `frontend smoke: ${failures} FAILURES`);
   process.exit(failures ? 1 : 0);

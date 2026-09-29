@@ -129,6 +129,24 @@ properties survive untranslated only because markdown offers no equivalent.
 
 ## The desktop app
 
+Keys, with `⌘/` for the list:
+
+| | |
+|---|---|
+| `⌘K` `⌘F` | search |
+| `⌘T` | today |
+| `⌘⇧A` | agenda |
+| `⌘[` `⌘]` | back, forward |
+| `⌥⌘←` `⌥⌘→` | the day before, the day after |
+| `⌘,` | settings |
+| `⌘⇧M` | everything tlog has said |
+| `Esc` | close whatever is open |
+
+Click a bullet to fold what is under it; shift-click to make the block a task.
+Errors stay in the corner until dismissed and are kept in Messages afterwards —
+a push that failed while you were looking elsewhere is still there.
+
+
 The same notes in a window, for when an outline is easier to read than to type:
 sidebar of journals, pages and tags; the outline, editable in place; and the
 tagged pages and linked references below it. `⌘F` searches, `⌘T` jumps to today.
