@@ -119,13 +119,16 @@ func TestStatus(t *testing.T) {
 
 func TestDescribe(t *testing.T) {
 	cases := map[string]string{
-		"2026-09-24": "heute",
-		"2026-09-25": "morgen",
-		"2026-09-26": "übermorgen",
-		"2026-09-23": "gestern",
-		"2026-09-21": "3 Tage überfällig",
-		"2026-09-28": "in 4 Tagen",
-		"2026-10-02": "nächste Woche",
+		"2026-09-24": "today",
+		"2026-09-25": "tomorrow",
+		"2026-09-26": "in 2 days",
+		"2026-09-23": "yesterday",
+		"2026-09-21": "3 days overdue",
+		"2026-09-28": "in 4 days",
+		"2026-10-02": "next week",
+		// One is not plural, which is the whole reason plural() exists.
+		"2026-09-22": "2 days overdue",
+		"2026-09-27": "in 3 days",
 	}
 	for in, want := range cases {
 		d, _ := Parse(in, now)

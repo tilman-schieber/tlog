@@ -285,10 +285,10 @@ func (a *API) Month(iso string) Calendar {
 }
 
 var monthNames = map[time.Month]string{
-	time.January: "Januar", time.February: "Februar", time.March: "März",
-	time.April: "April", time.May: "Mai", time.June: "Juni",
-	time.July: "Juli", time.August: "August", time.September: "September",
-	time.October: "Oktober", time.November: "November", time.December: "Dezember",
+	time.January: "January", time.February: "February", time.March: "March",
+	time.April: "April", time.May: "May", time.June: "June",
+	time.July: "July", time.August: "August", time.September: "September",
+	time.October: "October", time.November: "November", time.December: "December",
 }
 
 // RunCommand applies a slash command to a block and cuts the command out of the
@@ -340,7 +340,7 @@ func (a *API) AttachFiles(rel string, paths []string) (*Edit, error) {
 // ChooseFiles opens the system file dialog, for when there is nothing to drag.
 func (a *API) ChooseFiles() ([]string, error) {
 	return runtime.OpenMultipleFilesDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Anhängen",
+		Title: "Attach",
 	})
 }
 

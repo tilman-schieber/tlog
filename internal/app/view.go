@@ -56,7 +56,7 @@ type BlockView struct {
 	EmbedKids []EmbedView `json:"embedKids,omitempty"`
 
 	// A deadline is resolved once, here, so that no adapter has to decide for
-	// itself what "soon" means or how to say "3 Tage überfällig".
+	// itself what "soon" means or how to say "3 days overdue".
 	Due      string `json:"due,omitempty"`
 	DueState string `json:"dueState,omitempty"`
 	DueLabel string `json:"dueLabel,omitempty"`

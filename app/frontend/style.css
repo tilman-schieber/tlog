@@ -150,13 +150,41 @@ html, body {
 #nav li.active { background: var(--sel); font-weight: 600; }
 
 #root {
-  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
   border-top: 1px solid var(--line);
   color: var(--fg-muted);
   font-size: 11px;
+}
+
+#rootpath {
+  flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Settings is reached about once a month. It had the same weight as Today,
+   which is reached every morning. */
+#gear {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--fg-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: default;
+}
+
+#gear:hover {
+  background: var(--sel);
+  color: var(--fg);
 }
 
 /* --- page ---------------------------------------------------------------- */
@@ -167,7 +195,7 @@ html, body {
 
 #title { font-size: 23px; margin: 0; font-weight: 600; }
 
-#daynav { display: flex; gap: 2px; }
+#daynav { display: flex; gap: 2px; margin-left: 2px; }
 #daynav button {
   width: 22px; height: 22px;
   border: 1px solid var(--line);

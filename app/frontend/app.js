@@ -883,7 +883,7 @@ function placeCompletion(box) {
 // a mistyped date is caught before it is written.
 function calendarHTML(cal) {
   if (!cal) return "";
-  const head = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+  const head = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
     .map((d) => `<th>${d}</th>`)
     .join("");
   const cells = cal.days
@@ -1330,7 +1330,7 @@ $("agendabtn").onclick = () => openAgenda();
 
 (async function start() {
   const root = await call(() => api().Root());
-  if (root) $("root").textContent = root;
+  if (root) $("rootpath").textContent = root;
   await refreshIndex();
   await openToday();
 })();

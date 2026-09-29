@@ -32,17 +32,19 @@
           </details>
         </nav>
 
-        <footer id="root" title="Your notes live here"></footer>
-        <button id="gear" title="Einstellungen">Einstellungen</button>
+        <footer id="root" title="Your notes live here">
+          <span id="rootpath"></span>
+          <button id="gear" title="Settings (⌘,)" aria-label="Settings">⚙</button>
+        </footer>
       </aside>
 
       <main id="main">
         <header id="pagehead">
-          <div id="daynav">
-            <button id="prev" title="Previous day">‹</button>
-            <button id="next" title="Next day">›</button>
-          </div>
           <h1 id="title"></h1>
+          <div id="daynav">
+            <button id="prev" title="Previous day (⌘[)">‹</button>
+            <button id="next" title="Next day (⌘])">›</button>
+          </div>
           <div id="pagetags"></div>
         </header>
 
@@ -66,7 +68,7 @@
 
     <div id="settings" hidden>
       <div class="sheet">
-        <header><h2>Einstellungen</h2><button id="closesettings">Fertig</button></header>
+        <header><h2>Settings</h2><button id="closesettings">Done</button></header>
         <div id="settingslist"></div>
         <footer id="settingspath"></footer>
       </div>

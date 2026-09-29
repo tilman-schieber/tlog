@@ -41,18 +41,18 @@ func (c Command) TakesText() bool { return c.Arg == "text" }
 const DeadlineProp = "Deadline"
 
 var commands = []Command{
-	{Name: "todo", Title: "TODO", Hint: "Aufgabe, offen", aliases: []string{"task", "aufgabe"}},
-	{Name: "done", Title: "DONE", Hint: "Aufgabe, erledigt", aliases: []string{"erledigt"}},
-	{Name: "deadline", Title: "Deadline", Hint: "Fällig am …", Arg: "date", aliases: []string{"due", "faellig", "fällig", "dl"}},
-	{Name: "date", Title: "Datum", Hint: "Datum einfügen, als Link", Arg: "date", aliases: []string{"datum"}},
-	{Name: "quote", Title: "Zitat", Hint: "Block als Zitat", aliases: []string{"zitat"}},
-	{Name: "code", Title: "Code", Hint: "Codeblock einfügen"},
-	{Name: "table", Title: "Tabelle", Hint: "Tabelle als csv einfügen", aliases: []string{"tabelle", "csv"}},
-	{Name: "page", Title: "Seite", Hint: "Link auf eine Seite", aliases: []string{"link", "seite"}},
-	{Name: "tag", Title: "Tag", Hint: "Tag einfügen"},
-	{Name: "file", Title: "Anhang", Hint: "Datei aus ~/.att einfügen", Arg: "attachment", aliases: []string{"anhang", "att", "attach"}},
-	{Name: "prop", Title: "Property", Hint: "Eigenschaft setzen: /prop status offen", Arg: "text", aliases: []string{"property", "eigenschaft"}},
-	{Name: "alias", Title: "Alias", Hint: "Zweitname für diese Seite: /alias Ada", Arg: "text", aliases: []string{"aka", "zweitname"}},
+	{Name: "todo", Title: "TODO", Hint: "Task, open", aliases: []string{"task", "aufgabe"}},
+	{Name: "done", Title: "DONE", Hint: "Task, done", aliases: []string{"erledigt"}},
+	{Name: "deadline", Title: "Deadline", Hint: "Due on …", Arg: "date", aliases: []string{"due", "faellig", "fällig", "dl"}},
+	{Name: "date", Title: "Date", Hint: "Insert a date, as a link", Arg: "date", aliases: []string{"datum"}},
+	{Name: "quote", Title: "Quote", Hint: "Make the block a quotation", aliases: []string{"zitat"}},
+	{Name: "code", Title: "Code", Hint: "Insert a code block"},
+	{Name: "table", Title: "Table", Hint: "Insert a table as csv", aliases: []string{"tabelle", "csv"}},
+	{Name: "page", Title: "Page", Hint: "Link to a page", aliases: []string{"link", "seite"}},
+	{Name: "tag", Title: "Tag", Hint: "Insert a tag"},
+	{Name: "file", Title: "Attachment", Hint: "Insert a file from ~/.att", Arg: "attachment", aliases: []string{"anhang", "att", "attach"}},
+	{Name: "prop", Title: "Property", Hint: "Set a property: /prop status open", Arg: "text", aliases: []string{"property", "eigenschaft"}},
+	{Name: "alias", Title: "Alias", Hint: "Another name for this page: /alias Ada", Arg: "text", aliases: []string{"aka", "zweitname"}},
 }
 
 // Commands returns the whole menu, in the order it is shown.

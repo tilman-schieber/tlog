@@ -732,7 +732,7 @@ func TestSlashDeadlineWritesAProperty(t *testing.T) {
 		t.Fatalf("deadline not offered: %+v", m.comp)
 	}
 	// The menu shows what the shorthand resolved to, before anything is written.
-	if !strings.Contains(m.comp.items[0], "morgen") {
+	if !strings.Contains(m.comp.items[0], "tomorrow") {
 		t.Fatalf("no preview of the date: %q", m.comp.items[0])
 	}
 	send(t, m, k(tea.KeyEnter))
@@ -915,11 +915,11 @@ func TestSettingsSayWhatWillNotTakeEffectYet(t *testing.T) {
 	send(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{','}})
 
 	m.applySetting("notes", "~/zettel")
-	if !strings.Contains(m.settings.msg, "nächsten Start") {
+	if !strings.Contains(m.settings.msg, "next start") {
 		t.Fatalf("a setting that needs a restart should say so: %q", m.settings.msg)
 	}
 	m.applySetting("format.blank_lines", "false")
-	if !strings.Contains(m.settings.msg, "neu formatiert") {
+	if !strings.Contains(m.settings.msg, "reformat") {
 		t.Fatalf("a reformat should be announced: %q", m.settings.msg)
 	}
 }

@@ -87,17 +87,17 @@ func (m *Model) afterSetting(note string, err error) {
 	}
 	m.settings.items = m.svc.Settings()
 	if note != "" {
-		m.settings.msg = "gespeichert — " + note
+		m.settings.msg = "saved — " + note
 		return
 	}
-	m.settings.msg = "gespeichert"
+	m.settings.msg = "saved"
 }
 
 func (m *Model) settingsView() string {
 	s := m.settings
 	var b strings.Builder
 
-	b.WriteString(styleTitle.Render("Einstellungen"))
+	b.WriteString(styleTitle.Render("Settings"))
 	b.WriteString("  " + styleMuted.Render(m.svc.ConfigPath()) + "\n\n")
 
 	for i, it := range s.items {
@@ -132,9 +132,9 @@ func (m *Model) settingsView() string {
 		b.WriteString(styleMuted.Render(s.msg) + "\n")
 	}
 	if s.ed != nil {
-		b.WriteString(styleMuted.Render("enter übernehmen · esc abbrechen"))
+		b.WriteString(styleMuted.Render("enter to apply · esc to cancel"))
 	} else {
-		b.WriteString(styleMuted.Render("↑↓ wählen · enter ändern · esc zurück"))
+		b.WriteString(styleMuted.Render("↑↓ choose · enter change · esc back"))
 	}
 	return b.String()
 }

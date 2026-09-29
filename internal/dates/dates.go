@@ -187,39 +187,53 @@ func Status(t, now time.Time) State {
 	}
 }
 
-// Describe says how far away a day is, in German, for showing beside a date.
+// Describe says how far away a day is, for showing beside a date.
+//
+// English, like the rest of what tlog says. Parsing stays bilingual — "morgen"
+// and "tomorrow" both work, and so do the German weekday names — because what
+// you type in your own notes is your business and what the tool says back is
+// the tool's.
 func Describe(t, now time.Time) string {
 	d := days(day(now), day(t))
 	switch {
 	case d == 0:
-		return "heute"
+		return "today"
 	case d == 1:
-		return "morgen"
+		return "tomorrow"
 	case d == -1:
-		return "gestern"
+		return "yesterday"
 	case d == 2:
-		return "übermorgen"
+		return "in 2 days"
 	case d < 0:
-		return fmt.Sprintf("%d Tage überfällig", -d)
+		return plural(-d, "day") + " overdue"
 	case d < 7:
-		return fmt.Sprintf("in %d Tagen", d)
+		return "in " + plural(d, "day")
 	case d < 14:
-		return "nächste Woche"
+		return "next week"
 	case d < 62:
-		return fmt.Sprintf("in %d Wochen", (d+3)/7)
+		return "in " + plural((d+3)/7, "week")
 	default:
-		return fmt.Sprintf("in %d Monaten", d/30)
+		return "in " + plural(d/30, "month")
 	}
+}
+
+// plural is the difference between "in 1 days" and a tool that reads like it
+// was written by someone.
+func plural(n int, unit string) string {
+	if n == 1 {
+		return "1 " + unit
+	}
+	return fmt.Sprintf("%d %ss", n, unit)
 }
 
 func days(from, to time.Time) int {
 	return int(to.Sub(from).Hours() / 24)
 }
 
-// Weekday renders the two-letter German abbreviation, for a calendar header or
-// a compact date.
+// Weekday renders the two-letter abbreviation, for a calendar header or a
+// compact date.
 func Weekday(t time.Time) string {
-	return [...]string{"So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"}[int(t.Weekday())]
+	return [...]string{"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"}[int(t.Weekday())]
 }
 
 // Short renders a date the way it would be written by hand: "Fr 26.09."

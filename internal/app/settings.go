@@ -32,49 +32,49 @@ type Setting struct {
 func (s *Service) Settings() []Setting {
 	c := s.Cfg
 	remote := s.Git.Remote()
-	remoteNote := "im Repository der Notizen, nicht in tlog"
+	remoteNote := "kept in the notes repository, not in tlog"
 	if remote == "" {
-		remoteNote = "noch keins — ohne Remote kann nichts gepusht werden"
+		remoteNote = "none yet — without a remote nothing can be pushed"
 	}
 	return []Setting{
 		{"notes", c.Notes, "text",
-			"Wo die Notizen liegen", "$TLOG_DIR sticht das aus", "config"},
+			"Where the notes live", "$TLOG_DIR overrides this", "config"},
 		{"startup", c.Startup, "text",
-			"Womit tlog öffnet", "today oder last", "config"},
+			"What tlog opens on", "today or last", "config"},
 
 		{"attachments.dir", c.Attachments.Dir, "text",
-			"Das Regal, geteilt mit att", "$ATT_DIR sticht das aus", "config"},
+			"The shelf, shared with att", "$ATT_DIR overrides this", "config"},
 		{"attachments.sanitize", boolStr(c.Attachments.Sanitize), "bool",
-			"Dateinamen beim Ablegen aufräumen",
-			"att lässt Namen wie sie sind — beide schreiben hierhin", "config"},
+			"Tidy filenames on the way in",
+			"att leaves names as they are — both write here", "config"},
 		{"attachments.lowercase", boolStr(c.Attachments.Lowercase), "bool",
-			"…und klein schreiben", "nur wirksam, wenn sanitize an ist", "config"},
+			"…and lowercase them", "only has an effect when sanitize is on", "config"},
 
 		{"git.autocommit", boolStr(c.Git.AutoCommit), "bool",
-			"Beim Schreiben committen",
-			"aus: erst bei tlog push oder beim Beenden", "config"},
+			"Commit as you write",
+			"off: not until tlog push, or quitting", "config"},
 		{"git.debounce", c.Git.Debounce, "duration",
-			"Ruhe vor einem Commit", "", "config"},
+			"How long writing must be idle before a commit", "", "config"},
 		{"git.autopush", boolStr(s.Git.AutoPush()), "bool",
-			"Nach jedem Commit pushen",
-			"im Repository der Notizen, nicht in tlog", "notes"},
+			"Push after every commit",
+			"kept in the notes repository, not in tlog", "notes"},
 		{"git.remote", remote, "text",
-			"Wohin gepusht wird", remoteNote, "notes"},
+			"Where pushing goes", remoteNote, "notes"},
 
 		{"watch.enabled", boolStr(c.Watch.Enabled), "bool",
-			"Änderungen von aussen übernehmen",
-			"Getipptes wird nie verworfen — nur gemeldet", "config"},
+			"Pick up edits made elsewhere",
+			"what you are typing is never discarded, only reported", "config"},
 		{"watch.interval", c.Watch.Interval, "duration",
-			"Wie oft nachgesehen wird", "", "config"},
+			"How often the notes are checked", "", "config"},
 
 		{"format.blank_lines", boolStr(c.Format.BlankLines), "bool",
-			"Leerzeile zwischen Blöcken",
-			"formatiert jede Datei beim nächsten Schreiben neu", "config"},
+			"A blank line between top-level blocks",
+			"reformats each file the next time it is written", "config"},
 		{"deadline.property", c.Deadline.Property, "text",
-			"Property für Fälligkeiten",
-			"gelesen wird jede Schreibweise, auch due", "config"},
+			"The property a deadline is written to",
+			"reading accepts any casing, and due as well", "config"},
 		{"dates.end_of_week", c.Dates.EndOfWeek, "text",
-			"Was „eow“ bedeutet", "friday oder sunday", "config"},
+			"What “eow” means", "friday or sunday", "config"},
 	}
 }
 
@@ -124,11 +124,11 @@ func (s *Service) ToggleSetting(key string) (string, error) {
 func consequence(before, after config.Config) string {
 	switch {
 	case after.Notes != before.Notes || after.Attachments.Dir != before.Attachments.Dir:
-		return "wirkt beim nächsten Start"
+		return "takes effect at the next start"
 	case after.Format.BlankLines != before.Format.BlankLines:
-		return "Dateien werden beim nächsten Schreiben neu formatiert"
+		return "files are reformatted the next time they are written"
 	case after.Watch != before.Watch:
-		return "wirkt beim nächsten Start"
+		return "takes effect at the next start"
 	}
 	return ""
 }

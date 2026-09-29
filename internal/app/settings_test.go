@@ -169,10 +169,10 @@ func TestAConsequenceIsAnnouncedRatherThanDiscovered(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(note, "nächsten Start") {
+	if !strings.Contains(note, "next start") {
 		t.Fatalf("got %q", note)
 	}
-	if note, _ = s.SetSetting("format.blank_lines", "false"); !strings.Contains(note, "neu formatiert") {
+	if note, _ = s.SetSetting("format.blank_lines", "false"); !strings.Contains(note, "reformat") {
 		t.Fatalf("got %q", note)
 	}
 	if note, _ = s.SetSetting("deadline.property", "due"); note != "" {
