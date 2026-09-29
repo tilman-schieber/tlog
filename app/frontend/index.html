@@ -40,10 +40,14 @@
 
       <main id="main">
         <header id="pagehead">
+          <div id="histnav">
+            <button id="back" title="Back (⌘[)">←</button>
+            <button id="fwd" title="Forward (⌘])">→</button>
+          </div>
           <h1 id="title"></h1>
           <div id="daynav">
-            <button id="prev" title="Previous day (⌘[)">‹</button>
-            <button id="next" title="Next day (⌘])">›</button>
+            <button id="prev" title="Previous day (⌥⌘←)">‹</button>
+            <button id="next" title="Next day (⌥⌘→)">›</button>
           </div>
           <div id="pagetags"></div>
         </header>
@@ -71,6 +75,13 @@
         <header><h2>Settings</h2><button id="closesettings">Done</button></header>
         <div id="settingslist"></div>
         <footer id="settingspath"></footer>
+      </div>
+    </div>
+
+    <div id="help" hidden>
+      <div class="sheet">
+        <header><h2>Keyboard</h2><button id="closehelp">Done</button></header>
+        <div id="helplist"></div>
       </div>
     </div>
 

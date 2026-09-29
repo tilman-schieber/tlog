@@ -657,3 +657,58 @@ table.cal td.sel { background: var(--accent); color: #fff; font-weight: 600; }
 .block.embedded .bullet {
   opacity: 0.5;
 }
+
+/* --- going back ----------------------------------------------------------- */
+
+#histnav { display: flex; gap: 2px; margin-right: 2px; }
+#histnav button {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--fg-muted);
+  cursor: default;
+  font-size: 12px;
+  line-height: 1;
+}
+#histnav button:hover:not(:disabled) { background: var(--sel); }
+
+/* Dimmed rather than removed: the arrows keep their place, so the header does
+   not shift every time you arrive somewhere with nowhere to go back to. */
+#histnav button:disabled { opacity: 0.3; }
+
+/* --- the keyboard sheet --------------------------------------------------- */
+
+#help {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.28);
+}
+#help .sheet {
+  width: min(420px, 92vw);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--bg);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.3);
+}
+#help header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+#help h2 { margin: 0; font-size: 14px; }
+#helplist { padding: 8px 16px 16px; }
+#helplist table { width: 100%; border-collapse: collapse; font-size: 13px; }
+#helplist td { padding: 5px 0; }
+#helplist .chord {
+  width: 5.5rem;
+  color: var(--fg-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}

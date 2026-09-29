@@ -357,6 +357,7 @@ function render() {
   renderTagged();
   renderRefs();
   markActive();
+  updateNav();
 
   if (focusOffset !== null) {
     const el = document.querySelector(`.text[data-offset="${focusOffset}"]`);
@@ -1006,22 +1007,73 @@ async function runCommand() {
 
 // --- navigation -------------------------------------------------------------
 
+// Where you have been, so that following a link is not a one-way door. Only
+// the path is kept: the page itself may have changed by the time you go back,
+// and showing the version you remember rather than the one on disk is how an
+// editor starts lying to you.
+const history = [];
+let forward = [];
+
+// remember records where we are before going somewhere else. Going back and
+// arriving at the same page again are different things, so the caller says
+// which this is rather than the function guessing from the path.
+function remember() {
+  if (page && history[history.length - 1] !== page.rel) history.push(page.rel);
+}
+
 async function openRel(rel) {
+  if (page && page.rel === rel) return; // already here
   hideCompletion();
+  remember();
+  forward = [];
   show(await call(() => api().OpenRel(rel)));
 }
 
 async function open_(name) {
   hideCompletion();
+  remember();
+  forward = [];
   show(await call(() => api().OpenPage(name)));
 }
 
 async function openToday() {
   hideCompletion();
+  remember();
+  forward = [];
   show(await call(() => api().TodayJournal()));
 }
 
+// goBack returns to the last page, keeping where you were so that going back
+// and forward again lands where it started.
+async function goBack() {
+  if (!history.length) return;
+  const rel = history.pop();
+  if (page) forward.push(page.rel);
+  hideCompletion();
+  show(await call(() => api().OpenRel(rel)));
+  updateNav();
+}
+
+async function goForward() {
+  if (!forward.length) return;
+  const rel = forward.pop();
+  if (page) history.push(page.rel);
+  hideCompletion();
+  show(await call(() => api().OpenRel(rel)));
+  updateNav();
+}
+
+// updateNav dims the arrows when there is nowhere to go, so the window says
+// whether back is available rather than leaving it to be discovered.
+function updateNav() {
+  $("back").disabled = history.length === 0;
+  $("fwd").disabled = forward.length === 0;
+}
+
 async function shiftDay(delta) {
+  if (!page) return;
+  remember();
+  forward = [];
   show(await call(() => api().Journal(page.rel, delta)));
 }
 
@@ -1167,6 +1219,9 @@ async function runSearch(query) {
 $("today").onclick = openToday;
 $("prev").onclick = () => shiftDay(-1);
 $("next").onclick = () => shiftDay(1);
+$("back").onclick = () => goBack();
+$("fwd").onclick = () => goForward();
+$("closehelp").onclick = () => ($("help").hidden = true);
 
 // Navigation happens on mousedown, not click: by the time a click arrives the
 // block has taken focus, swapped itself to raw text and destroyed the very
@@ -1198,24 +1253,76 @@ document.addEventListener("mousedown", (e) => {
   }
 });
 
+// The keys, in one table. The other adapter is a vim-style outliner with
+// fifty-odd bindings; this had three, and reaching for the mouse to change
+// page in a tool whose other face never needs one is a jarring difference.
+//
+// Every binding takes a modifier, so nothing here can swallow a keystroke
+// meant for the block being edited.
+const KEYS = [
+  { key: "k", mod: true, label: "Search", run: focusSearch },
+  { key: "f", mod: true, label: "Search", run: focusSearch },
+  { key: "t", mod: true, label: "Today", run: () => openToday() },
+  { key: "a", mod: true, shift: true, label: "Agenda", run: () => openAgenda() },
+  { key: "[", mod: true, label: "Back", run: () => goBack() },
+  { key: "]", mod: true, label: "Forward", run: () => goForward() },
+  { key: "ArrowLeft", mod: true, alt: true, label: "Previous day", run: () => shiftDay(-1) },
+  { key: "ArrowRight", mod: true, alt: true, label: "Next day", run: () => shiftDay(1) },
+  { key: ",", mod: true, label: "Settings", run: openSettings },
+  { key: "/", mod: true, label: "Keyboard shortcuts", run: toggleHelp },
+];
+
+function focusSearch() {
+  $("search").focus();
+  $("search").select();
+}
+
 document.addEventListener("keydown", (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === "f") {
-    e.preventDefault();
-    $("search").focus();
-    $("search").select();
+  // Escape backs out of whatever is covering the page, innermost first.
+  if (e.key === "Escape") {
+    if (!$("help").hidden) return void ($("help").hidden = true);
+    if (!$("settings").hidden) return void ($("settings").hidden = true);
+    if (!$("agenda").hidden && page) return void show(page);
+    return;
   }
-  if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+  const mod = e.metaKey || e.ctrlKey;
+  for (const k of KEYS) {
+    if (e.key.toLowerCase() !== k.key.toLowerCase() && e.key !== k.key) continue;
+    if (!!k.mod !== mod) continue;
+    if (!!k.shift !== e.shiftKey) continue;
+    if (!!k.alt !== e.altKey) continue;
     e.preventDefault();
-    openSettings();
-  }
-  if (e.key === "Escape" && !$("settings").hidden) {
-    $("settings").hidden = true;
-  }
-  if ((e.metaKey || e.ctrlKey) && e.key === "t") {
-    e.preventDefault();
-    openToday();
+    k.run();
+    return;
   }
 });
+
+// toggleHelp shows the table above rather than a list written out by hand,
+// which would be a second place to keep in step and the one that goes stale.
+function toggleHelp() {
+  const box = $("help");
+  if (!box.hidden) {
+    box.hidden = true;
+    return;
+  }
+  const mac = navigator.platform.toLowerCase().includes("mac");
+  const rows = KEYS.map((k) => {
+    const parts = [];
+    if (k.mod) parts.push(mac ? "⌘" : "Ctrl");
+    if (k.alt) parts.push(mac ? "⌥" : "Alt");
+    if (k.shift) parts.push("⇧");
+    parts.push({ ArrowLeft: "←", ArrowRight: "→" }[k.key] || k.key.toUpperCase());
+    return `<tr><td class="chord">${escapeHTML(parts.join(mac ? "" : "+"))}</td>` +
+           `<td>${escapeHTML(k.label)}</td></tr>`;
+  });
+  $("helplist").innerHTML =
+    "<table>" + rows.join("") +
+    `<tr><td class="chord">Esc</td><td>Close what is open</td></tr>` +
+    `<tr><td class="chord">Tab</td><td>Indent the block being edited</td></tr>` +
+    `<tr><td class="chord">${mac ? "⌥" : "Alt"}↑↓</td><td>Move the block</td></tr>` +
+    "</table>";
+  box.hidden = false;
+}
 
 // Wails reports a file drop here. The files go on the shared shelf and their
 // links into the page currently open.

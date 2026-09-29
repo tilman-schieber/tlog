@@ -81,13 +81,20 @@ const PAGE = {
   ],
 };
 
+const OTHER = {
+  rel: "pages/Timetable.md", title: "Timetable", hash: "def456",
+  isJournal: false, tags: [], tagged: [], refs: [],
+  blocks: [{ addr: "pages/Timetable.md:0@def456", offset: 0, depth: 0,
+             text: "the lecture is at nine", body: "the lecture is at nine", hasChildren: false }],
+};
+
 const API = {
   Root: async () => "/home/ada/notes",
   Index: async () => ({ journals: ["2026-09-25"], pages: ["Ada Lovelace", "Timetable"], tags: ["project"] }),
   TodayJournal: async () => PAGE,
   Today: async () => PAGE,
-  OpenRel: async () => PAGE,
-  OpenPage: async () => PAGE,
+  OpenRel: async (rel) => (rel === "pages/Timetable.md" ? OTHER : PAGE),
+  OpenPage: async () => OTHER,
   Journal: async () => PAGE,
   Search: async () => [{ addr: "a:0@b", rel: "a", page: "Ada Lovelace", offset: 0, hash: "b", text: "a hit" }],
   Due: async () => [{ addr: "a:0@b", rel: "a", page: "Ada Lovelace", offset: 0, hash: "b",
@@ -185,11 +192,56 @@ function ok(label, cond, detail) {
   ok("a text setting carries its value",
     $("settingslist").querySelector("input[type=text]").value === "~/notes");
 
+  $("settings").hidden = true;
+
   await w.eval("openAgenda()");
   await new Promise((r) => setTimeout(r, 100));
   ok("the agenda opens", $("agenda").hidden === false);
   ok("the agenda lists what is due", $("agendalist").textContent.includes("follow up"));
 
+  // --- going back ---------------------------------------------------------
+  //
+  // Following a link used to be a one-way door: the only route back was
+  // finding the page again in the sidebar.
+  await w.eval(`openRel("pages/Timetable.md")`);
+  await new Promise((r) => setTimeout(r, 100));
+  ok("following a link arrives", $("title").textContent === "Timetable");
+  ok("back is offered once there is somewhere to go", $("back").disabled === false);
+
+  await w.eval("goBack()");
+  await new Promise((r) => setTimeout(r, 100));
+  ok("back returns to where you were", $("title").textContent === "2026-09-25",
+    $("title").textContent);
+  ok("forward is offered after going back", $("fwd").disabled === false);
+  ok("back is not offered at the start", $("back").disabled === true);
+
+  await w.eval("goForward()");
+  await new Promise((r) => setTimeout(r, 100));
+  ok("forward lands where back came from", $("title").textContent === "Timetable");
+
+  // Arriving at the page you are already on is not a move.
+  const depth = await w.eval("history.length");
+  await w.eval(`openRel("pages/Timetable.md")`);
+  await new Promise((r) => setTimeout(r, 100));
+  ok("re-opening the current page does not stack up history",
+    (await w.eval("history.length")) === depth);
+
+  // --- the keyboard -------------------------------------------------------
+  await w.eval("toggleHelp()");
+  ok("the keyboard sheet opens", $("help").hidden === false);
+  ok("it lists the bindings from the table",
+    $("helplist").textContent.includes("Search") &&
+    $("helplist").textContent.includes("Back") &&
+    $("helplist").textContent.includes("Agenda"));
+  await w.eval("toggleHelp()");
+  ok("and closes again", $("help").hidden === true);
+
   console.log(failures === 0 ? "frontend smoke: all pass" : `frontend smoke: ${failures} FAILURES`);
   process.exit(failures ? 1 : 0);
-})();
+})().catch((e) => {
+  // Recording unhandled rejections lets the page's own failures be reported,
+  // but it also means a mistake in this file would end the run silently with
+  // a success. It must not be possible to pass by not finishing.
+  console.log("frontend smoke: the test itself threw\n" + (e && e.stack ? e.stack : e));
+  process.exit(1);
+});
