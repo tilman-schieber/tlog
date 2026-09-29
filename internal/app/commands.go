@@ -226,6 +226,13 @@ func (s *Service) RunCommand(a Addr, name, arg, text string, from, to int) (*Com
 				b.ToggleTask()
 			}
 		case "deadline":
+			// A deadline makes it a task. A date on a block that can never be
+			// ticked off is a date that never leaves the agenda, and "what is
+			// due" only means anything if something can become not-due.
+			if b.Task() == markdown.NotATask {
+				b.MakeTask()
+				caret += 4 // "[ ] " went in front
+			}
 			setDeadline(b, due, s.Cfg.DeadlineProperty())
 		case "quote":
 			if !b.Quote() {

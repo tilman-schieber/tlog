@@ -251,6 +251,27 @@ function ok(label, cond, detail) {
   ok("unfolding brings it back", rows() === before);
   ok("and the child is back", $("outline").textContent.includes("she will send"));
 
+  // A bullet folds and does nothing else. It used to make the block a task,
+  // so a stray click rewrote a note into a checkbox.
+  const plain = [...$("outline").querySelectorAll(".block .bullet")]
+    .find((el) => !el.classList.contains("haskids"));
+  ok("a childless block has an inert bullet", plain && plain.onclick === null);
+  let toggled = false;
+  const realToggle = API.ToggleTask;
+  API.ToggleTask = async () => { toggled = true; return { page: PAGE, offset: 0 }; };
+  if (plain) plain.click();
+  parentBullet().click();
+  await new Promise((r) => setTimeout(r, 50));
+  ok("clicking a bullet never makes the block a task", toggled === false);
+  parentBullet().click();
+  await new Promise((r) => setTimeout(r, 50));
+
+  // The checkbox still ticks off — that is what a checkbox is for.
+  $("outline").querySelector(".check").click();
+  await new Promise((r) => setTimeout(r, 50));
+  ok("a checkbox still ticks off", toggled === true);
+  API.ToggleTask = realToggle;
+
   // A fold belongs to the block, not to the row it happened to be on.
   parentBullet().click();
   await new Promise((r) => setTimeout(r, 50));

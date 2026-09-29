@@ -142,7 +142,9 @@ Keys, with `⌘/` for the list:
 | `⌘⇧M` | everything tlog has said |
 | `Esc` | close whatever is open |
 
-Click a bullet to fold what is under it; shift-click to make the block a task.
+Click a bullet to fold what is under it. A bullet does nothing else: a block
+becomes a task when you say `/todo` or give it a `/deadline`, never because you
+clicked near it. A checkbox, once there, ticks off on a click.
 Errors stay in the corner until dismissed and are kept in Messages afterwards —
 a push that failed while you were looking elsewhere is still there.
 
@@ -225,7 +227,7 @@ is its effect, never a slash.
 | | |
 |---|---|
 | `/todo` `/done` | a checkbox, open or ticked |
-| `/deadline fr` | `Deadline:: 2026-09-25` on the block |
+| `/deadline fr` | a checkbox and `Deadline:: 2026-09-25` on the block |
 | `/date morgen` | `[[2026-09-25]]` inline, a link to that day's journal |
 | `/quote` `/code` `/table` | a quotation, a code fence, a `csv` table |
 | `/file report` | a link to an attachment, chosen from the shelf |
@@ -238,13 +240,17 @@ showing what the shorthand resolved to — confirmation, so a mistyped date is
 caught before it is written, rather than the way you are meant to enter one.
 
 ```
-/deadline fr          Freitag
-/deadline 26.9.       the German form you would type anyway
-/deadline morgen      heute · morgen · übermorgen
-/deadline +3d         +3d  +2w  +1m  +1j   (and 3t for Tage)
+/deadline fr          friday — and mo tu we th sa su
+/deadline tomorrow    today · tomorrow · yesterday
+/deadline +3d         +3d  +2w  +1m  +1y
 /deadline eow         end of week · eom · eoy
+/deadline 26.9.       the German form, since that is what you would type
 /deadline 2026-10-11  ISO
 ```
+
+German works too, everywhere a date is read: `morgen`, `übermorgen`,
+`nächsten freitag`, `+1j`, `3t`, and `/fällig` for the command itself. What
+tlog *says* is English; what you type in your own notes is your business.
 
 German and English both work, and whatever you type is stored as ISO — so the
 files sort, grep and still mean the same thing in a year. Nonsense is refused

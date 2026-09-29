@@ -749,6 +749,11 @@ func TestSlashDeadlineWritesAProperty(t *testing.T) {
 	if !strings.Contains(got, want) {
 		t.Fatalf("expected %s in %q", want, got)
 	}
+	// A date on a block that can never be ticked off is a date that never
+	// leaves the agenda, so a deadline makes it a task.
+	if !strings.Contains(got, "- [ ] Bot testen") {
+		t.Fatalf("a deadline did not make it a task: %q", got)
+	}
 }
 
 func TestASlashInProseIsNotACommand(t *testing.T) {

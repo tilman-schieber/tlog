@@ -473,23 +473,25 @@ function renderOutline() {
       const check = document.createElement("span");
       check.className = "check";
       check.textContent = b.task === "done" ? "☑" : "☐";
+      check.title = b.task === "done" ? "Not done after all" : "Done";
       check.onclick = async () =>
         applied(await call(() => api().ToggleTask(page.rel, b.offset, page.hash)));
       row.appendChild(check);
     } else {
-      // A block with children folds on a click and turns into a task on a
-      // shift-click: folding is the thing you do to a parent all day, and
-      // making one a task is the thing you do to it once.
+      // The bullet folds what is under it, and does nothing else. It used to
+      // turn the block into a task, which meant a stray click on the wrong
+      // pixel silently rewrote a note into a checkbox. A block becomes a task
+      // because you said /todo or gave it a /deadline — never because you
+      // clicked near it.
       const kids = b.hasChildren;
       const shut = kids && isFolded(b);
       const bullet = document.createElement("span");
       bullet.className = "bullet" + (kids ? " haskids" : "") + (shut ? " folded" : "");
       bullet.textContent = "●";
-      bullet.title = kids ? "Fold (shift-click to make a task)" : "Make this a task";
-      bullet.onclick = async (e) => {
-        if (kids && !e.shiftKey) return toggleFold(b);
-        applied(await call(() => api().ToggleTask(page.rel, b.offset, page.hash)));
-      };
+      if (kids) {
+        bullet.title = shut ? "Unfold" : "Fold";
+        bullet.onclick = () => toggleFold(b);
+      }
       row.appendChild(bullet);
     }
 

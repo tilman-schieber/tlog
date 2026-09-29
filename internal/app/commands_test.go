@@ -320,3 +320,32 @@ func TestAliasWithoutANameIsRefused(t *testing.T) {
 		t.Fatal("a refused command wrote anyway")
 	}
 }
+
+func TestDeadlineMakesATaskAndDoesNotUnTickADoneOne(t *testing.T) {
+	s := newSvc(t)
+	rel, _ := s.AddToday("call the registrar")
+
+	if _, err := s.RunCommand(addrOf(t, s, rel, 0), "deadline", "tomorrow",
+		"call the registrar /deadline tomorrow", 20, 37); err != nil {
+		t.Fatal(err)
+	}
+	if got := body(t, s, rel); !strings.Contains(got, "- [ ] call the registrar") {
+		t.Fatalf("a deadline did not make it a task: %q", got)
+	}
+
+	// Ticking it off and then moving the date must not reopen it: that would
+	// be the tool deciding the work is not finished after all.
+	if _, err := s.ToggleTask(addrOf(t, s, rel, 0)); err != nil {
+		t.Fatal(err)
+	}
+	// The text an adapter passes is the block's own, marker and all — it is
+	// what the editor holds, and RunCommand writes it back.
+	done := "[x] call the registrar "
+	if _, err := s.RunCommand(addrOf(t, s, rel, 0), "deadline", "+1w",
+		done, len([]rune(done)), len([]rune(done))); err != nil {
+		t.Fatal(err)
+	}
+	if got := body(t, s, rel); !strings.Contains(got, "- [x] call the registrar") {
+		t.Fatalf("moving the date reopened a finished task: %q", got)
+	}
+}
