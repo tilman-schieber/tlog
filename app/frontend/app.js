@@ -1368,6 +1368,21 @@ $("back").onclick = () => goBack();
 $("fwd").onclick = () => goForward();
 $("closehelp").onclick = () => ($("help").hidden = true);
 $("closelog").onclick = () => ($("log").hidden = true);
+$("palettequery").addEventListener("input", refreshPalette);
+$("palettequery").addEventListener("keydown", (e) => {
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    placeSel = Math.min(placeSel + 1, places.length - 1);
+    drawPalette();
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    placeSel = Math.max(placeSel - 1, 0);
+    drawPalette();
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    choosePlace();
+  }
+});
 // Dismissing a message and losing it are different things.
 $("error").onclick = () => {
   $("error").hidden = true;
@@ -1423,6 +1438,7 @@ const KEYS = [
   { key: ",", mod: true, label: "Settings", run: openSettings },
   { key: "/", mod: true, label: "Keyboard shortcuts", run: toggleHelp },
   { key: "m", mod: true, shift: true, label: "Messages", run: openLog },
+  { key: "p", mod: true, label: "Go to a page", run: () => openPalette() },
 ];
 
 function focusSearch() {
@@ -1433,6 +1449,7 @@ function focusSearch() {
 document.addEventListener("keydown", (e) => {
   // Escape backs out of whatever is covering the page, innermost first.
   if (e.key === "Escape") {
+    if (!$("palette").hidden) return void ($("palette").hidden = true);
     if (!$("log").hidden) return void ($("log").hidden = true);
     if (!$("help").hidden) return void ($("help").hidden = true);
     if (!$("settings").hidden) return void ($("settings").hidden = true);
@@ -1450,6 +1467,64 @@ document.addEventListener("keydown", (e) => {
     return;
   }
 });
+
+// --- going somewhere -------------------------------------------------------
+//
+// Search finds words inside blocks, which is the wrong tool for "take me to
+// the page about Ada": a page whose name you remember but whose contents you
+// do not never came up, and the sidebar is an unfiltered list. The outliner
+// has had ctrl+p from the start.
+
+let places = [];
+let placeSel = 0;
+
+async function openPalette() {
+  $("palettequery").value = "";
+  await refreshPalette();
+  $("palette").hidden = false;
+  $("palettequery").focus();
+}
+
+async function refreshPalette() {
+  places = (await call(() => api().Places($("palettequery").value))) || [];
+  placeSel = 0;
+  drawPalette();
+}
+
+function drawPalette() {
+  const list = $("palettelist");
+  list.innerHTML = "";
+  if (places.length === 0) {
+    const li = document.createElement("li");
+    li.className = "hint";
+    li.textContent = "Nothing by that name";
+    list.appendChild(li);
+    return;
+  }
+  places.forEach((p, i) => {
+    const li = document.createElement("li");
+    li.className = "place" + (i === placeSel ? " sel" : "");
+    li.innerHTML =
+      `<span class="kind">${escapeHTML(p.kind)}</span>` +
+      `<span>${escapeHTML(p.kind === "tag" ? "#" + p.name : p.name)}</span>`;
+    li.onmousedown = (e) => {
+      e.preventDefault();
+      placeSel = i;
+      choosePlace();
+    };
+    list.appendChild(li);
+  });
+}
+
+// choosePlace opens what is selected. A tag may have no file of its own, so it
+// is opened by name — which is what creates it, and only then.
+async function choosePlace() {
+  const p = places[placeSel];
+  $("palette").hidden = true;
+  if (!p) return;
+  if (p.kind === "tag" || !p.rel) return open_(p.name);
+  openRel(p.rel);
+}
 
 function openLog() {
   renderLog();

@@ -95,6 +95,13 @@ func (a *API) CompletePages(prefix string) ([]string, error) {
 	return a.svc.CompletePages(prefix, 8)
 }
 
+// Places is everywhere you could go — journals, pages and tags — ranked by
+// what has been typed. The ranking is the core's, the same one the [[link]]
+// completion uses, so a name that completes one way is found the other way.
+func (a *API) Places(query string) ([]tapp.PlaceView, error) {
+	return a.svc.Places(query, 30)
+}
+
 func (a *API) CompleteTags(prefix string) ([]string, error) {
 	return a.svc.CompleteTags(prefix, 8)
 }

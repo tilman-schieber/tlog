@@ -119,6 +119,15 @@ const API = {
   CompletePages: async () => [],
   CompleteTags: async () => [],
   Blocks: async () => [],
+  Places: async (q) => {
+    const all = [
+      { kind: "journal", name: "2026-09-25", rel: "journals/2026-09-25.md" },
+      { kind: "page", name: "Ada Lovelace", rel: "pages/Ada Lovelace.md" },
+      { kind: "page", name: "Timetable", rel: "pages/Timetable.md" },
+      { kind: "tag", name: "project", rel: "" },
+    ];
+    return q ? all.filter((p) => p.name.toLowerCase().includes(q.toLowerCase())) : all;
+  },
   AttachDir: async () => "~/.att",
   Attachments: async () => [],
 };
@@ -348,6 +357,31 @@ function ok(label, cond, detail) {
     API.DeleteBlock = realDelete;
     API.InsertBefore = realInsert;
   }
+
+  // --- going somewhere ------------------------------------------------------
+  //
+  // Search finds words inside blocks, which is the wrong tool for "take me to
+  // the page about Ada" — a page whose name you remember but whose contents
+  // you do not never came up.
+  await w.eval("openPalette()");
+  await new Promise((r) => setTimeout(r, 100));
+  ok("the palette opens", $("palette").hidden === false);
+  ok("it offers everywhere you could go", $("palettelist").children.length === 4,
+    String($("palettelist").children.length));
+  ok("it says which kind each one is", $("palettelist").textContent.includes("journal") &&
+    $("palettelist").textContent.includes("tag"));
+  ok("a tag is shown as one", $("palettelist").textContent.includes("#project"));
+
+  $("palettequery").value = "table";
+  await w.eval("refreshPalette()");
+  await new Promise((r) => setTimeout(r, 80));
+  ok("typing narrows it", $("palettelist").children.length === 1,
+    $("palettelist").textContent);
+
+  await w.eval("choosePlace()");
+  await new Promise((r) => setTimeout(r, 100));
+  ok("choosing goes there", $("title").textContent === "Timetable", $("title").textContent);
+  ok("and the palette closes", $("palette").hidden === true);
 
   // --- the keyboard -------------------------------------------------------
   await w.eval("toggleHelp()");

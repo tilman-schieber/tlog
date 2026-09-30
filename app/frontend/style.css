@@ -775,3 +775,61 @@ table.cal td.sel { background: var(--accent); color: #fff; font-weight: 600; }
   font-variant-numeric: tabular-nums;
 }
 .logline.error { color: var(--danger); }
+
+/* --- going somewhere ------------------------------------------------------- */
+
+#palette {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 14vh;
+  background: rgba(0, 0, 0, 0.28);
+}
+#palette .sheet {
+  width: min(520px, 92vw);
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--bg);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+#palettequery {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 15px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 15px;
+  outline: none;
+}
+#palettelist {
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  list-style: none;
+}
+.place {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 5px 9px;
+  border-radius: 6px;
+  cursor: default;
+}
+.place.sel { background: var(--sel); }
+
+/* The kind is said rather than guessed from the name: a page and a tag can be
+   called the same thing, and one of them has no file. */
+.place .kind {
+  flex: none;
+  width: 4.2rem;
+  color: var(--fg-muted);
+  font-size: 11px;
+}

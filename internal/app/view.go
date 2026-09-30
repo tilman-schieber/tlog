@@ -395,6 +395,47 @@ func (l *Lookup) Tags(prefix string, limit int) []string {
 	return graph.FuzzyRank(l.g.TagNames(), prefix, limit)
 }
 
+// PlaceView is somewhere you can go: a journal, a page, or a tag. The kind is
+// carried so a chooser can say which without inferring it from the path, and
+// the path is carried so opening one creates nothing.
+type PlaceView struct {
+	Kind string `json:"kind"` // "journal", "page" or "tag"
+	Name string `json:"name"`
+	Rel  string `json:"rel,omitempty"` // empty for a tag, which may have no file
+}
+
+// Places ranks everywhere you could go against what has been typed — the same
+// fuzzy ranking the [[link]] completion uses, so a name that completes one way
+// is found the other way too.
+//
+// Journals come before pages before tags at equal rank, because a date is the
+// thing most often being looked for and the thing most easily typed exactly.
+func (l *Lookup) Places(query string, limit int) []PlaceView {
+	var out []PlaceView
+	add := func(kind string, names []string, rel func(string) string) {
+		for _, n := range graph.FuzzyRank(names, query, 0) {
+			out = append(out, PlaceView{Kind: kind, Name: n, Rel: rel(n)})
+		}
+	}
+	idx := l.Index()
+	add("journal", idx.Journals, func(n string) string { return store.JournalsDir + "/" + n + ".md" })
+	add("page", idx.Pages, func(n string) string { return store.PagesDir + "/" + n + ".md" })
+	add("tag", idx.Tags, func(string) string { return "" })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
+// Places is Lookup.Places for a caller that wants one answer and no snapshot.
+func (s *Service) Places(query string, limit int) ([]PlaceView, error) {
+	l, err := s.Lookup()
+	if err != nil {
+		return nil, err
+	}
+	return l.Places(query, limit), nil
+}
+
 // Backlinks are the blocks elsewhere that mention a page, flattened with their
 // children the way a page shows them.
 func (l *Lookup) Backlinks(name string) []RefView {

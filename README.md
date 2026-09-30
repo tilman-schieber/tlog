@@ -133,7 +133,8 @@ Keys, with `⌘/` for the list:
 
 | | |
 |---|---|
-| `⌘K` `⌘F` | search |
+| `⌘P` | go to a journal, page or tag |
+| `⌘K` `⌘F` | search inside blocks |
 | `⌘T` | today |
 | `⌘⇧A` | agenda |
 | `⌘[` `⌘]` | back, forward |
