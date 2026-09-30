@@ -1421,3 +1421,114 @@ func TestTheWholeRoundTrip(t *testing.T) {
 		t.Fatalf("the file lost the reference: %q", onDisk(t, m))
 	}
 }
+
+// --- the agenda and the message log ------------------------------------------
+//
+// The window had both and the outliner had neither: knowing what was due meant
+// leaving the outliner for `tlog due`, and a message was replaced by the next
+// thing that happened with nothing to go back to.
+
+func TestAgendaListsWhatIsDueAndGoesThere(t *testing.T) {
+	m := newModel(t)
+	rel, err := m.svc.AddToPage("Timetable", "book the room")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, _ := m.svc.Load(rel)
+	a := tapp.Addr{Rel: rel, Offset: d.Doc.Flatten()[0].Start, Hash: d.Hash}
+	if _, err := m.svc.RunCommand(a, "deadline", "tomorrow", "book the room", 13, 13); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.load(m.doc.Rel); err != nil {
+		t.Fatal(err)
+	}
+
+	send(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'A'}})
+	if m.mode != modeAgenda {
+		t.Fatal("A did not open the agenda")
+	}
+	if len(m.agenda.items) != 1 || !strings.Contains(m.agenda.items[0].Text, "book the room") {
+		t.Fatalf("got %+v", m.agenda.items)
+	}
+	out := stripANSI(m.agendaView())
+	if !strings.Contains(out, "book the room") || !strings.Contains(out, "tomorrow") {
+		t.Fatalf("agenda reads %q", out)
+	}
+
+	// Enter goes to the block itself.
+	send(t, m, k(tea.KeyEnter))
+	if m.mode != modeNormal {
+		t.Fatal("enter did not leave the agenda")
+	}
+	if m.doc.Rel != rel {
+		t.Fatalf("went to %q", m.doc.Rel)
+	}
+}
+
+func TestAgendaTicksOffWithoutLeaving(t *testing.T) {
+	m := newModel(t)
+	rel, _ := m.svc.AddToPage("Timetable", "book the room")
+	d, _ := m.svc.Load(rel)
+	a := tapp.Addr{Rel: rel, Offset: d.Doc.Flatten()[0].Start, Hash: d.Hash}
+	if _, err := m.svc.RunCommand(a, "deadline", "tomorrow", "book the room", 13, 13); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.load(m.doc.Rel); err != nil {
+		t.Fatal(err)
+	}
+
+	send(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'A'}})
+	send(t, m, tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}})
+
+	f, err := m.svc.Store.Read(rel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(f.Data), "- [x] book the room") {
+		t.Fatalf("space did not tick it off: %q", f.Data)
+	}
+	// Done work leaves the agenda, which is what an agenda is for.
+	if len(m.agenda.items) != 0 {
+		t.Fatalf("still listed: %+v", m.agenda.items)
+	}
+	// And `a` brings it back.
+	send(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	if len(m.agenda.items) != 1 {
+		t.Fatalf("all did not include what is done: %+v", m.agenda.items)
+	}
+}
+
+func TestMessagesAreKeptRatherThanReplaced(t *testing.T) {
+	m := newModel(t)
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "top")
+	send(t, m, k(tea.KeyEsc))
+
+	// Two things worth saying, the second replacing the first on screen.
+	send(t, m, tea.KeyMsg{Type: tea.KeyShiftTab}) // refused: already at the top
+	first := m.status
+	if !strings.Contains(first, "top level") {
+		t.Fatalf("nothing was said: %q", first)
+	}
+	send(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	send(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	if m.status == first {
+		t.Fatal("the second message did not replace the first on screen")
+	}
+
+	send(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'M'}})
+	if m.mode != modeLog {
+		t.Fatal("M did not open the log")
+	}
+	out := stripANSI(m.logView())
+	if !strings.Contains(out, "top level") {
+		t.Fatalf("the replaced message is gone: %q", out)
+	}
+	if !strings.Contains(out, "git has the previous version") {
+		t.Fatalf("the newer message is missing: %q", out)
+	}
+	// Newest first: what you came to read is the last thing said.
+	if strings.Index(out, "git has") > strings.Index(out, "top level") {
+		t.Fatalf("oldest first: %q", out)
+	}
+}

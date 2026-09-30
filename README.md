@@ -77,6 +77,8 @@ The notes directory is `$TLOG_DIR`, or `~/notes`. Any command takes `-dir`.
 | `t` / `[` `]` | today · previous, next day |
 | `backspace` | back to where you came from |
 | `R` | reload from disk (asks again if you have unsaved typing) |
+| `A` | agenda: everything with a deadline |
+| `M` | messages: everything tlog has said |
 | `,` | settings |
 | `?` / `q` | help · quit |
 
@@ -268,8 +270,9 @@ tlog due          # everything open and dated, soonest first
 tlog due -all     # including what is done
 ```
 
-**Agenda** in the desktop app's sidebar is that same list, from the same call.
-Clicking a line goes to the block itself.
+**Agenda** is that same list, from the same call: `A` in the outliner, `⌘⇧A` in
+the app. Enter or a click goes to the block, and space ticks it off without
+leaving — `a` in the outliner also shows what is already done.
 
 ## Settings
 

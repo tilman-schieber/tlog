@@ -28,6 +28,12 @@ func (m *Model) View() string {
 	if m.mode == modeHelp {
 		return m.helpView()
 	}
+	if m.mode == modeAgenda {
+		return m.agendaView()
+	}
+	if m.mode == modeLog {
+		return m.logView()
+	}
 	if m.mode == modeSettings {
 		return m.settingsView()
 	}
@@ -110,7 +116,7 @@ func (m *Model) footer() string {
 		if m.rowKind() != rowBlock {
 			return styleMuted.Render("enter open · ↑↓ move · these live on other pages and are not edited here")
 		}
-		return styleMuted.Render("? help · enter new block · i edit · tab/shift+tab indent · ctrl+p open · / search · gf follow · q quit")
+		return styleMuted.Render("? help · enter new block · i edit · tab/shift+tab indent · ctrl+p open · / search · A agenda · q quit")
 	}
 }
 
@@ -517,6 +523,8 @@ func (m *Model) helpView() string {
 		{"backspace", "back to where you came from"},
 		{"R", "reload from disk after an external edit"},
 		{"g g / G", "first · last block"},
+		{"A", "agenda: everything with a deadline"},
+		{"M", "messages: everything tlog has said"},
 		{",", "settings"},
 		{"q", "quit"},
 	}

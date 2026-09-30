@@ -26,6 +26,8 @@ const (
 	modeBacklinks
 	modeHelp
 	modeSettings
+	modeAgenda
+	modeLog
 )
 
 type rowKind int
@@ -71,6 +73,8 @@ type Model struct {
 	comp *completion
 
 	settings *settings
+	agenda   *agenda
+	log      *logView
 
 	// embeds resolves each block's references by offset, so that a reference
 	// can be drawn as the block it points at rather than as a page name. It is
@@ -85,6 +89,10 @@ type Model struct {
 	status  string
 	errMsg  string
 	stale   bool
+
+	// notices is everything said so far, so that a message replaced by the
+	// next one is not simply gone.
+	notices []notice
 
 	// graphDirty says a file other than this one changed while typing, so the
 	// sections below the outline are out of date. Redrawing them mid-word
@@ -344,6 +352,21 @@ func asConflict(err error, target **store.ErrConflict) bool {
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Everything the outliner says lands in one of two lines and is replaced by
+	// the next thing that happens. Recording the change here rather than at
+	// thirty assignment sites means nothing can be said without being kept.
+	before, beforeErr := m.status, m.errMsg
+	model, cmd := m.update(msg)
+	if m.status != before {
+		m.record(m.status, false)
+	}
+	if m.errMsg != beforeErr {
+		m.record(m.errMsg, true)
+	}
+	return model, cmd
+}
+
+func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -376,6 +399,10 @@ func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.pickerKey(msg, k)
 	case modeSettings:
 		return m.settingsKey(msg, k)
+	case modeAgenda:
+		return m.agendaKey(k)
+	case modeLog:
+		return m.logKey(k)
 	case modeHelp:
 		m.mode = modeNormal
 		return m, nil
@@ -425,6 +452,12 @@ func (m *Model) normalKey(msg tea.KeyMsg, k string) (tea.Model, tea.Cmd) {
 		return m, nil
 	case ",":
 		m.openSettings()
+		return m, nil
+	case "A":
+		m.openAgenda()
+		return m, nil
+	case "M":
+		m.openLog()
 		return m, nil
 	case "R":
 		// Reloading throws away whatever is not on disk, so it asks first —
