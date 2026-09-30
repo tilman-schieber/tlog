@@ -140,6 +140,8 @@ Keys, with `⌘/` for the list:
 | `⌥⌘←` `⌥⌘→` | the day before, the day after |
 | `⌘,` | settings |
 | `⌘⇧M` | everything tlog has said |
+| `⌘⇧⏎` | a new block above this one |
+| `⌘⌫` | delete the block and what is under it |
 | `Esc` | close whatever is open |
 
 Click a bullet to fold what is under it. A bullet does nothing else: a block

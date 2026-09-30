@@ -151,6 +151,12 @@ func (a *API) MergeIntoPrevious(rel string, offset int, hash string) (*Edit, err
 	return a.after(a.svc.MergeIntoPrevious(addr(rel, offset, hash)))
 }
 
+// InsertBefore adds a block above another one — Enter makes the one below, and
+// this is the other direction.
+func (a *API) InsertBefore(rel string, offset int, hash, text string) (*Edit, error) {
+	return a.after(a.svc.InsertBefore(addr(rel, offset, hash), text))
+}
+
 func (a *API) AppendBlock(rel, hash, text string) (*Edit, error) {
 	return a.after(a.svc.AppendBlock(rel, hash, text))
 }

@@ -88,11 +88,21 @@ const OTHER = {
              text: "the lecture is at nine", body: "the lecture is at nine", hasChildren: false }],
 };
 
+const opened = [];
+
 const API = {
   Root: async () => "/home/ada/notes",
   Index: async () => ({ journals: ["2026-09-25"], pages: ["Ada Lovelace", "Timetable"], tags: ["project"] }),
-  TodayJournal: async () => PAGE,
-  Today: async () => PAGE,
+  TodayJournal: async () => { opened.push("TodayJournal"); return PAGE; },
+  Today: async () => { opened.push("Today"); return PAGE; },
+  InsertBefore: async () => ({ page: PAGE, offset: 0 }),
+  SetText: async () => ({ page: PAGE, offset: 0 }),
+  DeleteBlock: async () => ({ page: PAGE, offset: 0 }),
+  SplitBlock: async () => ({ page: PAGE, offset: 0 }),
+  Indent: async () => ({ page: PAGE, offset: 0 }),
+  Outdent: async () => ({ page: PAGE, offset: 0 }),
+  Move: async () => ({ page: PAGE, offset: 0 }),
+  MergeIntoPrevious: async () => ({ page: PAGE, offset: 0 }),
   OpenRel: async (rel) => (rel === "pages/Timetable.md" ? OTHER : PAGE),
   OpenPage: async () => OTHER,
   Journal: async () => PAGE,
@@ -134,6 +144,23 @@ function ok(label, cond, detail) {
   style.textContent = fs.readFileSync(path.join(here, "style.css"), "utf8");
   dom.window.document.head.appendChild(style);
 
+  // jsdom has no innerText, and raw() is built on it — so without this shim
+  // every editing path is silently unreachable here: splitting, indenting,
+  // merging and saving on blur all start by reading the block's text and would
+  // throw on undefined before doing anything. A contenteditable holds one text
+  // node and <br> for the line breaks, which is what this reproduces.
+  Object.defineProperty(dom.window.HTMLElement.prototype, "innerText", {
+    configurable: true,
+    get() {
+      return [...this.childNodes]
+        .map((n) => (n.nodeName === "BR" ? "\n" : n.textContent))
+        .join("");
+    },
+    set(v) {
+      this.textContent = v;
+    },
+  });
+
   const w = dom.window;
   w.go = { main: { API } };
   w.runtime = undefined;
@@ -165,6 +192,12 @@ function ok(label, cond, detail) {
   ok("the title is drawn", $("title").textContent === "2026-09-25", $("title").textContent);
   ok("the outline is drawn", $("outline").children.length > 0);
   ok("the sidebar is filled", $("pages").children.length === 2);
+
+  // `startup = last` is a setting in all three menus. The window called
+  // TodayJournal at launch, which always opens today, so the setting did
+  // nothing here while the outliner honoured it.
+  ok("the window opens where the startup setting says",
+    opened[0] === "Today", JSON.stringify(opened));
 
   const outline = $("outline").textContent;
   ok("a task does not show its marker twice", !outline.includes("[ ]"), outline.slice(0, 200));
@@ -285,6 +318,36 @@ function ok(label, cond, detail) {
     $("outline").querySelector(".bullet.folded") !== null);
   parentBullet().click();
   await new Promise((r) => setTimeout(r, 50));
+
+  // --- deleting, and inserting above ---------------------------------------
+  //
+  // The window could only delete an empty first block, so a paragraph could
+  // not be thrown away at all; and it had no way to make a block above one.
+  {
+    let deleted = null, inserted = false;
+    const realDelete = API.DeleteBlock, realInsert = API.InsertBefore;
+    API.DeleteBlock = async (rel, offset) => { deleted = offset; return { page: PAGE, offset: 0 }; };
+    API.InsertBefore = async () => { inserted = true; return { page: PAGE, offset: 0 }; };
+
+    const block = $("outline").querySelector(".text");
+    const key = (init) => block.dispatchEvent(new w.KeyboardEvent("keydown",
+      { bubbles: true, cancelable: true, ...init }));
+
+    key({ key: "Backspace", metaKey: true });
+    await new Promise((r) => setTimeout(r, 60));
+    ok("cmd-backspace deletes the block", deleted === 0, String(deleted));
+    ok("and says git has it", $("error").textContent.includes("git has the previous version"),
+      $("error").textContent);
+    ok("it counts what goes with it", $("error").textContent.includes("child"),
+      $("error").textContent);
+
+    key({ key: "Enter", metaKey: true, shiftKey: true });
+    await new Promise((r) => setTimeout(r, 60));
+    ok("cmd-shift-enter makes a block above", inserted === true);
+
+    API.DeleteBlock = realDelete;
+    API.InsertBefore = realInsert;
+  }
 
   // --- the keyboard -------------------------------------------------------
   await w.eval("toggleHelp()");

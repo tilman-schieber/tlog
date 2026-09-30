@@ -608,6 +608,18 @@ function renderRefs() {
 
 // --- editing ----------------------------------------------------------------
 
+// childrenOf is everything nested under a block. The block list is flat with a
+// depth on each one, so a subtree is the run that follows it while the depth
+// stays greater.
+function childrenOf(b) {
+  const all = (page && page.blocks) || [];
+  const i = all.findIndex((x) => x.offset === b.offset);
+  if (i < 0) return [];
+  const out = [];
+  for (let j = i + 1; j < all.length && all[j].depth > b.depth; j++) out.push(all[j]);
+  return out;
+}
+
 function raw(el) {
   return el.innerText.replace(/ /g, " ").replace(/\n$/, "");
 }
@@ -728,6 +740,22 @@ function wireBlock(el, b) {
       return;
     }
 
+    // Delete the block and everything under it. The window could only remove
+    // an empty first block, so there was no way to throw away a paragraph
+    // short of selecting the text and leaving an empty bullet behind.
+    if (e.key === "Backspace" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      const kids = childrenOf(b).length;
+      const gone = await call(() => api().DeleteBlock(page.rel, b.offset, page.hash));
+      if (gone) {
+        say(kids
+          ? `Block and ${kids === 1 ? "its child" : `its ${kids} children`} deleted — git has the previous version`
+          : "Block deleted — git has the previous version");
+      }
+      applied(gone);
+      return;
+    }
+
     // Backspace at the start of a block joins it onto the one above, the way
     // an outliner behaves. On the very first block there is nothing above, so
     // an empty one is simply removed.
@@ -753,6 +781,21 @@ function wireBlock(el, b) {
           api().MergeIntoPrevious(saved.page.rel, saved.offset, saved.page.hash)
         ),
         seam
+      );
+      return;
+    }
+
+    // A new block above this one. Enter makes the one below; this is the other
+    // direction, and the outliner has had it as O from the start.
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && e.shiftKey) {
+      e.preventDefault();
+      const text = raw(el);
+      el.dataset.raw = text;
+      const saved = await call(() => api().SetText(page.rel, b.offset, page.hash, text));
+      if (!saved) return;
+      applied(
+        await call(() => api().InsertBefore(saved.page.rel, saved.offset, saved.page.hash, "")),
+        0
       );
       return;
     }
@@ -1137,6 +1180,14 @@ async function openToday() {
   show(await call(() => api().TodayJournal()));
 }
 
+// openStartup is where the window opens: today's journal, or whatever was
+// written last, as the startup setting says. Both methods have always been
+// bound and the window called the wrong one, so `startup = last` did nothing
+// here while the outliner honoured it.
+async function openStartup() {
+  show(await call(() => api().Today()));
+}
+
 // goBack returns to the last page, keeping where you were so that going back
 // and forward again lands where it started.
 async function goBack() {
@@ -1428,6 +1479,8 @@ function toggleHelp() {
     `<tr><td class="chord">Esc</td><td>Close what is open</td></tr>` +
     `<tr><td class="chord">Tab</td><td>Indent the block being edited</td></tr>` +
     `<tr><td class="chord">${mac ? "⌥" : "Alt"}↑↓</td><td>Move the block</td></tr>` +
+    `<tr><td class="chord">${mac ? "⌘⇧⏎" : "Ctrl+Shift+Enter"}</td><td>New block above</td></tr>` +
+    `<tr><td class="chord">${mac ? "⌘⌫" : "Ctrl+Backspace"}</td><td>Delete the block and what is under it</td></tr>` +
     "</table>";
   box.hidden = false;
 }
@@ -1547,5 +1600,5 @@ $("agendabtn").onclick = () => openAgenda();
   const root = await call(() => api().Root());
   if (root) $("rootpath").textContent = root;
   await refreshIndex();
-  await openToday();
+  await openStartup();
 })();
