@@ -653,6 +653,23 @@ func TestQuotedBlockIsMarkedAsAQuotation(t *testing.T) {
 	}
 }
 
+func TestHeadingIsDrawnWithoutItsHashes(t *testing.T) {
+	m := newModel(t)
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "# 02.11.26")
+	send(t, m, k(tea.KeyEsc))
+
+	// Nothing is stored differently: a heading is a block whose text starts with #.
+	if got := onDisk(t, m); got != "- # 02.11.26\n" {
+		t.Fatalf("got %q", got)
+	}
+	m.cur = 1 // off the block, so it is drawn rather than inverted
+	frame := m.View()
+	if !strings.Contains(frame, "02.11.26") || strings.Contains(frame, "# 02.11.26") {
+		t.Fatalf("a heading should be drawn without its marker:\n%s", frame)
+	}
+}
+
 func TestFencedCodeIsHighlightedInTheOutliner(t *testing.T) {
 	m := newModel(t)
 	send(t, m, k(tea.KeyEnter))

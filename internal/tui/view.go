@@ -19,6 +19,8 @@ var (
 	viewAnchorRe = regexp.MustCompile(`\[\[[^\[\]]*#\^[^\[\]]+\]\]`)
 	viewTagRe    = regexp.MustCompile(`(^|\s)(#[A-Za-z][A-Za-z0-9_/\-]*)`)
 	viewCheckRe  = regexp.MustCompile(`^\[( |x|X)\] `)
+	// The same rule the desktop app draws headings by.
+	viewHeadingRe = regexp.MustCompile(`^\s*#{1,6}\s+`)
 )
 
 func (m *Model) View() string {
@@ -440,6 +442,15 @@ func (m *Model) highlight(s string, r row) string {
 	}
 	cursor := &refCursor{embeds: embeds}
 	cursor.skip(r, s)
+
+	// A markdown heading inside a block is drawn bold without its hashes, as
+	// the desktop app draws it. Nothing is stored differently. Inline styles
+	// end in a full reset, so bold is put back after each one.
+	if mark := viewHeadingRe.FindString(s); mark != "" {
+		body := highlightInline(s[len(mark):], cursor)
+		body = strings.ReplaceAll(body, "\x1b[0m", "\x1b[0m\x1b[1m")
+		return styleTitle.Render(body)
+	}
 
 	out := s
 	if mark := viewCheckRe.FindString(out); mark != "" {
