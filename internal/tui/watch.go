@@ -5,6 +5,7 @@ import (
 
 	"github.com/tilman-schieber/tlog/internal/app"
 	"github.com/tilman-schieber/tlog/internal/markdown"
+	"github.com/tilman-schieber/tlog/internal/store"
 )
 
 // Noticing an edit made elsewhere. nvim, the outliner and the desktop app all
@@ -39,16 +40,34 @@ func watchCmd(ch <-chan app.Change) tea.Cmd {
 // Two ways to be dirty: half-typed text that has not been folded back into the
 // block yet, and an edit whose save was refused because the file had moved.
 func (m *Model) dirty() bool {
-	if m.mode == modeInsert && m.edBlock != nil && m.ed.String() != m.edBlock.Text {
+	if m.typing() {
 		return true
 	}
+	if m.feed != nil {
+		for _, d := range m.feed.days {
+			if docDirty(d.Doc) {
+				return true
+			}
+		}
+		return false
+	}
+	return docDirty(m.doc)
+}
+
+// typing reports half-typed text not yet folded back into its block.
+func (m *Model) typing() bool {
+	return m.mode == modeInsert && m.edBlock != nil && m.ed.String() != m.edBlock.Text
+}
+
+// docDirty reports whether a document in memory differs from its file.
+func docDirty(d *app.Doc) bool {
 	// The blank bullet shown for a page that has no file yet is not work, and
 	// it never matches what is on disk, so it has to be excluded by name.
-	if bs := m.doc.Doc.Blocks; len(bs) == 1 && bs[0].Text == "" &&
+	if bs := d.Doc.Blocks; len(bs) == 1 && bs[0].Text == "" &&
 		len(bs[0].Children) == 0 && len(bs[0].Props) == 0 {
 		return false
 	}
-	return markdown.Hash(markdown.Render(m.doc.Doc)) != m.doc.Hash
+	return markdown.Hash(markdown.Render(d.Doc)) != d.Hash
 }
 
 // changed decides what an external edit means for what is on screen.
@@ -57,6 +76,10 @@ func (m *Model) changed(c changedMsg) {
 	// terminate: a reload here would write nothing, but it would fight the
 	// caret on every keystroke.
 	if m.svc.Ours(app.Change(c)) {
+		return
+	}
+	if m.feed != nil {
+		m.changedDay(c)
 		return
 	}
 
@@ -93,7 +116,7 @@ func (m *Model) changed(c changedMsg) {
 	if m.mode == modeInsert && m.ed != nil {
 		caret = m.ed.cur
 	}
-	if err := m.reloadFromDisk(); err != nil {
+	if err := m.reloadFromDisk(c.Rel); err != nil {
 		m.errMsg = err.Error()
 		return
 	}
@@ -101,4 +124,46 @@ func (m *Model) changed(c changedMsg) {
 		m.editHere(caret)
 	}
 	m.status = "reloaded — changed on disk"
+}
+
+// changedDay is changed for the journals page: only the day that changed is
+// re-read, and only if nothing unsaved is in it. Typing on one day is never
+// disturbed by an edit to another.
+func (m *Model) changedDay(c changedMsg) {
+	i := m.feed.index(c.Rel)
+	if i < 0 {
+		// A day not on screen, or not a day at all. A new day may have been
+		// written elsewhere; picking it up waits until nothing is being typed.
+		if !store.IsJournal(c.Rel) {
+			return
+		}
+		if m.mode == modeInsert {
+			m.graphDirty = true
+			return
+		}
+		m.refreshFeed()
+		return
+	}
+	d := m.feed.days[i].Doc
+	if c.Hash == d.Hash {
+		return
+	}
+	editingHere := m.mode == modeInsert && m.edBlock != nil && m.docOf(m.edBlock).Rel == c.Rel
+	if docDirty(d) || (editingHere && m.typing()) {
+		m.stale = true
+		m.status = store.Title(c.Rel) + " changed on disk while you were editing it — esc saves, R discards"
+		return
+	}
+	caret := 0
+	if editingHere {
+		caret = m.ed.cur
+	}
+	if err := m.reloadDay(c.Rel); err != nil {
+		m.errMsg = err.Error()
+		return
+	}
+	if editingHere {
+		m.editHere(caret)
+	}
+	m.status = store.Title(c.Rel) + " reloaded — changed on disk"
 }

@@ -508,6 +508,55 @@ before a single assertion has run — the failure is real but the report is a
 stack trace and nothing else. Two of the three bugs above were found that way,
 and the second one was only legible after this.
 
+## The journals page
+
+**A way of looking, not a file.** Every day stays its own file and is edited as
+that file: each row on the page carries the day it was drawn from, and every
+edit is addressed through it, with that day's hash check. Nothing about storage
+changed, and an edit can only ever reach the day it was made on.
+
+**A day's edge is a wall.** The core rewrites one file per operation, so
+indenting the first block of a day, moving the last one down, or joining across
+a date is refused exactly as it is at the edge of any page. Moving a block to
+another day would be two writes that cannot be made all-or-nothing; it is left
+out rather than made half-safe.
+
+**Opened a fortnight at a time.** All days are listed up front, which is cheap;
+they are parsed and drawn fourteen at a time as the cursor nears the bottom, so
+a long history costs nothing until it is read. All days in a batch share one
+graph build.
+
+**Today is always there**, file or not, as a blank bullet that exists only in
+memory — the same as opening today on its own. Showing the page writes nothing.
+
+**Outside edits reload one day.** A change to a day other than the one being
+typed in reloads that day and leaves the typing alone; a change to the day being
+typed in is the existing rule — warn, never discard.
+
+## Recent pages
+
+**Remembered outside the notes.** Where you were last looking is not a note:
+writing it into the notes directory would commit and push it with every page
+change. It goes to the XDG state directory, one list per notes directory, so a
+second directory never shows pages that are not in it. This is the first state
+tlog keeps that is not a note or the config.
+
+**Written without a hash, read forgivingly.** Compare-and-swap protects notes.
+A few names are not worth refusing over: the worst a race between two outliners
+can do is reorder them, and a broken file reads as an empty list and is
+replaced on the next visit.
+
+**Four pages, one day, and the journals page.** A plain list of the last five
+places would be all journal days by Wednesday, since every day is a new place.
+So pages, days and the journals page each have their own share, and within
+that the order is still purely by recency, so one step back is always where you
+just were. The day and the journals page are always present because they are
+the two places you go most.
+
+**The order holds still while cycling.** If every step moved the page you land
+on to the front, the next step could only go back to where you came from — two
+pages, not five. Like alt-tab, the list catches up once you do something else.
+
 ## Known gaps
 
 - A name that parses as an ISO date resolves to that day's journal rather than

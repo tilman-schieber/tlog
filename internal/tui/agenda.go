@@ -69,7 +69,7 @@ func (m *Model) agendaKey(k string) (tea.Model, tea.Cmd) {
 				a.sel = min(a.sel, max(0, len(items)-1))
 			}
 			// The page being edited may be the one that just changed.
-			if err := m.reloadFromDisk(); err != nil {
+			if err := m.reloadFromDisk(it.Addr.Rel); err != nil {
 				m.errMsg = err.Error()
 			}
 		}
@@ -79,7 +79,7 @@ func (m *Model) agendaKey(k string) (tea.Model, tea.Cmd) {
 			m.mode = modeNormal
 			m.agenda = nil
 			m.goTo(it.Rel)
-			m.focusOffset(it.Offset)
+			m.focusOffset(it.Rel, it.Offset)
 		}
 	}
 	return m, nil

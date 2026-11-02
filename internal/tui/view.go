@@ -42,7 +42,7 @@ func (m *Model) View() string {
 	b.WriteString(m.header())
 	b.WriteByte('\n')
 
-	lines, cursorLine := m.bodyLines()
+	lines, owners, cursorLine := m.bodyLines()
 	h := m.viewHeight()
 	top := m.top
 	if cursorLine < top {
@@ -59,9 +59,13 @@ func (m *Model) View() string {
 	}
 	m.top = top
 
+	// What is drawn is also what a click is measured against: one entry per
+	// screen line.
+	m.hits = m.hits[:0]
 	for i := top; i < len(lines) && i < top+h; i++ {
 		b.WriteString(lines[i])
 		b.WriteByte('\n')
+		m.hits = append(m.hits, owners[i])
 	}
 	for i := len(lines) - top; i < h; i++ {
 		b.WriteByte('\n')
@@ -74,32 +78,59 @@ func (m *Model) View() string {
 	return b.String()
 }
 
+// header is the recent pages on the left, the current one in the title colour,
+// and what the current page is on the right. When the line is too narrow the
+// aliases go first, then the tags, then the oldest of the recent pages; the
+// current page and the mode are never dropped.
 func (m *Model) header() string {
-	title := store.Title(m.doc.Rel)
 	kind := "page"
-	if store.IsJournal(m.doc.Rel) {
+	switch {
+	case m.feed != nil:
+		kind = "every day"
+	case store.IsJournal(m.doc.Rel):
 		kind = "journal"
 	}
-	left := styleTitle.Render(title) + " " + styleMuted.Render(kind)
+	var tags, aka string
 	if m.page != nil {
 		for _, t := range m.page.Tags {
-			left += " " + styleTag.Render("#"+t)
+			tags += " " + styleTag.Render("#"+t)
 		}
 		// The other names this page answers to, so a [[link]] that worked is
 		// not a mystery when you arrive.
 		if a := m.page.Aliases; len(a) > 0 {
-			left += " " + styleMuted.Render("auch: "+strings.Join(a, ", "))
+			aka = " " + styleMuted.Render("auch: "+strings.Join(a, ", "))
 		}
 	}
-	right := ""
-	switch m.mode {
-	case modeInsert:
-		right = styleTodo.Render("INSERT")
-	default:
-		right = styleMuted.Render("NORMAL")
+	mode := styleMuted.Render("NORMAL")
+	if m.mode == modeInsert {
+		mode = styleTodo.Render("INSERT")
 	}
 	if m.stale {
-		right = styleError.Render("STALE") + " " + right
+		mode = styleError.Render("STALE") + " " + mode
+	}
+
+	type fit struct {
+		keep      int
+		tags, aka bool
+	}
+	tries := []fit{{tapp.RecentMax, true, true}, {tapp.RecentMax, true, false}}
+	for k := tapp.RecentMax; k >= 1; k-- {
+		tries = append(tries, fit{k, false, false})
+	}
+	var left, right string
+	for _, f := range tries {
+		left, m.headerHits = m.recentStrip(f.keep)
+		right = styleMuted.Render(kind)
+		if f.tags {
+			right += tags
+		}
+		if f.aka {
+			right += aka
+		}
+		right += "  " + mode
+		if m.width == 0 || lipgloss.Width(left)+lipgloss.Width(right)+1 <= m.width {
+			break
+		}
 	}
 	return pad(left, right, m.width)
 }
@@ -113,6 +144,9 @@ func (m *Model) footer() string {
 	case m.mode == modeInsert:
 		return styleMuted.Render("esc done · enter new block · alt+enter newline · tab indent · [[ links")
 	default:
+		if m.rowKind() == rowDay {
+			return styleMuted.Render("enter open this day on its own · [ ] older · newer day · ↑↓ move")
+		}
 		if m.rowKind() != rowBlock {
 			return styleMuted.Render("enter open · ↑↓ move · these live on other pages and are not edited here")
 		}
@@ -120,18 +154,42 @@ func (m *Model) footer() string {
 	}
 }
 
-// bodyLines renders every visible block into screen lines and reports which
-// screen line the cursor is on.
-func (m *Model) bodyLines() ([]string, int) {
+// bodyLines renders every visible block into screen lines, says which row and
+// which line of its text each one belongs to, and reports which screen line the
+// cursor is on.
+func (m *Model) bodyLines() ([]string, []hit, int) {
 	var out []string
+	var owners []hit
 	cursorLine := 0
 
 	for i, r := range m.rows {
 		editing := m.mode == modeInsert && m.edBlock == r.block
 		start := len(out)
 		out = append(out, m.renderRow(r, i == m.cur, editing)...)
+		textLines := 0
+		if r.kind == rowBlock {
+			text := r.block.Text
+			if editing {
+				text = m.ed.String()
+			}
+			textLines = strings.Count(text, "\n") + 1
+		}
+		for j := start; j < len(out); j++ {
+			line := j - start
+			if line >= textLines {
+				line = -1
+			}
+			owner := i
+			if r.kind != rowBlock && j < len(out)-1 {
+				owner = -1 // the blank line above a heading is not the heading
+			}
+			owners = append(owners, hit{row: owner, line: line})
+		}
 		if i == m.cur {
 			cursorLine = start
+			if r.kind != rowBlock {
+				cursorLine = len(out) - 1 // the heading, not the blank above it
+			}
 			if editing {
 				line, _ := m.ed.cursorPos()
 				cursorLine = start + line
@@ -139,14 +197,19 @@ func (m *Model) bodyLines() ([]string, int) {
 		}
 	}
 	if len(out) == 0 {
-		out = append(out, styleMuted.Render("  (empty — press enter to write something)"))
+		out = append(out, styleMuted.Render("  (empty — press enter or click to write something)"))
+		owners = append(owners, hit{row: -1, line: -1})
 	}
-	return out, cursorLine
+	return out, owners, cursorLine
 }
 
 func (m *Model) renderRow(r row, selected, editing bool) []string {
 	if r.kind != rowBlock {
-		return []string{m.renderSectionRow(r, selected)}
+		// A heading brings its own blank line above it. Each screen line is
+		// its own entry, so that the window is measured in screen lines and
+		// never drawn taller than the terminal — which would push the header
+		// off the top.
+		return strings.Split(m.renderSectionRow(r, selected), "\n")
 	}
 	indent := strings.Repeat("  ", r.depth)
 	bullet := "•"
@@ -298,6 +361,8 @@ func (m *Model) renderFenced(r row, text, indent, bullet string) []string {
 // shown but never edited here.
 func (m *Model) renderSectionRow(r row, selected bool) string {
 	switch r.kind {
+	case rowDay:
+		return m.dayHeading(r, selected)
 	case rowHeader:
 		rule := strings.Repeat("─", max(1, min(m.width, 72)-lipgloss.Width(r.text)-3))
 		return "\n" + styleMuted.Render("── "+r.text+" "+rule)
@@ -371,7 +436,7 @@ func (m *Model) highlight(s string, r row) string {
 	// theirs.
 	var embeds []tapp.EmbedView
 	if r.kind == rowBlock && r.block != nil {
-		embeds = m.embeds[r.block.Start]
+		embeds = m.embeds[r.block]
 	}
 	cursor := &refCursor{embeds: embeds}
 	cursor.skip(r, s)
@@ -515,18 +580,23 @@ func (m *Model) helpView() string {
 		{"/", "commands: /todo, /deadline fr, /table, /code …"},
 		{"gf", "follow the [[link]] in this block"},
 		{"gb", "what links here, as a list"},
+		{"gj", "journals: every day, newest first, editable"},
 		{"enter", "on a reference below the outline: jump to it"},
 		{"ctrl+p", "open a journal or page"},
 		{"/", "search every block"},
 		{"t", "today's journal"},
 		{"[ / ]", "previous · next day"},
 		{"backspace", "back to where you came from"},
+		{"ctrl+n", "next of the recent pages in the header"},
 		{"R", "reload from disk after an external edit"},
 		{"g g / G", "first · last block"},
 		{"A", "agenda: everything with a deadline"},
 		{"M", "messages: everything tlog has said"},
 		{",", "settings"},
 		{"q", "quit"},
+		{"click", "select · again: edit there, or open the [[link]]"},
+		{"click ▸ ▾ ☐", "fold · unfold · tick the task"},
+		{"wheel", "move between blocks, or through a list"},
 	}
 	var b strings.Builder
 	b.WriteString(styleTitle.Render("tlog") + "\n\n")

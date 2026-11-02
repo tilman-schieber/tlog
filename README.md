@@ -72,17 +72,36 @@ The notes directory is `$TLOG_DIR`, or `~/notes`. Any command takes `-dir`.
 | `[[` | page autocomplete, while typing |
 | `/` | commands: `/todo`, `/deadline fr`, `/table`, `/code` … |
 | `gf` / `gb` | follow the link · what links here, as a list |
+| `gj` | journals: every day, newest first, editable |
 | `enter` | on a reference below the outline: jump to it |
 | `ctrl+p` / `/` | open a page · search every block |
 | `t` / `[` `]` | today · previous, next day |
 | `backspace` | back to where you came from |
+| `ctrl+n` | the next of the recent pages in the header |
 | `R` | reload from disk (asks again if you have unsaved typing) |
 | `A` | agenda: everything with a deadline |
 | `M` | messages: everything tlog has said |
 | `,` | settings |
 | `?` / `q` | help · quit |
+| click | select a block · click it again to edit there, or to open the `[[link]]` under the pointer |
+| click `▸` `▾` `☐` | fold · unfold · tick the task |
+| wheel | move between blocks, or through a list |
 
 Arrow keys work everywhere; the vim keys are an alternative, not the foundation.
+The mouse is an alternative too: every click ends in something a key already
+does. While tlog has the mouse, the terminal's own text selection needs `shift`
+(`option` in iTerm2).
+
+The header shows where you were last, newest first: your last four pages, the
+last journal day, and Journals — so a run of days never crowds out the pages.
+The journal day and Journals are always there; if you have not been to them
+yet they come last, with today standing in for the day. Click one to go there. `ctrl+n` steps to the next older one and wraps round. The order holds
+still while you keep pressing and catches up when you do something else, so one
+press is the place you were just on — like alt-tab.
+While the `[[` completion list is open, `ctrl+n` moves down that list instead. The
+list is remembered across restarts in `~/.local/state/tlog/recent.json` (or
+`$XDG_STATE_HOME`, or `$TLOG_STATE`), one list per notes directory — never in
+the notes, which are committed.
 
 `shift+enter` is not distinguishable from `enter` in most terminals, so the
 newline-inside-a-block key is `alt+enter` or `ctrl+j`. In kitty you can map
@@ -222,6 +241,19 @@ simply that a block which says nothing else is showing you what it points at.
 Those rows belong to the other file, so they are shown and not edited — click
 one to go there. A reference with prose around it stays inline, because
 inlining a subtree into the middle of a sentence would be nonsense.
+
+## Journals
+
+`gj` (or "Journals" in `ctrl+p`) shows every day newest first, each under its
+own date, today at the top whether you have written anything yet or not. It is
+edited like any page, and every change goes into the day it was made on: each
+day is still its own file in `journals/`, so nothing about how notes are stored
+changes.
+
+A day's edge is a wall. `enter` makes the new block on the same day; indenting,
+moving and joining with backspace stop at the first or last block of a day.
+`[` and `]` jump to the older and newer day, `enter` on a date opens that day
+on its own, and older days are opened as you scroll down to them.
 
 ## Tasks and deadlines
 
