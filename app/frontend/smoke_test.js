@@ -88,7 +88,33 @@ const OTHER = {
              text: "the lecture is at nine", body: "the lecture is at nine", hasChildren: false }],
 };
 
+// The journals page: today without a file, and yesterday with one block.
+const TODAY = {
+  rel: "journals/2026-11-02.md", title: "2026-11-02", hash: "", isJournal: true,
+  tags: [], tagged: [], refs: [], blocks: [],
+};
+const YESTERDAY = {
+  rel: "journals/2026-11-01.md", title: "2026-11-01", hash: "y1", isJournal: true,
+  tags: [], tagged: [], refs: [],
+  blocks: [{ addr: "journals/2026-11-01.md:0@y1", offset: 0, depth: 0,
+             text: "yesterday's note", body: "yesterday's note", hasChildren: false }],
+};
+const DAYS = [
+  { page: TODAY, date: "2026-11-02", weekday: "Monday", today: true, ahead: false },
+  { page: YESTERDAY, date: "2026-11-01", weekday: "Sunday", today: false, ahead: false },
+];
+// Twenty days, so that a second batch is there to be opened.
+const DAY_RELS = [TODAY.rel, YESTERDAY.rel];
+for (let d = 31; DAY_RELS.length < 20; d--) DAY_RELS.push(`journals/2026-10-${d}.md`);
+
 const opened = [];
+const visited = [];
+const dayCalls = [];
+let recentList = [
+  { rel: "pages/Timetable.md", title: "Timetable" },
+  { rel: "journals/2026-09-25.md", title: "2026-09-25" },
+  { rel: "journals", title: "Journals" },
+];
 
 const API = {
   Root: async () => "/home/ada/notes",
@@ -129,6 +155,25 @@ const API = {
     return q ? all.filter((p) => p.name.toLowerCase().includes(q.toLowerCase())) : all;
   },
   AttachDir: async () => "~/.att",
+  JournalsRel: async () => "journals",
+  Recent: async () => ({ places: recentList }),
+  // The core moves the place to the front; this does the same, so cycling can
+  // be checked against a list that behaves like the real one.
+  Visited: async (rel) => {
+    visited.push(rel);
+    const known = recentList.find((p) => p.rel === rel) || { rel, title: rel };
+    recentList = [known, ...recentList.filter((p) => p.rel !== rel)];
+    return { places: recentList };
+  },
+  JournalDays: async () => DAY_RELS,
+  OpenDays: async (rels) => {
+    dayCalls.push(rels);
+    return rels.map((rel) => DAYS.find((d) => d.page.rel === rel) || {
+      page: { rel, title: rel.slice(9, 19), hash: "h" + rel, isJournal: true,
+              tags: [], tagged: [], refs: [], blocks: [] },
+      date: rel.slice(9, 19), weekday: "Someday", today: false, ahead: false,
+    });
+  },
   Attachments: async () => [],
 };
 
@@ -366,7 +411,9 @@ function ok(label, cond, detail) {
   await w.eval("openPalette()");
   await new Promise((r) => setTimeout(r, 100));
   ok("the palette opens", $("palette").hidden === false);
-  ok("it offers everywhere you could go", $("palettelist").children.length === 4,
+  ok("it offers everywhere you could go, the journals page first",
+    $("palettelist").children.length === 5 &&
+    $("palettelist").children[0].textContent.includes("Journals"),
     String($("palettelist").children.length));
   ok("it says which kind each one is", $("palettelist").textContent.includes("journal") &&
     $("palettelist").textContent.includes("tag"));
@@ -425,6 +472,99 @@ function ok(label, cond, detail) {
     $("loglist").textContent.indexOf("push rejected") <
       $("loglist").textContent.indexOf("a quiet receipt"));
   $("log").hidden = true;
+
+  // --- the recent list -------------------------------------------------------
+  //
+  // The header names the places you were last, from the same list the
+  // outliner keeps, and each arrival is told to the core.
+  ok("arriving somewhere is remembered", visited.includes("pages/Timetable.md"),
+    JSON.stringify(visited));
+  const strip = () => [...$("recent").querySelectorAll(".place")].map((el) => el.textContent);
+  ok("the header shows the recent places", strip().includes("Journals"), strip().join(" · "));
+  ok("the place you are on is marked",
+    $("recent").querySelector(".place.current").textContent === $("title").textContent,
+    $("recent").innerHTML);
+
+  // ctrl+n steps through them and the order holds still while it does.
+  const key = (init) => w.document.dispatchEvent(new w.KeyboardEvent("keydown",
+    { bubbles: true, cancelable: true, ...init }));
+  const startAt = $("title").textContent;
+  const order = strip();
+  const before2 = visited.length;
+  key({ key: "n", ctrlKey: true });
+  await new Promise((r) => setTimeout(r, 100));
+  ok("ctrl+n goes to the place you were before", $("title").textContent === order[1],
+    `${$("title").textContent} after ${order.join(" · ")}`);
+  key({ key: "n", ctrlKey: true });
+  await new Promise((r) => setTimeout(r, 150));
+  ok("and again to the one before that", $("title").textContent === order[2],
+    `${$("title").textContent} after ${order.join(" · ")}`);
+  ok("the order holds still while stepping", strip().join("|") === order.join("|"),
+    strip().join(" · "));
+  ok("nothing is remembered while stepping", visited.length === before2);
+  key({ key: "x" });
+  await new Promise((r) => setTimeout(r, 100));
+  ok("another key settles it where it stopped", visited[visited.length - 1] !== undefined &&
+    strip()[0] === $("title").textContent, strip().join(" · "));
+  ok("the place stopped on is now first", startAt !== strip()[0]);
+
+  // --- the journals page ----------------------------------------------------
+  await w.eval("openJournals()");
+  await new Promise((r) => setTimeout(r, 150));
+  ok("the journals page opens", $("title").textContent === "Journals", $("title").textContent);
+  const sections = () => $("outline").querySelectorAll("section.day");
+  ok("every day is drawn under its own date", sections().length === 14,
+    String(sections().length));
+  ok("newest first, today at the top",
+    sections()[0].querySelector(".date").textContent === "2026-11-02" &&
+    sections()[0].querySelector(".note").textContent.includes("today"));
+  ok("today without a file can be started",
+    sections()[0].textContent.includes("click here to start writing"));
+  ok("a day's blocks are there", sections()[1].textContent.includes("yesterday's note"));
+  ok("the journals page is in the recent list", visited[visited.length - 1] === "journals");
+  ok("back is offered from the journals page", $("back").disabled === false);
+
+  // An edit is addressed to the day it was made on, with that day's hash.
+  {
+    let call = null;
+    const real = API.SetText;
+    API.SetText = async (rel, offset, hash, text) => {
+      call = { rel, offset, hash, text };
+      return { page: { ...YESTERDAY, hash: "y2",
+        blocks: [{ ...YESTERDAY.blocks[0], text, body: text }] }, offset };
+    };
+    const el = sections()[1].querySelector(".text");
+    el.dispatchEvent(new w.FocusEvent("focus"));
+    el.textContent = "yesterday, edited";
+    el.dispatchEvent(new w.FocusEvent("blur"));
+    await new Promise((r) => setTimeout(r, 100));
+    ok("an edit goes to its own day", call && call.rel === YESTERDAY.rel && call.hash === "y1",
+      JSON.stringify(call));
+    ok("only that day is redrawn, with what was written",
+      sections()[1].textContent.includes("yesterday, edited") && sections().length === 14);
+    ok("and the next edit carries the new hash",
+      (await w.eval(`viewOf("${YESTERDAY.rel}").hash`)) === "y2");
+    API.SetText = real;
+  }
+
+  // Older days are opened as they are asked for, not all at once.
+  ok("only the first fortnight is opened", dayCalls[dayCalls.length - 1].length === 14);
+  $("outline").querySelector(".moredays").click();
+  await new Promise((r) => setTimeout(r, 100));
+  ok("the rest are opened below", sections().length === 20, String(sections().length));
+  ok("and nothing more is offered", $("outline").querySelector(".moredays") === null);
+
+  // A date opens that day on its own.
+  sections()[1].querySelector(".date").click();
+  await new Promise((r) => setTimeout(r, 100));
+  // The stub answers every day with the same page; what matters is that the
+  // journals page was left for a single one.
+  ok("a date opens its day", $("title").textContent === "2026-09-25" &&
+    $("outline").querySelector("section.day") === null, $("title").textContent);
+  await w.eval("goBack()");
+  await new Promise((r) => setTimeout(r, 150));
+  ok("back returns to the journals page", $("title").textContent === "Journals",
+    $("title").textContent);
 
   console.log(failures === 0 ? "frontend smoke: all pass" : `frontend smoke: ${failures} FAILURES`);
   process.exit(failures ? 1 : 0);

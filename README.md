@@ -157,6 +157,8 @@ Keys, with `⌘/` for the list:
 | `⌘P` | go to a journal, page or tag |
 | `⌘K` `⌘F` | search inside blocks |
 | `⌘T` | today |
+| `⌘J` | journals: every day, newest first, editable |
+| `⌘N` | the next of the recent pages in the header |
 | `⌘⇧A` | agenda |
 | `⌘[` `⌘]` | back, forward |
 | `⌥⌘←` `⌥⌘→` | the day before, the day after |
@@ -171,6 +173,17 @@ becomes a task when you say `/todo` or give it a `/deadline`, never because you
 clicked near it. A checkbox, once there, ticks off on a click.
 Errors stay in the corner until dismissed and are kept in Messages afterwards —
 a push that failed while you were looking elsewhere is still there.
+
+Above the title are the places you were last — the same list the outliner shows,
+from the same file, so switching between the two keeps it. Click one to go
+there; `⌘N` (or `ctrl+n`) steps through them like alt-tab, the order holding
+still until you do something else. While a `[[` list is open, `ctrl+n` and
+`ctrl+p` move through that list instead.
+
+The journals page (`⌘J`, the Journals button, or "Journals" in `⌘P`) is the
+outliner's: every day under its own date, edited in place, each edit going to
+the day it was made on. The day buttons scroll to the older and newer day there,
+a date opens that day on its own, and older days are opened as you scroll down.
 
 
 The same notes in a window, for when an outline is easier to read than to type:

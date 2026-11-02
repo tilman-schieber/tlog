@@ -833,3 +833,59 @@ table.cal td.sel { background: var(--accent); color: #fff; font-weight: 600; }
   color: var(--fg-muted);
   font-size: 11px;
 }
+
+/* --- the recent list ------------------------------------------------------ */
+
+/* The places you were last, the one you are on in the title colour. Muted, so
+   it reads as a way out rather than as part of the page. */
+#recent {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  padding: 8px 0 0;
+  min-height: 1.4em;
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+#recent .place {
+  max-width: 14em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+#recent .place:hover { color: var(--fg); text-decoration: underline; }
+#recent .place.current { color: var(--fg); font-weight: 600; }
+#recent .sep { opacity: 0.6; }
+
+/* --- the journals page ---------------------------------------------------- */
+
+#main h2.dayhead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 22px 0 4px;
+  padding: 0;
+  border: 0;
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+#outline section.day:first-child h2.dayhead { margin-top: 2px; }
+.dayhead .date { cursor: default; font-variant-numeric: tabular-nums; }
+.dayhead .date:hover { color: var(--accent); text-decoration: underline; }
+.dayhead .note { color: var(--fg-muted); font-size: 12px; font-weight: 400; }
+
+.moredays {
+  margin: 22px 0 0;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg-muted);
+  cursor: default;
+}
+.moredays:hover { background: var(--sel); }

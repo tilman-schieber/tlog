@@ -502,3 +502,104 @@ func blockAt(bs []tapp.BlockView, off int) *tapp.BlockView {
 	}
 	return nil
 }
+
+// The window keeps the same recent list as the outliner, in the same file, and
+// names the journals page so that it can be shown and gone to.
+func TestRecentIsSharedAndNamesTheJournalsPage(t *testing.T) {
+	t.Setenv("TLOG_STATE", filepath.Join(t.TempDir(), "recent.json"))
+	a := newAPI(t)
+	if _, err := a.OpenPage("Ada"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.svc.AppendBlock("pages/Ada.md", "", "x"); err != nil {
+		t.Fatal(err)
+	}
+
+	r := a.Visited("pages/Ada.md")
+	if r.Error != "" {
+		t.Fatal(r.Error)
+	}
+	if len(r.Places) == 0 || r.Places[0].Rel != "pages/Ada.md" || r.Places[0].Title != "Ada" {
+		t.Fatalf("visited: %+v", r.Places)
+	}
+	last := r.Places[len(r.Places)-1]
+	if last.Rel != a.JournalsRel() || last.Title != "Journals" {
+		t.Fatalf("the journals page should always be there, last: %+v", r.Places)
+	}
+
+	again := a.Recent()
+	if len(again.Places) != len(r.Places) || again.Places[0].Rel != "pages/Ada.md" {
+		t.Fatalf("not remembered: %+v", again.Places)
+	}
+
+	// The outliner reads the same file, so what the window visited is there.
+	if got := a.svc.Recent(); got[0] != "pages/Ada.md" {
+		t.Fatalf("the core does not see it: %v", got)
+	}
+}
+
+// A list that could not be written is still a list.
+func TestVisitedSaysWhyItCouldNotRemember(t *testing.T) {
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "file")
+	if err := os.WriteFile(blocker, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TLOG_STATE", filepath.Join(blocker, "recent.json"))
+	a := newAPI(t)
+	r := a.Visited(a.JournalsRel())
+	if r.Error == "" {
+		t.Fatal("an unwritable state file went unmentioned")
+	}
+	if len(r.Places) == 0 || r.Places[0].Rel != a.JournalsRel() {
+		t.Fatalf("the list was lost with the write: %+v", r.Places)
+	}
+}
+
+// Every day on the journals page is its own page: an edit made there goes to
+// that day, through the same calls as on the day's own page.
+func TestJournalsPageEditsEachDayOnItsOwn(t *testing.T) {
+	a := newAPI(t)
+	today := a.svc.TodayRel()
+	yesterday := a.svc.JournalRel(time.Now().AddDate(0, 0, -1))
+	if _, err := a.svc.AppendBlock(yesterday, "", "yesterday's note"); err != nil {
+		t.Fatal(err)
+	}
+
+	rels, err := a.JournalDays()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rels) != 2 || rels[0] != today || rels[1] != yesterday {
+		t.Fatalf("days: %v", rels)
+	}
+
+	days, err := a.OpenDays(rels)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !days[0].Today || days[1].Today || days[0].Weekday == "" || days[1].Ahead {
+		t.Fatalf("headings: %+v %+v", days[0], days[1])
+	}
+	if len(days[0].Page.Blocks) != 0 {
+		t.Fatal("today has no file yet and should be empty")
+	}
+	if _, err := os.Stat(a.svc.Store.Abs(today)); err == nil {
+		t.Fatal("showing the journals page wrote today's file")
+	}
+
+	y := days[1].Page
+	e, err := a.NewBlock(y.Rel, y.Blocks[0].Offset, y.Hash, "and another", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.Page.Rel != yesterday || len(e.Page.Blocks) != 2 {
+		t.Fatalf("the edit went to %s: %+v", e.Page.Rel, e.Page.Blocks)
+	}
+
+	// A day's edge is a wall: the first block of a day cannot be indented
+	// under the last block of the day above it.
+	if _, err := a.Indent(e.Page.Rel, e.Page.Blocks[0].Offset, e.Page.Hash); err == nil {
+		t.Fatal("the first block of a day was indented across the date")
+	}
+}

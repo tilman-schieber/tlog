@@ -87,6 +87,92 @@ func (a *API) Journal(rel string, delta int) (*tapp.PageView, error) {
 	return a.svc.View(a.svc.JournalRel(day.AddDate(0, 0, delta)))
 }
 
+// --- the recent list --------------------------------------------------------
+
+// Place is one entry in the recent list: the path to go to and the name to
+// show for it.
+type Place struct {
+	Rel   string `json:"rel"`
+	Title string `json:"title"`
+}
+
+// Recents is the recent list, and why it could not be remembered if it could
+// not. The list is there either way, so the window still has it.
+type Recents struct {
+	Places []Place `json:"places"`
+	Error  string  `json:"error,omitempty"`
+}
+
+func places(rels []string) []Place {
+	out := make([]Place, 0, len(rels))
+	for _, rel := range rels {
+		title := store.Title(rel)
+		if rel == tapp.JournalsRel {
+			title = "Journals"
+		}
+		out = append(out, Place{Rel: rel, Title: title})
+	}
+	return out
+}
+
+// Recent is the places you were last, newest first — the same list, from the
+// same file, the outliner shows in its header.
+func (a *API) Recent() Recents { return Recents{Places: places(a.svc.Recent())} }
+
+// Visited puts a place at the front of the recent list. A list that could not
+// be written is still returned, with the reason, rather than as a failure: the
+// window should go on showing it.
+func (a *API) Visited(rel string) Recents {
+	list, err := a.svc.Visited(rel)
+	r := Recents{Places: places(list)}
+	if err != nil {
+		r.Error = err.Error()
+	}
+	return r
+}
+
+// --- the journals page ------------------------------------------------------
+
+// JournalsRel names the journals page wherever the window names a place by
+// path: history, the recent list, the palette.
+func (a *API) JournalsRel() string { return tapp.JournalsRel }
+
+// JournalDays lists every day on the journals page, newest first, with today
+// always there.
+func (a *API) JournalDays() ([]string, error) { return a.svc.JournalDays() }
+
+// DayView is one day on the journals page: the day as a page, which every
+// edit is addressed through, and how to head it.
+type DayView struct {
+	Page    *tapp.PageView `json:"page"`
+	Date    string         `json:"date"`
+	Weekday string         `json:"weekday"`
+	Today   bool           `json:"today"`
+	Ahead   bool           `json:"ahead"`
+}
+
+// OpenDays opens a batch of days with one graph build. Each comes back as the
+// page it is, so an edit on the journals page is an edit to that one day, with
+// that day's hash — the same calls as on the day's own page.
+func (a *API) OpenDays(rels []string) ([]DayView, error) {
+	days, err := a.svc.OpenDays(rels)
+	if err != nil {
+		return nil, err
+	}
+	today := a.svc.TodayRel()
+	now := time.Now()
+	out := make([]DayView, 0, len(days))
+	for _, d := range days {
+		v := DayView{Page: d.View, Date: store.Title(d.Doc.Rel), Today: d.Doc.Rel == today}
+		if t, ok := store.JournalDay(d.Doc.Rel); ok {
+			v.Weekday = t.Format("Monday")
+			v.Ahead = !v.Today && t.After(now)
+		}
+		out = append(out, v)
+	}
+	return out, nil
+}
+
 func (a *API) Index() (*tapp.Index, error) { return a.svc.Index() }
 
 func (a *API) Search(query string) ([]tapp.SearchHit, error) { return a.svc.Search(query, 200) }

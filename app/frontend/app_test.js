@@ -40,6 +40,7 @@ eval(lift("function decorate"));
 eval(lift("function linkPrefix"));
 eval(lift("function slashAt"));
 eval(lift("function shouldReload"));
+eval(lift("function feedReload"));
 eval(lift("function refPrefix"));
 
 let failures = 0;
@@ -359,6 +360,36 @@ for (const probe of [
 }
 
 eq("a quote in text is an entity", escapeHTML('say "hi"'), "say &quot;hi&quot;");
+
+// --- the journals page, noticing an edit made elsewhere ----------------------
+//
+// Every day is its own file, so a change reloads one day and never the day
+// being typed in.
+{
+  const day = (rel, hash) => ({ page: { rel, hash } });
+  const feed = {
+    rels: ["journals/2026-11-02.md", "journals/2026-11-01.md", "journals/2026-10-01.md"],
+    days: [day("journals/2026-11-02.md", "aaa"), day("journals/2026-11-01.md", "bbb")],
+  };
+  const ev = (rel, hash) => ({ rel, hash, exists: true });
+  const J = "journals";
+  eq("our own write to a day is not a reason to redraw",
+    feedReload(ev("journals/2026-11-01.md", "bbb"), feed, null, J), "none");
+  eq("a day changed elsewhere is reloaded",
+    feedReload(ev("journals/2026-11-01.md", "ccc"), feed, null, J), "day");
+  eq("even while another day is being typed in",
+    feedReload(ev("journals/2026-11-01.md", "ccc"), feed, "journals/2026-11-02.md", J), "day");
+  eq("but never the day being typed in",
+    feedReload(ev("journals/2026-11-01.md", "ccc"), feed, "journals/2026-11-01.md", J), "stale");
+  eq("a day not opened yet only moves the index",
+    feedReload(ev("journals/2026-10-01.md", "x"), feed, null, J), "index");
+  eq("a new day reads the list of days again",
+    feedReload(ev("journals/2026-11-03.md", "x"), feed, null, J), "list");
+  eq("but not while something is being typed",
+    feedReload(ev("journals/2026-11-03.md", "x"), feed, "journals/2026-11-02.md", J), "index");
+  eq("a page is not a day", feedReload(ev("pages/Ada.md", "x"), feed, null, J), "index");
+  eq("no journals page, nothing to do", feedReload(ev("pages/Ada.md", "x"), null, null, J), "none");
+}
 
 console.log(failures === 0 ? "frontend: all pass" : `frontend: ${failures} FAILURES`);
 process.exit(failures ? 1 : 0);

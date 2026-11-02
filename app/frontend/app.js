@@ -8,10 +8,28 @@ const api = () => window.go.main.API;
 
 const $ = (id) => document.getElementById(id);
 
-let page = null; // the current PageView
+let page = null; // the current PageView; a stand-in while on the journals page
 let focusOffset = null; // where to put the caret after a redraw
 let focusCaret = null; // how far into that block, null meaning at its end
+let focusRel = null; // which file that block is in, when more than one is shown
 let completion = null;
+
+// The journals page is every day, newest first, each still its own file. While
+// it is open, feed holds the days and `page` is a stand-in named JOURNALS, so
+// that history, the recent list and the title all have something to say.
+let JOURNALS = "journals"; // asked of the core at startup
+let feed = null; // { rels: every day, days: the DayViews opened so far }
+
+// viewOf is the page a block belongs to, as it now stands. On the journals page
+// that is the block's own day: every edit is addressed through it, with that
+// day's hash, so a change can only ever reach the day it was made on.
+function viewOf(rel) {
+  if (feed) {
+    const d = feed.days.find((d) => d.page.rel === rel);
+    return d ? d.page : null;
+  }
+  return page && page.rel === rel ? page : null;
+}
 
 // --- plumbing ---------------------------------------------------------------
 
@@ -72,21 +90,55 @@ async function call(fn) {
   }
 }
 
+// show draws a page. Arriving somewhere is also how the recent list learns
+// where you are: every way of navigating ends up here, so no route can forget.
 function show(p) {
   if (!p) return;
+  const arriving = !page || page.rel !== p.rel;
+  if (p.rel !== JOURNALS) feed = null;
+  else if (p.feed) feed = p.feed;
   page = p;
   render();
+  if (arriving) arrived(p.rel);
 }
 
 // An edit returns the page plus where the block ended up, because rewriting the
 // file moves every offset after it.
+//
+// On the journals page only the day that was written is redrawn, so typing in
+// another day is left alone. An edit to a page no longer on screen — a save on
+// blur that finished after a click had already gone elsewhere — is not drawn
+// at all: it would take you back to where you had just left.
 function applied(edit, caret = null) {
   if (!edit) return;
-  focusOffset = edit.offset;
-  focusCaret = caret;
-  show(edit.page);
+  const rel = edit.page.rel;
+  if (feed && feed.days.some((d) => d.page.rel === rel)) {
+    feed.days.find((d) => d.page.rel === rel).page = edit.page;
+    focusRel = rel;
+    focusOffset = edit.offset;
+    focusCaret = caret;
+    renderDay(rel);
+    takeFocus();
+  } else if (!feed && (!page || page.rel === rel)) {
+    focusRel = rel;
+    focusOffset = edit.offset;
+    focusCaret = caret;
+    show(edit.page);
+  }
   refreshIndex();
   checkSync();
+}
+
+// takeFocus puts the caret where the last edit asked for it.
+function takeFocus() {
+  if (focusOffset === null) return;
+  const el = [...document.querySelectorAll("#outline .text[data-offset]")].find(
+    (t) => Number(t.dataset.offset) === focusOffset && (!focusRel || t.dataset.rel === focusRel)
+  );
+  if (el) placeCaretAt(el, focusCaret);
+  focusOffset = null;
+  focusCaret = null;
+  focusRel = null;
 }
 
 // A push happens in the background after a commit; if it failed, say so.
@@ -369,7 +421,7 @@ function decorateInline(text, embeds, cursor) {
 
 function render() {
   $("title").textContent = page.title;
-  $("daynav").style.visibility = page.isJournal ? "visible" : "hidden";
+  $("daynav").style.visibility = page.isJournal || feed ? "visible" : "hidden";
 
   const tags = $("pagetags");
   tags.innerHTML = "";
@@ -398,13 +450,8 @@ function render() {
   renderRefs();
   markActive();
   updateNav();
-
-  if (focusOffset !== null) {
-    const el = document.querySelector(`.text[data-offset="${focusOffset}"]`);
-    if (el) placeCaretAt(el, focusCaret);
-    focusOffset = null;
-    focusCaret = null;
-  }
+  drawRecent();
+  takeFocus();
 }
 
 // Which blocks are folded, per page, by the text of the block rather than by
@@ -422,24 +469,27 @@ function foldsFor(rel) {
   return folded.get(rel);
 }
 
-function isFolded(b) {
-  return page ? foldsFor(page.rel).has(b.text) : false;
+// A fold is kept per file, so a day folded on the journals page is folded on
+// its own page too, and the other way round.
+function isFolded(rel, b) {
+  return foldsFor(rel).has(b.text);
 }
 
-function toggleFold(b) {
-  const set = foldsFor(page.rel);
+function toggleFold(rel, b) {
+  const set = foldsFor(rel);
   if (set.has(b.text)) set.delete(b.text);
   else set.add(b.text);
-  renderOutline();
+  if (feed) renderDay(rel);
+  else renderOutline();
 }
 
 // hiddenUnder walks the flat block list and reports which offsets are inside a
 // folded subtree. The list is flat with a depth on each block, so a subtree is
 // the run that follows a block at a greater depth than it.
-function hiddenUnder(blocks) {
+function hiddenUnder(rel, blocks) {
   const hide = new Set();
   for (let i = 0; i < blocks.length; i++) {
-    if (!blocks[i].hasChildren || !isFolded(blocks[i])) continue;
+    if (!blocks[i].hasChildren || !isFolded(rel, blocks[i])) continue;
     for (let j = i + 1; j < blocks.length && blocks[j].depth > blocks[i].depth; j++) {
       hide.add(blocks[j].offset);
     }
@@ -450,20 +500,30 @@ function hiddenUnder(blocks) {
 function renderOutline() {
   const out = $("outline");
   out.innerHTML = "";
+  if (feed) return renderFeed(out);
+  renderBlocks(out, page);
+}
 
-  if (!page.blocks || page.blocks.length === 0) {
+// renderBlocks draws one file's blocks: the page, or one day of the journals
+// page. Every handler asks for the file as it stands when it fires, not as it
+// was drawn, because another day may have been redrawn in between.
+function renderBlocks(out, pv) {
+  const rel = pv.rel;
+  const cur = () => viewOf(rel) || pv;
+
+  if (!pv.blocks || pv.blocks.length === 0) {
     const hint = document.createElement("div");
     hint.className = "refline";
     hint.textContent = "Empty — click here to start writing";
     hint.onclick = async () =>
-      applied(await call(() => api().AppendBlock(page.rel, page.hash, "")));
+      applied(await call(() => api().AppendBlock(rel, cur().hash, "")));
     out.appendChild(hint);
     return;
   }
 
-  const hidden = hiddenUnder(page.blocks);
+  const hidden = hiddenUnder(rel, pv.blocks);
 
-  page.blocks.forEach((b) => {
+  pv.blocks.forEach((b) => {
     if (hidden.has(b.offset)) return;
     const row = document.createElement("div");
     row.className = "block" + (b.task === "done" ? " done" : "");
@@ -475,7 +535,7 @@ function renderOutline() {
       check.textContent = b.task === "done" ? "☑" : "☐";
       check.title = b.task === "done" ? "Not done after all" : "Done";
       check.onclick = async () =>
-        applied(await call(() => api().ToggleTask(page.rel, b.offset, page.hash)));
+        applied(await call(() => api().ToggleTask(rel, b.offset, cur().hash)));
       row.appendChild(check);
     } else {
       // The bullet folds what is under it, and does nothing else. It used to
@@ -484,13 +544,13 @@ function renderOutline() {
       // because you said /todo or gave it a /deadline — never because you
       // clicked near it.
       const kids = b.hasChildren;
-      const shut = kids && isFolded(b);
+      const shut = kids && isFolded(rel, b);
       const bullet = document.createElement("span");
       bullet.className = "bullet" + (kids ? " haskids" : "") + (shut ? " folded" : "");
       bullet.textContent = "●";
       if (kids) {
         bullet.title = shut ? "Unfold" : "Fold";
-        bullet.onclick = () => toggleFold(b);
+        bullet.onclick = () => toggleFold(rel, b);
       }
       row.appendChild(bullet);
     }
@@ -508,11 +568,12 @@ function renderOutline() {
     text.contentEditable = "plaintext-only";
     text.spellcheck = false;
     text.dataset.offset = b.offset;
+    text.dataset.rel = rel;
     text.dataset.raw = b.text;
     // The checkbox is drawn beside the block, so the marker is not repeated in
     // the text. What is stored still has it, and focusing shows that.
     text.innerHTML = decorate(b.task ? b.body : b.text, b.fences, b.embeds) || "<br>";
-    wireBlock(text, b);
+    wireBlock(text, b, pv);
     row.appendChild(text);
 
     out.appendChild(row);
@@ -521,7 +582,7 @@ function renderOutline() {
     // which is the whole reason to embed rather than to refer. The rows are
     // the other page's, so they are shown and not edited: editing them here
     // would be editing a file this page does not have open.
-    (isFolded(b) ? [] : b.embedKids || []).forEach((kid) => {
+    (isFolded(rel, b) ? [] : b.embedKids || []).forEach((kid) => {
       const line = document.createElement("div");
       line.className = "block embedded";
       line.style.marginLeft = (b.depth + kid.depth) * 22 + "px";
@@ -547,6 +608,212 @@ function renderOutline() {
       out.appendChild(pr);
     });
   });
+}
+
+// --- the journals page ------------------------------------------------------
+//
+// Every day under its own date, newest first, today at the top whether it has
+// a file or not. Each day is drawn by renderBlocks from its own PageView, so
+// it is edited exactly as on its own page; the core rewrites one file per
+// operation, so indenting, moving or joining across a date is refused as it is
+// at the edge of any page. Days are opened a fortnight at a time as you scroll
+// down to them.
+
+const FEED_CHUNK = 14;
+
+// The stand-in drawn as "the page" while the journals page is open. It carries
+// the days, and show takes them from it, so the journals page and its days
+// arrive together or not at all.
+function feedPage(f) {
+  return { rel: JOURNALS, title: "Journals", hash: "", isJournal: false,
+           tags: [], blocks: [], tagged: [], refs: [], feed: f };
+}
+
+// loadFeed opens the journals page with at least n days.
+async function loadFeed(n) {
+  const rels = await call(() => api().JournalDays());
+  if (!rels) return null;
+  const want = Math.min(rels.length, Math.max(n || 0, FEED_CHUNK));
+  const days = await call(() => api().OpenDays(rels.slice(0, want)));
+  if (!days) return null;
+  return { rels, days };
+}
+
+function renderFeed(out) {
+  feed.days.forEach((d) => out.appendChild(daySection(d)));
+  moreDaysButton(out);
+}
+
+// daySection draws one day: its date, which opens that day on its own, then
+// its blocks.
+function daySection(d) {
+  const sec = document.createElement("section");
+  sec.className = "day";
+  sec.dataset.rel = d.page.rel;
+
+  const head = document.createElement("h2");
+  head.className = "dayhead";
+  const date = document.createElement("span");
+  date.className = "date";
+  date.textContent = d.date;
+  date.title = "Open this day on its own";
+  date.onclick = () => openRel(d.page.rel);
+  head.appendChild(date);
+  const note = document.createElement("span");
+  note.className = "note";
+  note.textContent = [d.weekday, d.today ? "today" : d.ahead ? "ahead" : ""]
+    .filter(Boolean).join(" · ");
+  head.appendChild(note);
+  sec.appendChild(head);
+
+  const body = document.createElement("div");
+  body.className = "dayblocks";
+  renderBlocks(body, d.page);
+  sec.appendChild(body);
+  return sec;
+}
+
+function moreDaysButton(out) {
+  if (!feed || feed.days.length >= feed.rels.length) return;
+  const more = document.createElement("button");
+  more.className = "moredays";
+  more.textContent = "Older days";
+  more.onclick = () => loadMoreDays();
+  out.appendChild(more);
+}
+
+// renderDay redraws one day and leaves every other day — and anything being
+// typed into one — exactly as it is.
+function renderDay(rel) {
+  const d = feed && feed.days.find((d) => d.page.rel === rel);
+  const sec = [...document.querySelectorAll("#outline section.day")].find(
+    (s) => s.dataset.rel === rel
+  );
+  if (!d || !sec) return renderOutline();
+  sec.replaceWith(daySection(d));
+}
+
+// loadMoreDays opens the next fortnight below the last one. They are appended
+// rather than the page redrawn, so the block being typed in keeps its caret.
+let loadingDays = false;
+async function loadMoreDays() {
+  const f = feed;
+  if (!f || loadingDays || f.days.length >= f.rels.length) return;
+  loadingDays = true;
+  const next = f.rels.slice(f.days.length, f.days.length + FEED_CHUNK);
+  const more = await call(() => api().OpenDays(next));
+  loadingDays = false;
+  if (!more || feed !== f) return;
+  f.days.push(...more);
+  const out = $("outline");
+  const btn = out.querySelector(".moredays");
+  if (btn) btn.remove();
+  more.forEach((d) => out.appendChild(daySection(d)));
+  moreDaysButton(out);
+}
+
+// refreshFeed re-reads the journals page — a day written elsewhere, or links
+// into a day that moved — keeping as many days open as there were.
+async function refreshFeed() {
+  const f = feed;
+  if (!f) return;
+  const fresh = await loadFeed(f.days.length);
+  if (!fresh || feed !== f) return;
+  feed = fresh;
+  if (page && page.rel === JOURNALS) page.feed = fresh; // what show restores
+  renderOutline();
+}
+
+// jumpDay scrolls to the next older (delta < 0) or newer day, which is what
+// the previous and next day buttons mean on the journals page.
+async function jumpDay(delta) {
+  const secs = () => [...document.querySelectorAll("#outline section.day")];
+  const top = $("main").getBoundingClientRect().top;
+  let at = secs().findIndex((s) => s.getBoundingClientRect().bottom > top + 1);
+  if (at < 0) at = 0;
+  const to = at + (delta < 0 ? 1 : -1);
+  if (to < 0) return;
+  if (to >= secs().length) await loadMoreDays();
+  const target = secs()[to];
+  if (target) target.scrollIntoView({ block: "start" });
+}
+
+$("main").addEventListener("scroll", () => {
+  if (!feed) return;
+  const m = $("main");
+  if (m.scrollTop + m.clientHeight > m.scrollHeight - 600) loadMoreDays();
+});
+
+// --- the recent list --------------------------------------------------------
+//
+// The header names the places you were last — four pages, the last journal day
+// and the journals page, newest first — the same list from the same file as
+// the outliner, so moving between the two keeps it. The core decides what is
+// on it; this draws it and steps through it.
+
+let recent = []; // [{rel, title}]
+let cycling = false;
+let cycleAt = 0;
+let recentFailed = false;
+
+// arrived tells the core where you are now. While cycling the order holds
+// still, so the list catches up only once you stop (settleRecent).
+async function arrived(rel) {
+  if (cycling) return drawRecent();
+  const r = await call(() => api().Visited(rel));
+  if (r) {
+    recent = r.places || [];
+    // Said once: a state directory that cannot be written stays that way, and
+    // a message on every page change would bury everything else.
+    if (r.error && !recentFailed) {
+      recentFailed = true;
+      fail("Could not remember the recent pages: " + r.error);
+    }
+  }
+  drawRecent();
+}
+
+function drawRecent() {
+  const bar = $("recent");
+  if (!bar) return;
+  bar.innerHTML = "";
+  const cur = page ? page.rel : null;
+  const list = recent.length ? recent : page ? [{ rel: page.rel, title: page.title }] : [];
+  list.forEach((p, i) => {
+    if (i) {
+      const sep = document.createElement("span");
+      sep.className = "sep";
+      sep.textContent = "·";
+      bar.appendChild(sep);
+    }
+    const el = document.createElement("span");
+    el.className = "place" + (p.rel === cur ? " current" : "");
+    el.textContent = p.title;
+    el.title = p.rel === JOURNALS ? "Every day, newest first" : p.rel;
+    el.onclick = () => openRel(p.rel);
+    bar.appendChild(el);
+  });
+}
+
+// cycleRecent steps to the next older place, wrapping, like alt-tab: the order
+// holds still while you keep stepping, or every step would put the page you
+// landed on first and the next could only go back. One step from a settled
+// list is therefore the place you were on before this one.
+async function cycleRecent() {
+  if (recent.length < 2) return say("No other recent page yet");
+  if (!cycling) {
+    cycling = true;
+    cycleAt = Math.max(0, recent.findIndex((p) => page && p.rel === page.rel));
+  }
+  cycleAt = (cycleAt + 1) % recent.length;
+  await openRel(recent[cycleAt].rel);
+}
+
+// settleRecent ends a run of cycling: wherever it stopped is now most recent.
+function settleRecent() {
+  if (!cycling) return;
+  cycling = false;
+  if (page) arrived(page.rel);
 }
 
 function renderTagged() {
@@ -611,8 +878,8 @@ function renderRefs() {
 // childrenOf is everything nested under a block. The block list is flat with a
 // depth on each one, so a subtree is the run that follows it while the depth
 // stays greater.
-function childrenOf(b) {
-  const all = (page && page.blocks) || [];
+function childrenOf(pv, b) {
+  const all = (pv && pv.blocks) || [];
   const i = all.findIndex((x) => x.offset === b.offset);
   if (i < 0) return [];
   const out = [];
@@ -658,9 +925,9 @@ function placeCaretAtEnd(el) {
 
 // seamAbove is where the caret belongs after a merge: the end of the text the
 // block above had before this one was appended to it.
-function seamAbove(b) {
-  const i = page.blocks.findIndex((x) => x.offset === b.offset);
-  return i > 0 ? page.blocks[i - 1].text.length : 0;
+function seamAbove(pv, b) {
+  const i = pv.blocks.findIndex((x) => x.offset === b.offset);
+  return i > 0 ? pv.blocks[i - 1].text.length : 0;
 }
 
 function caretAtStart(el) {
@@ -672,7 +939,14 @@ function caretAtStart(el) {
   return r.toString().length === 0;
 }
 
-function wireBlock(el, b) {
+// wireBlock makes a block editable. pv is the file it was drawn from; every
+// call goes through that file as it now stands, which on the journals page is
+// the block's own day. Once the file is no longer on screen — a blur after a
+// click went elsewhere — the hash it was drawn with is the one sent, so a
+// change made meanwhile is refused rather than overwritten.
+function wireBlock(el, b, pv) {
+  const rel = pv.rel;
+  const cur = () => viewOf(rel) || pv;
   // While a block has focus it shows raw text: what you type is what is stored.
   el.addEventListener("focus", () => {
     el.textContent = el.dataset.raw;
@@ -686,7 +960,7 @@ function wireBlock(el, b) {
       return;
     }
     el.dataset.raw = text;
-    applied(await call(() => api().SetText(page.rel, b.offset, page.hash, text)));
+    applied(await call(() => api().SetText(rel, b.offset, cur().hash, text)));
   });
 
   el.addEventListener("input", () => updateCompletion(el));
@@ -710,7 +984,7 @@ function wireBlock(el, b) {
       applied(
         await call(() =>
           api().SplitBlock(
-            page.rel, b.offset, page.hash,
+            rel, b.offset, cur().hash,
             text.slice(0, at), text.slice(at),
             // Nothing is collapsed in the window, so a block with children has
             // visible ones and the new block belongs under it.
@@ -726,7 +1000,7 @@ function wireBlock(el, b) {
       e.preventDefault();
       const text = raw(el);
       el.dataset.raw = text;
-      const saved = await call(() => api().SetText(page.rel, b.offset, page.hash, text));
+      const saved = await call(() => api().SetText(rel, b.offset, cur().hash, text));
       if (!saved) return;
       const fn = e.shiftKey ? api().Outdent : api().Indent;
       applied(await call(() => fn.call(api(), saved.page.rel, saved.offset, saved.page.hash)));
@@ -736,7 +1010,7 @@ function wireBlock(el, b) {
     if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
       e.preventDefault();
       const delta = e.key === "ArrowUp" ? -1 : 1;
-      applied(await call(() => api().Move(page.rel, b.offset, page.hash, delta)));
+      applied(await call(() => api().Move(rel, b.offset, cur().hash, delta)));
       return;
     }
 
@@ -745,8 +1019,8 @@ function wireBlock(el, b) {
     // short of selecting the text and leaving an empty bullet behind.
     if (e.key === "Backspace" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
-      const kids = childrenOf(b).length;
-      const gone = await call(() => api().DeleteBlock(page.rel, b.offset, page.hash));
+      const kids = childrenOf(cur(), b).length;
+      const gone = await call(() => api().DeleteBlock(rel, b.offset, cur().hash));
       if (gone) {
         say(kids
           ? `Block and ${kids === 1 ? "its child" : `its ${kids} children`} deleted — git has the previous version`
@@ -760,11 +1034,11 @@ function wireBlock(el, b) {
     // an outliner behaves. On the very first block there is nothing above, so
     // an empty one is simply removed.
     if (e.key === "Backspace" && caretAtStart(el)) {
-      const first = page.blocks.length > 0 && page.blocks[0].offset === b.offset;
+      const first = cur().blocks.length > 0 && cur().blocks[0].offset === b.offset;
       if (first) {
         if (raw(el) === "") {
           e.preventDefault();
-          const gone = await call(() => api().DeleteBlock(page.rel, b.offset, page.hash));
+          const gone = await call(() => api().DeleteBlock(rel, b.offset, cur().hash));
           if (gone) say("Block deleted — git has the previous version");
           applied(gone);
         }
@@ -773,8 +1047,8 @@ function wireBlock(el, b) {
       e.preventDefault();
       const text = raw(el);
       el.dataset.raw = text;
-      const seam = seamAbove(b);
-      const saved = await call(() => api().SetText(page.rel, b.offset, page.hash, text));
+      const seam = seamAbove(cur(), b);
+      const saved = await call(() => api().SetText(rel, b.offset, cur().hash, text));
       if (!saved) return;
       applied(
         await call(() =>
@@ -791,7 +1065,7 @@ function wireBlock(el, b) {
       e.preventDefault();
       const text = raw(el);
       el.dataset.raw = text;
-      const saved = await call(() => api().SetText(page.rel, b.offset, page.hash, text));
+      const saved = await call(() => api().SetText(rel, b.offset, cur().hash, text));
       if (!saved) return;
       applied(
         await call(() => api().InsertBefore(saved.page.rel, saved.offset, saved.page.hash, "")),
@@ -1046,42 +1320,50 @@ function hideCompletion() {
 }
 
 function handleCompletionKey(e, el) {
-  if (e.key === "Escape") {
+  // ctrl+n and ctrl+p move through an open list, as they do in the outliner;
+  // with no list open, ctrl+n steps through the recent pages instead.
+  const emacs = e.ctrlKey && !e.metaKey && !e.altKey;
+  const key = emacs && e.key === "n" ? "ArrowDown" : emacs && e.key === "p" ? "ArrowUp" : e.key;
+  if (key === "Escape") {
     e.preventDefault();
     hideCompletion();
     return true;
   }
   if (completion.kind === "cmd") {
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    if (key === "ArrowDown" || key === "ArrowUp") {
       e.preventDefault();
       const n = (completion.files || completion.cmds).length;
-      const d = e.key === "ArrowDown" ? 1 : -1;
+      const d = key === "ArrowDown" ? 1 : -1;
       completion.sel = Math.max(0, Math.min(completion.sel + d, n - 1));
       if (completion.files) drawCompletion();
       else updateCompletion(el);
       return true;
     }
-    if (e.key === "Enter" || e.key === "Tab") {
+    if (key === "Enter" || key === "Tab") {
       e.preventDefault();
       runCommand();
       return true;
     }
     return false;
   }
-  if (completion.items.length === 0) return false; // a hint claims nothing
-  if (e.key === "ArrowDown") {
+  if (completion.items.length === 0) {
+    // A hint claims nothing, except the keys that would otherwise leave the page.
+    if (key !== e.key) e.preventDefault();
+    return key !== e.key;
+  }
+  if (key === "ArrowDown") {
     e.preventDefault();
     completion.sel = Math.min(completion.sel + 1, completion.items.length - 1);
     drawCompletion();
     return true;
   }
-  if (e.key === "ArrowUp") {
+  if (key === "ArrowUp") {
     e.preventDefault();
     completion.sel = Math.max(completion.sel - 1, 0);
     drawCompletion();
     return true;
   }
-  if (e.key === "Enter" || e.key === "Tab") {
+  if (key === "Enter" || key === "Tab") {
     e.preventDefault();
     acceptCompletion();
     return true;
@@ -1133,10 +1415,13 @@ async function runCommand() {
   const from = c.start;
   const to = textBeforeCaret(el).length;
   const offset = Number(el.dataset.offset);
+  const rel = el.dataset.rel;
+  const pv = viewOf(rel);
   hideCompletion();
+  if (!pv) return;
 
   const edit = await call(() =>
-    api().RunCommand(page.rel, offset, page.hash, cmd.name, arg, text, from, to)
+    api().RunCommand(rel, offset, pv.hash, cmd.name, arg, text, from, to)
   );
   if (!edit) return;
   applied(edit);
@@ -1158,12 +1443,25 @@ function remember() {
   if (page && history[history.length - 1] !== page.rel) history.push(page.rel);
 }
 
+// fetchPlace reads a place by its path, the journals page included.
+async function fetchPlace(rel) {
+  if (rel === JOURNALS) {
+    const f = await loadFeed(0);
+    return f ? feedPage(f) : null;
+  }
+  return call(() => api().OpenRel(rel));
+}
+
 async function openRel(rel) {
   if (page && page.rel === rel) return; // already here
   hideCompletion();
   remember();
   forward = [];
-  show(await call(() => api().OpenRel(rel)));
+  show(await fetchPlace(rel));
+}
+
+function openJournals() {
+  return openRel(JOURNALS);
 }
 
 async function open_(name) {
@@ -1195,7 +1493,7 @@ async function goBack() {
   const rel = history.pop();
   if (page) forward.push(page.rel);
   hideCompletion();
-  show(await call(() => api().OpenRel(rel)));
+  show(await fetchPlace(rel));
   updateNav();
 }
 
@@ -1204,7 +1502,7 @@ async function goForward() {
   const rel = forward.pop();
   if (page) history.push(page.rel);
   hideCompletion();
-  show(await call(() => api().OpenRel(rel)));
+  show(await fetchPlace(rel));
   updateNav();
 }
 
@@ -1217,6 +1515,7 @@ function updateNav() {
 
 async function shiftDay(delta) {
   if (!page) return;
+  if (feed) return jumpDay(delta); // on the journals page, scroll to the day
   remember();
   forward = [];
   show(await call(() => api().Journal(page.rel, delta)));
@@ -1404,6 +1703,7 @@ async function openBlock(e) {
 }
 
 document.addEventListener("mousedown", (e) => {
+  settleRecent();
   const d = e.target.dataset;
   if (!d) return;
   if (d.page) {
@@ -1430,6 +1730,8 @@ const KEYS = [
   { key: "k", mod: true, label: "Search", run: focusSearch },
   { key: "f", mod: true, label: "Search", run: focusSearch },
   { key: "t", mod: true, label: "Today", run: () => openToday() },
+  { key: "j", mod: true, label: "Journals", run: () => openJournals() },
+  { key: "n", mod: true, label: "Next recent page", run: () => cycleRecent() },
   { key: "a", mod: true, shift: true, label: "Agenda", run: () => openAgenda() },
   { key: "[", mod: true, label: "Back", run: () => goBack() },
   { key: "]", mod: true, label: "Forward", run: () => goForward() },
@@ -1446,7 +1748,18 @@ function focusSearch() {
   $("search").select();
 }
 
+// isCycleKey is the chord that steps through the recent pages. Anything else
+// pressed — other than a modifier on its own, on the way to the next step —
+// settles the list where the stepping stopped.
+function isCycleKey(e) {
+  return (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "n";
+}
+const MODIFIERS = new Set(["Meta", "Control", "Shift", "Alt"]);
+
 document.addEventListener("keydown", (e) => {
+  if (!isCycleKey(e) && !MODIFIERS.has(e.key)) settleRecent();
+  // A block that took the key — a completion list moving with ctrl+n — has it.
+  if (e.defaultPrevented) return;
   // Escape backs out of whatever is covering the page, innermost first.
   if (e.key === "Escape") {
     if (!$("palette").hidden) return void ($("palette").hidden = true);
@@ -1485,8 +1798,14 @@ async function openPalette() {
   $("palettequery").focus();
 }
 
+// The journals page is not a file, so the core does not list it; it is offered
+// first whenever what is typed could be its name, as the outliner does.
 async function refreshPalette() {
-  places = (await call(() => api().Places($("palettequery").value))) || [];
+  const q = $("palettequery").value;
+  places = (await call(() => api().Places(q))) || [];
+  if ("journals".includes(q.trim().toLowerCase())) {
+    places.unshift({ kind: "journals", name: "Journals", rel: JOURNALS });
+  }
   placeSel = 0;
   drawPalette();
 }
@@ -1561,16 +1880,23 @@ function toggleHelp() {
 }
 
 // Wails reports a file drop here. The files go on the shared shelf and their
-// links into the page currently open.
+// links into the page currently open — on the journals page, into the day of
+// the block being edited, or today.
 window.runtime && window.runtime.OnFileDrop(async (x, y, paths) => {
   if (!paths || !paths.length || !page) return;
   document.body.classList.remove("dropping");
-  const edit = await call(() => api().AttachFiles(page.rel, paths));
-  if (edit) {
-    show(edit.page);
-    refreshIndex();
-  }
+  const rel = feed ? editingRel() || (feed.days[0] && feed.days[0].page.rel) : page.rel;
+  if (!rel) return;
+  const edit = await call(() => api().AttachFiles(rel, paths));
+  // Nothing was being typed at, so the caret is not put anywhere.
+  if (edit) applied({ ...edit, offset: null });
 }, true);
+
+// editingRel is the file of the block that has the caret, if one does.
+function editingRel() {
+  const a = document.activeElement;
+  return a && a.classList && a.classList.contains("text") ? a.dataset.rel || null : null;
+}
 
 if (window.runtime && window.runtime.OnFileDropOff) {
   window.addEventListener("dragover", () => document.body.classList.add("dropping"));
@@ -1647,8 +1973,62 @@ function shouldReload(ev, page, editing) {
   return "page";
 }
 
+// feedReload is shouldReload for the journals page, where every day is its own
+// file. editingRel is the day of the block that has the caret, or null.
+//
+//   - a day on screen, unchanged bytes: our own write, coming back
+//   - a day on screen, being typed in: never reload it — warn
+//   - a day on screen otherwise: reload that day and no other
+//   - a journal day not listed yet: written elsewhere, so the list of days
+//     is read again — once nothing is being typed
+//   - anything else: the index, and how references into the days resolve
+function feedReload(ev, feed, editingRel, journals) {
+  if (!ev || !feed) return "none";
+  const day = feed.days.find((d) => d.page.rel === ev.rel);
+  if (day) {
+    if (ev.hash === day.page.hash) return "none";
+    if (editingRel === ev.rel) return "stale";
+    return "day";
+  }
+  const isDay = ev.rel.startsWith(journals + "/");
+  if (isDay && !feed.rels.includes(ev.rel)) return editingRel ? "index" : "list";
+  return "index";
+}
+
+// reloadDay re-reads one day of the journals page after it changed on disk.
+async function reloadDay(rel) {
+  const days = await call(() => api().OpenDays([rel]));
+  if (!days || !days.length || !feed) return;
+  const i = feed.days.findIndex((d) => d.page.rel === rel);
+  if (i < 0) return;
+  feed.days[i] = days[0];
+  renderDay(rel);
+}
+
+async function changedInFeed(ev) {
+  const editing = editingRel();
+  switch (feedReload(ev, feed, editing, JOURNALS)) {
+    case "day":
+      await reloadDay(ev.rel);
+      await refreshIndex();
+      break;
+    case "list":
+      await refreshIndex();
+      await refreshFeed();
+      break;
+    case "index":
+      await refreshIndex();
+      if (!editing) await refreshFeed();
+      break;
+    case "stale":
+      fail("This day changed on disk. Click away to save what you typed.");
+      break;
+  }
+}
+
 if (window.runtime && window.runtime.EventsOn) {
   window.runtime.EventsOn("notes:changed", async (ev) => {
+    if (feed) return changedInFeed(ev);
     const editing =
       document.activeElement && document.activeElement.classList.contains("text");
     switch (shouldReload(ev, page, editing)) {
@@ -1670,10 +2050,15 @@ if (window.runtime && window.runtime.EventsOn) {
 }
 
 $("agendabtn").onclick = () => openAgenda();
+$("journalsbtn").onclick = () => openJournals();
 
 (async function start() {
   const root = await call(() => api().Root());
   if (root) $("rootpath").textContent = root;
+  const journals = await call(() => api().JournalsRel());
+  if (journals) JOURNALS = journals;
+  const r = await call(() => api().Recent());
+  if (r) recent = r.places || [];
   await refreshIndex();
   await openStartup();
 })();
