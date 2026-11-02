@@ -197,3 +197,17 @@ func TestTheConfigLivesInDotConfig(t *testing.T) {
 		t.Fatalf("TLOG_CONFIG ignored: %q", got)
 	}
 }
+
+func TestFontSizeOutOfRangeFallsBack(t *testing.T) {
+	c := Default()
+	for _, n := range []int{0, 3, 99} {
+		c.App.FontSize = n
+		if c.FontSizePx() != Default().App.FontSize {
+			t.Errorf("%d drew at %d", n, c.FontSizePx())
+		}
+	}
+	c.App.FontSize = 18
+	if c.FontSizePx() != 18 {
+		t.Fatal("an ordinary size was not used")
+	}
+}

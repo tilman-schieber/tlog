@@ -1617,6 +1617,7 @@ function drawSettings(items, note) {
 async function saveSetting(key, value) {
   const res = await call(() => api().SetSetting(key, value));
   if (!res) return openSettings(); // a refused value: show what it really is
+  applyFontSize(res.settings);
   drawSettings(res.settings, res.note ? "Gespeichert — " + res.note : "Gespeichert");
 }
 
@@ -1738,14 +1739,56 @@ const KEYS = [
   { key: "ArrowLeft", mod: true, alt: true, label: "Previous day", run: () => shiftDay(-1) },
   { key: "ArrowRight", mod: true, alt: true, label: "Next day", run: () => shiftDay(1) },
   { key: ",", mod: true, label: "Settings", run: openSettings },
+  // Not ⌘\: on a German or Swiss keyboard the backslash is ⌥⇧7, which this
+  // table could never match.
+  { key: "s", mod: true, shift: true, label: "Show or hide the sidebar", run: toggleSidebar },
   { key: "/", mod: true, label: "Keyboard shortcuts", run: toggleHelp },
   { key: "m", mod: true, shift: true, label: "Messages", run: openLog },
   { key: "p", mod: true, label: "Go to a page", run: () => openPalette() },
 ];
 
+// Searching needs the field, so it brings the sidebar back if it was hidden.
 function focusSearch() {
+  setSidebar(true);
   $("search").focus();
   $("search").select();
+}
+
+// --- the sidebar ------------------------------------------------------------
+//
+// Hiding it gives the outline the whole window. Whether it is hidden is how
+// this window looks rather than anything about the notes, so it is kept in the
+// WebView's own storage, not in the config — and a storage that refuses only
+// means it comes back shown.
+
+function setSidebar(shown) {
+  document.body.classList.toggle("nosidebar", !shown);
+  const btn = $("sidebartoggle");
+  btn.setAttribute("aria-expanded", String(shown));
+  btn.title = (shown ? "Hide" : "Show") + " the sidebar (⌘⇧S)";
+  try {
+    localStorage.setItem("tlog.sidebar", shown ? "shown" : "hidden");
+  } catch {}
+}
+
+function toggleSidebar() {
+  setSidebar(document.body.classList.contains("nosidebar"));
+}
+
+$("sidebartoggle").onclick = toggleSidebar;
+try {
+  if (localStorage.getItem("tlog.sidebar") === "hidden") setSidebar(false);
+} catch {}
+
+// --- the font size ----------------------------------------------------------
+//
+// One setting, app.font_size, described in the core like every other. The
+// stylesheet sizes all text in rem, so setting the root is the whole job.
+
+function applyFontSize(items) {
+  const s = (items || []).find((it) => it.key === "app.font_size");
+  const n = s ? parseInt(s.value, 10) : NaN;
+  if (n > 0) document.documentElement.style.fontSize = n + "px";
 }
 
 // isCycleKey is the chord that steps through the recent pages. Anything else
@@ -2059,6 +2102,7 @@ $("journalsbtn").onclick = () => openJournals();
   if (journals) JOURNALS = journals;
   const r = await call(() => api().Recent());
   if (r) recent = r.places || [];
+  applyFontSize(await call(() => api().Settings()));
   await refreshIndex();
   await openStartup();
 })();

@@ -29,6 +29,7 @@ type Config struct {
 	Deadline    Deadline    `toml:"deadline"`
 	Dates       Dates       `toml:"dates"`
 	Watch       Watch       `toml:"watch"`
+	App         App         `toml:"app"`
 }
 
 // Attachments is the shelf shared with att.
@@ -88,6 +89,30 @@ type Dates struct {
 	EndOfWeek string `toml:"end_of_week"`
 }
 
+// App is how the desktop app draws. The outliner has no say in it: a terminal
+// program uses the terminal's font, at the terminal's size.
+type App struct {
+	// FontSize is the text size in pixels. Everything else in the window is
+	// sized relative to it.
+	FontSize int `toml:"font_size"`
+}
+
+// Font sizes outside this range are refused: smaller is unreadable, larger
+// leaves no room for an outline.
+const (
+	MinFontSize = 10
+	MaxFontSize = 28
+)
+
+// FontSizePx is the font size, falling back to the default rather than drawing
+// a window nobody can read from a value out of range.
+func (c Config) FontSizePx() int {
+	if c.App.FontSize < MinFontSize || c.App.FontSize > MaxFontSize {
+		return Default().App.FontSize
+	}
+	return c.App.FontSize
+}
+
 // Default is what tlog does when nothing says otherwise.
 func Default() Config {
 	return Config{
@@ -99,6 +124,7 @@ func Default() Config {
 		Deadline:    Deadline{Property: "Deadline"},
 		Dates:       Dates{EndOfWeek: "friday"},
 		Watch:       Watch{Enabled: true, Interval: "1s"},
+		App:         App{FontSize: 14},
 	}
 }
 
@@ -309,6 +335,12 @@ func (c Config) render() string {
 # What "eow" means when typed after /deadline. A week ends when the work
 # does, for most people, which is why this is friday rather than sunday.
 `)
-	fmt.Fprintf(&b, "end_of_week = %q\n", c.Dates.EndOfWeek)
+	fmt.Fprintf(&b, "end_of_week = %q\n\n", c.Dates.EndOfWeek)
+
+	b.WriteString(`[app]
+# The text size in the desktop app, in pixels; everything else in the window
+# is sized from it. The outliner uses the terminal's font and ignores this.
+`)
+	fmt.Fprintf(&b, "font_size = %d\n", c.App.FontSize)
 	return b.String()
 }

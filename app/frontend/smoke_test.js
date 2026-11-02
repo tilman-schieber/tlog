@@ -107,6 +107,12 @@ const DAYS = [
 const DAY_RELS = [TODAY.rel, YESTERDAY.rel];
 for (let d = 31; DAY_RELS.length < 20; d--) DAY_RELS.push(`journals/2026-10-${d}.md`);
 
+let settings = [
+  { key: "notes", value: "~/notes", kind: "text", hint: "where the notes live", source: "config" },
+  { key: "git.autocommit", value: "true", kind: "bool", hint: "commit as you write", source: "config" },
+  { key: "app.font_size", value: "16", kind: "text", hint: "text size in the app", source: "config" },
+];
+
 const opened = [];
 const visited = [];
 const dayCalls = [];
@@ -136,10 +142,11 @@ const API = {
   Due: async () => [{ addr: "a:0@b", rel: "a", page: "Ada Lovelace", offset: 0, hash: "b",
                       text: "follow up", due: "2026-09-26", state: "soon", label: "morgen" }],
   Sync: async () => ({ lastError: "" }),
-  Settings: async () => [
-    { key: "notes", value: "~/notes", kind: "text", hint: "where the notes live", source: "config" },
-    { key: "git.autocommit", value: "true", kind: "bool", hint: "commit as you write", source: "config" },
-  ],
+  Settings: async () => settings,
+  SetSetting: async (key, value) => {
+    settings = settings.map((s) => (s.key === key ? { ...s, value } : s));
+    return { settings };
+  },
   ConfigPath: async () => "~/.config/tlog/config.toml",
   Commands: async () => [],
   CompletePages: async () => [],
@@ -275,7 +282,7 @@ function ok(label, cond, detail) {
   await w.eval("openSettings()");
   await new Promise((r) => setTimeout(r, 100));
   ok("settings open", $("settings").hidden === false);
-  ok("settings are listed", $("settingslist").querySelectorAll(".setting").length === 2);
+  ok("settings are listed", $("settingslist").querySelectorAll(".setting").length === 3);
   ok("a text setting carries its value",
     $("settingslist").querySelector("input[type=text]").value === "~/notes");
 
@@ -565,6 +572,44 @@ function ok(label, cond, detail) {
   await new Promise((r) => setTimeout(r, 150));
   ok("back returns to the journals page", $("title").textContent === "Journals",
     $("title").textContent);
+
+  // --- the font size ---------------------------------------------------------
+  //
+  // One setting in the core; the stylesheet sizes everything from the root.
+  const rootSize = () => w.document.documentElement.style.fontSize;
+  ok("the window starts at the configured size", rootSize() === "16px", rootSize());
+  await w.eval("openSettings()");
+  await new Promise((r) => setTimeout(r, 80));
+  const sizeField = [...$("settingslist").querySelectorAll(".setting")]
+    .find((el) => el.textContent.includes("app.font_size")).querySelector("input");
+  sizeField.value = "19";
+  sizeField.dispatchEvent(new w.Event("change"));
+  await new Promise((r) => setTimeout(r, 80));
+  ok("changing it applies at once", rootSize() === "19px", rootSize());
+  $("settings").hidden = true;
+  // Every size but the root's own, and the sidebar button's, which is chrome.
+  ok("text is sized from the root", !/font-size:\s*\d+px/.test(
+    fs.readFileSync(path.join(here, "style.css"), "utf8")
+      .replace(/#sidebartoggle \{[^}]*\}/, "")
+      .replace(/^html \{ font-size: 14px; \}$/m, "")));
+
+  // --- the sidebar ----------------------------------------------------------
+  // Asked of the state rather than of getComputedStyle: jsdom does not weigh
+  // selectors by specificity, so `body.nosidebar #sidebar` loses to `#sidebar`
+  // there although it wins in every browser — the same reason the two checks
+  // on the sheets at the top fail under jsdom.
+  const sidebarShown = () => !w.document.body.classList.contains("nosidebar");
+  ok("the sidebar is shown to begin with", sidebarShown());
+  $("sidebartoggle").click();
+  ok("the button hides it", !sidebarShown());
+  ok("and says so", $("sidebartoggle").getAttribute("aria-expanded") === "false");
+  ok("the choice is remembered", w.localStorage.getItem("tlog.sidebar") === "hidden");
+  key({ key: "S", metaKey: true, shiftKey: true });
+  ok("⌘⇧S brings it back", sidebarShown());
+  key({ key: "S", metaKey: true, shiftKey: true });
+  ok("and hides it again", !sidebarShown());
+  key({ key: "k", metaKey: true });
+  ok("searching brings it back, since the field is in it", sidebarShown());
 
   console.log(failures === 0 ? "frontend smoke: all pass" : `frontend smoke: ${failures} FAILURES`);
   process.exit(failures ? 1 : 0);

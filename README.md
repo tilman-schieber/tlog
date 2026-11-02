@@ -163,6 +163,7 @@ Keys, with `⌘/` for the list:
 | `⌘[` `⌘]` | back, forward |
 | `⌥⌘←` `⌥⌘→` | the day before, the day after |
 | `⌘,` | settings |
+| `⌘⇧S` | show or hide the sidebar (also the `◧` button left of the recent pages) |
 | `⌘⇧M` | everything tlog has said |
 | `⌘⇧⏎` | a new block above this one |
 | `⌘⌫` | delete the block and what is under it |
@@ -179,6 +180,10 @@ from the same file, so switching between the two keeps it. Click one to go
 there; `⌘N` (or `ctrl+n`) steps through them like alt-tab, the order holding
 still until you do something else. While a `[[` list is open, `ctrl+n` and
 `ctrl+p` move through that list instead.
+
+The sidebar can be hidden to give the outline the whole window; the window
+remembers whether it was. The text size is the `app.font_size` setting, in
+pixels — in `⌘,`, or `tlog config app.font_size 16` — and applies at once.
 
 The journals page (`⌘J`, the Journals button, or "Journals" in `⌘P`) is the
 outliner's: every day under its own date, edited in place, each edit going to

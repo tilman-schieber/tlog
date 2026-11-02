@@ -153,6 +153,7 @@ func TestBadValuesAreRefusedAndChangeNothing(t *testing.T) {
 		{"startup", "gestern"}, {"git.debounce", "banana"},
 		{"git.autocommit", "vielleicht"}, {"dates.end_of_week", "montag"},
 		{"deadline.property", ""}, {"nope", "x"},
+		{"app.font_size", "huge"}, {"app.font_size", "4"}, {"app.font_size", "60"},
 	} {
 		if _, err := s.SetSetting(c[0], c[1]); err == nil {
 			t.Errorf("%s = %q was accepted", c[0], c[1])
@@ -203,5 +204,26 @@ func TestEverySettingIsDescribed(t *testing.T) {
 		if it.Kind != "bool" && it.Kind != "text" && it.Kind != "duration" {
 			t.Errorf("%s has kind %q", it.Key, it.Kind)
 		}
+	}
+}
+
+// The font size is the app's alone, but it is described and kept like every
+// other setting, so `tlog config` and the outliner can show and change it too.
+func TestFontSizeIsASetting(t *testing.T) {
+	s := cfgSvc(t)
+	if _, err := s.SetSetting("app.font_size", "17px"); err != nil {
+		t.Fatal(err)
+	}
+	if s.Cfg.App.FontSize != 17 {
+		t.Fatalf("got %d", s.Cfg.App.FontSize)
+	}
+	found := false
+	for _, it := range s.Settings() {
+		if it.Key == "app.font_size" {
+			found = it.Value == "17"
+		}
+	}
+	if !found {
+		t.Fatal("the font size is not listed with its value")
 	}
 }

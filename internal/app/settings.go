@@ -75,6 +75,11 @@ func (s *Service) Settings() []Setting {
 			"reading accepts any casing, and due as well", "config"},
 		{"dates.end_of_week", c.Dates.EndOfWeek, "text",
 			"What “eow” means", "friday or sunday", "config"},
+
+		{"app.font_size", strconv.Itoa(c.FontSizePx()), "text",
+			"Text size in the desktop app",
+			fmt.Sprintf("in pixels, %d to %d — the outliner uses the terminal's font",
+				config.MinFontSize, config.MaxFontSize), "config"},
 	}
 }
 
@@ -198,6 +203,13 @@ func setConfigValue(c config.Config, key, v string) (config.Config, error) {
 			return c, fmt.Errorf("%q is not friday or sunday", v)
 		}
 		c.Dates.EndOfWeek = l
+	case "app.font_size":
+		n, err := strconv.Atoi(strings.TrimSuffix(v, "px"))
+		if err != nil || n < config.MinFontSize || n > config.MaxFontSize {
+			return c, fmt.Errorf("%q is not a size from %d to %d",
+				v, config.MinFontSize, config.MaxFontSize)
+		}
+		c.App.FontSize = n
 	default:
 		return c, fmt.Errorf("no such setting: %s", key)
 	}
