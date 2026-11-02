@@ -98,6 +98,11 @@ body.nosidebar #sidebar { display: none; }
 #layout {
   display: flex;
   height: calc(100% - 38px);
+  /* Where a file may be dropped. app.js asks Wails for drops on a drop target
+     only, and without this property nothing was one: every drop on the window
+     was thrown away without a word. It is inherited, so all of the window
+     below the title bar takes a drop. */
+  --wails-drop-target: drop;
 }
 
 /* --- sidebar ------------------------------------------------------------- */

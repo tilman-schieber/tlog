@@ -361,6 +361,17 @@ for (const probe of [
 
 eq("a quote in text is an entity", escapeHTML('say "hi"'), "say &quot;hi&quot;");
 
+// --- dropping files on the window ---------------------------------------------
+//
+// OnFileDrop is asked for drops on a drop target only, and Wails silently
+// discards a drop anywhere else. Nothing was a target, so no drop ever worked.
+{
+  const css = fs.readFileSync(path.join(__dirname, "style.css"), "utf8");
+  const layout = (css.match(/#layout \{[^}]*\}/) || [""])[0];
+  eq("the window is a drop target", /--wails-drop-target:\s*drop/.test(layout), true);
+  eq("drops are asked for on a drop target", /OnFileDrop\([\s\S]*?\}, true\);/.test(src), true);
+}
+
 // --- the journals page, noticing an edit made elsewhere ----------------------
 //
 // Every day is its own file, so a change reloads one day and never the day
