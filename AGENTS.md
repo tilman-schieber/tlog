@@ -29,6 +29,8 @@ internal/attach/     the shelf shared with att
 internal/config/     ~/.config/tlog/config.toml
 internal/dates/      typed shorthand in, ISO out
 internal/graph/      derived view: pages, links, backlinks, search
+internal/fuzzy/      ranking for search, completion and pickers
+internal/watch/      polls for edits made outside tlog
 internal/app/        the core — every semantic operation
 internal/importer/   one-way Logseq conversion
 internal/cli/        adapter
@@ -106,9 +108,13 @@ character silently corrupts what the reader sees.
 
 ## Things deliberately absent
 
-No daemon, no socket, no SQLite, no file watcher, no Neovim plugin, no MCP
+No daemon, no socket, no SQLite, no fsnotify, no Neovim plugin, no MCP
 server yet. Each was considered and cut; `DECISIONS.md` says why. Do not add
 them back without a measured reason.
+
+`internal/watch` is not an exception: it is an in-process stat sweep that runs
+only while the outliner or the app is open, and it asks `store.List` what counts
+as a note. It polls on purpose — see "Watching the files" in `DECISIONS.md`.
 
 The desktop app deliberately has no build step: the frontend is plain
 HTML/CSS/JS served from `app/frontend`, so there is no npm in a Go repo.
