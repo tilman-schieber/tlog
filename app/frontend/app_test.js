@@ -41,6 +41,7 @@ eval(lift("function linkPrefix"));
 eval(lift("function slashAt"));
 eval(lift("function shouldReload"));
 eval(lift("function feedReload"));
+eval(lift("function pastedImage"));
 eval(lift("function refPrefix"));
 
 let failures = 0;
@@ -370,6 +371,34 @@ eq("a quote in text is an entity", escapeHTML('say "hi"'), "say &quot;hi&quot;")
   const layout = (css.match(/#layout \{[^}]*\}/) || [""])[0];
   eq("the window is a drop target", /--wails-drop-target:\s*drop/.test(layout), true);
   eq("drops are asked for on a drop target", /OnFileDrop\([\s\S]*?\}, true\);/.test(src), true);
+}
+
+// --- pictures ----------------------------------------------------------------
+//
+// A file:// picture cannot load in the window; it is asked of the app instead.
+// Any other picture is left alone.
+eq("a picture on the shelf is asked of the app",
+  decorateInline("![shot.png](file:///Users/ada/.att/store/shot%201.png)"),
+  '<img src="/file/Users/ada/.att/store/shot%201.png" alt="shot.png" loading="lazy">');
+eq("a picture on the web is loaded from the web",
+  decorateInline("![logo](https://example.com/logo.png)"),
+  '<img src="https://example.com/logo.png" alt="logo" loading="lazy">');
+eq("a file link that is not a picture stays a link",
+  decorateInline("[report.pdf](file:///Users/ada/.att/store/report.pdf)"),
+  '<span class="link" data-url="file:///Users/ada/.att/store/report.pdf">report.pdf</span>');
+
+// A screenshot is a picture with no text; a copied page brings text along.
+{
+  const shot = { name: "image.png" };
+  const clip = (text, items) => ({ getData: () => text, items });
+  const img = { kind: "file", type: "image/png", getAsFile: () => shot };
+  eq("a screenshot is taken as a picture", pastedImage(clip("", [img])) === shot, true);
+  eq("text pastes as text", pastedImage(clip("hello", [img])), null);
+  eq("no picture, nothing to attach",
+    pastedImage(clip("", [{ kind: "string", type: "text/html" }])), null);
+  eq("a file that is not a picture is not one",
+    pastedImage(clip("", [{ kind: "file", type: "application/pdf", getAsFile: () => shot }])), null);
+  eq("no clipboard, nothing", pastedImage(null), null);
 }
 
 // --- the journals page, noticing an edit made elsewhere ----------------------

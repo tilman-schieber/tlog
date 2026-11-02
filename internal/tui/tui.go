@@ -462,6 +462,19 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
 
+	// A file dropped on the terminal arrives as its path, pasted. Attaching it
+	// is what the drop meant; anything else pasted is text as before.
+	//
+	// Not every terminal brackets what a drop pastes, so a burst of several
+	// characters in one message counts too: typing delivers one at a time.
+	burst := msg.Type == tea.KeyRunes && len(msg.Runes) > 1
+	if (msg.Paste || burst) && (m.mode == modeNormal || m.mode == modeInsert) {
+		if files := app.DroppedFiles(string(msg.Runes)); files != nil {
+			m.dropFiles(files)
+			return m, nil
+		}
+	}
+
 	// Completion intercepts navigation keys while it is open.
 	if m.mode == modeInsert && m.comp != nil && m.comp.active {
 		if handled, cmd := m.completionKey(k); handled {

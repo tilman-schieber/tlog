@@ -603,3 +603,28 @@ func TestJournalsPageEditsEachDayOnItsOwn(t *testing.T) {
 		t.Fatal("the first block of a day was indented across the date")
 	}
 }
+
+// A screenshot pasted into a block goes on the shelf and comes back as the
+// link to type there, which the window can then show.
+func TestPasteImageFromTheApp(t *testing.T) {
+	t.Setenv("ATT_DIR", t.TempDir())
+	a := newAPI(t)
+	png := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+	link, err := a.PasteImage(png)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(link, "![screenshot-") || !strings.Contains(link, ".png](file://") {
+		t.Fatalf("link: %q", link)
+	}
+	path := strings.TrimSuffix(strings.SplitN(link, "](file://", 2)[1], ")")
+	if _, ok := onShelf(a.AttachDir(), path); !ok {
+		t.Fatalf("the link does not point at the shelf, so the window could not show it: %s", path)
+	}
+	if _, err := a.PasteImage("not base64!"); err == nil {
+		t.Fatal("garbage was accepted")
+	}
+	if _, err := a.PasteImage("aGVsbG8="); err == nil {
+		t.Fatal("text was stored as a picture")
+	}
+}

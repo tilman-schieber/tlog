@@ -405,7 +405,19 @@ tlog files budget                    # narrowed, fuzzily if nothing contains it
 
 In a note, `/file` offers the shelf. **In the desktop app, drop files on the
 window** — they land on the shelf and their links land in the page you are
-reading. Clicking one opens it in the Finder.
+reading. Clicking one opens it in the Finder. A picture is shown in place —
+the window fetches it from the shelf, and only from the shelf, while the note
+keeps the `file://` link att writes. **Paste a screenshot** (`⌘⌃⇧4`, then `⌘V`
+in a block) and it is saved to the shelf as `screenshot-<date>-<time>.png`,
+its link typed where you pasted.
+
+**In the outliner, drop files on the terminal.** The terminal pastes their
+paths; tlog sees that every part of the paste is an existing file, puts them on
+the shelf and writes their links — at the caret while typing, otherwise as a
+new block below the cursor. Escaped, quoted, `file://` and one-per-line paths
+are all understood. Pasting a path that exists does the same, since a terminal
+cannot tell the two apart; anything else pasted is text. The terminal shows the
+link, not the picture.
 
 The original file is never moved: attaching it to a note should not take it
 away from whatever else refers to it. Images become `![embeds]`, everything

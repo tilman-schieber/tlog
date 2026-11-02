@@ -392,9 +392,14 @@ function decorateInline(text, embeds, cursor) {
   });
 
   // An image before a link, so ![alt](src) is not read as a link.
-  out = out.replace(/!\[([^\[\]]*)\]\(([^()\s]+)\)/g, (_, alt, src) =>
-    hold(`<img src="${src}" alt="${alt}" loading="lazy">`)
-  );
+  //
+  // A file:// picture — what att and a drop write — cannot be loaded into this
+  // window, so it is asked of the app at /file/<path>, which serves the shelf
+  // and nothing else. The note keeps the file:// link.
+  out = out.replace(/!\[([^\[\]]*)\]\(([^()\s]+)\)/g, (_, alt, src) => {
+    const shown = src.startsWith("file://") ? "/file" + src.slice("file://".length) : src;
+    return hold(`<img src="${shown}" alt="${alt}" loading="lazy">`);
+  });
   out = out.replace(/\[([^\[\]]+)\]\(([^()\s]+)\)/g, (_, label, url) =>
     hold(`<span class="link" data-url="${url}">${label}</span>`)
   );
@@ -965,6 +970,19 @@ function wireBlock(el, b, pv) {
 
   el.addEventListener("input", () => updateCompletion(el));
 
+  // A picture on the clipboard — a screenshot — goes on the shelf, and its
+  // link is typed where it was pasted, to be saved with the rest of the text.
+  el.addEventListener("paste", async (e) => {
+    const file = pastedImage(e.clipboardData);
+    if (!file) return; // text pastes as text
+    e.preventDefault();
+    const link = await call(async () => api().PasteImage(await base64Of(file)));
+    if (!link) return;
+    if (document.activeElement !== el) placeCaretAt(el, null);
+    document.execCommand("insertText", false, link);
+    say("Screenshot put on the shelf");
+  });
+
   el.addEventListener("keydown", async (e) => {
     if (completion && handleCompletionKey(e, el)) return;
 
@@ -1078,6 +1096,29 @@ function wireBlock(el, b, pv) {
       hideCompletion();
       el.blur();
     }
+  });
+}
+
+// pastedImage is the picture in a paste, or null. A clipboard with text on it
+// pastes the text: copying an image from a page often brings its text along,
+// and what was meant is then usually the words.
+function pastedImage(cd) {
+  if (!cd || !cd.items) return null;
+  const text = cd.getData ? cd.getData("text/plain") : "";
+  if (text && text.trim()) return null;
+  for (const item of Array.from(cd.items)) {
+    if (item.kind === "file" && /^image\//.test(item.type)) return item.getAsFile();
+  }
+  return null;
+}
+
+// base64Of reads a pasted file as base64, which is how bytes cross into Go.
+function base64Of(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).replace(/^data:[^,]*,/, ""));
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
   });
 }
 

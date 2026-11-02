@@ -37,12 +37,16 @@ func main() {
 	api := &API{svc: svc}
 
 	err = wails.Run(&options.App{
-		Title:         "tlog",
-		Width:         1100,
-		Height:        760,
-		MinWidth:      520,
-		MinHeight:     360,
-		AssetServer:   &assetserver.Options{Assets: ui},
+		Title:     "tlog",
+		Width:     1100,
+		Height:    760,
+		MinWidth:  520,
+		MinHeight: 360,
+		AssetServer: &assetserver.Options{
+			Assets: ui,
+			// Pictures on the shelf, which a file:// link cannot show here.
+			Handler: shelfFiles(svc.AttachDir),
+		},
 		Bind:          []any{api},
 		OnBeforeClose: api.onClose,
 		OnStartup: func(ctx context.Context) {
