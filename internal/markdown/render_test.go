@@ -22,6 +22,11 @@ func TestRoundTripCanonical(t *testing.T) {
 		"front":        "---\ntitle: Foo\n---\n\n- body\n",
 		"mixed":        "---\ntitle: Foo\n---\n\n- a\n  cont\n  k:: v\n  - b ^abc123\n\n- c\n",
 		"empty-bullet": "-\n\n- x\n",
+		// A fence that opens on the bullet line itself must close at its
+		// marker, not run on and swallow the blocks after it.
+		"fence-on-bullet":        "- ```\n  a@b\n  ```\n\n- after\n",
+		"fence-on-nested-bullet": "- Bachelor\n  - ```sh\n    - not a bullet\n    ```\n  - sibling\n\n- Master\n",
+		"inline-triple-backtick": "- ```x``` inline\n\n- after\n",
 	}
 	for name, src := range cases {
 		t.Run(name, func(t *testing.T) {

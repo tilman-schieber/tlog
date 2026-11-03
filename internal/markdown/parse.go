@@ -191,8 +191,22 @@ func (p *parser) startBlock(col int, content string, ln srcLine) {
 	p.stack = append(p.stack, stackEntry{col: col, block: b})
 	p.cur = b
 	p.curCont = nil
-	p.curFence = false
+	// A fence can open on the bullet line itself. Missing it here once made
+	// the closing marker read as an opening one, and the block swallowed the
+	// rest of the file.
+	p.curFence = opensFence(content)
 	p.pending = nil
+}
+
+// opensFence reports whether the first line of a block opens a code fence that
+// is still open at its end. Three backticks that close again on the same line
+// are inline code, not a fence.
+func opensFence(line string) bool {
+	m := fenceRe.FindString(line)
+	if m == "" {
+		return false
+	}
+	return !strings.Contains(line[len(m):], m)
 }
 
 // closeTo pops the stack until the top entry is a strict ancestor of a bullet

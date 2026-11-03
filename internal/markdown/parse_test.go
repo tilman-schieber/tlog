@@ -65,6 +65,35 @@ func TestParseCodeFence(t *testing.T) {
 	}
 }
 
+// A fence can open on the bullet line itself. It used to be missed there, so
+// its closing marker was read as an opening one and the block swallowed
+// everything after it, to the end of the file.
+func TestParseFenceOpenedOnTheBulletLine(t *testing.T) {
+	src := "- Bachelor\n  - ```\n    a@b\n    - not a bullet\n    ```\n  - sibling\n\n- Master\n"
+	doc := parseOne(t, src)
+	if len(doc.Blocks) != 2 || doc.Blocks[1].Text != "Master" {
+		t.Fatalf("fence swallowed structure: %d top-level blocks", len(doc.Blocks))
+	}
+	kids := doc.Blocks[0].Children
+	if len(kids) != 2 || kids[1].Text != "sibling" {
+		t.Fatalf("children: %d", len(kids))
+	}
+	if want := "```\na@b\n- not a bullet\n```"; kids[0].Text != want {
+		t.Fatalf("fence text:\ngot  %q\nwant %q", kids[0].Text, want)
+	}
+	if len(kids[0].Children) != 0 {
+		t.Fatal("fence content became children")
+	}
+}
+
+// Three backticks that close on the same line are inline code, not a fence.
+func TestInlineTripleBackticksOnTheBulletLineAreNotAFence(t *testing.T) {
+	doc := parseOne(t, "- ```x``` inline\n- after\n")
+	if len(doc.Blocks) != 2 {
+		t.Fatalf("got %d top-level blocks", len(doc.Blocks))
+	}
+}
+
 func TestParseProperties(t *testing.T) {
 	doc := parseOne(t, `- a task
   status:: doing
