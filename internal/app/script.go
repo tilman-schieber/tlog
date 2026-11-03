@@ -27,6 +27,9 @@ type LinkView struct {
 	// For a url or a file: what opening it would open, or why it cannot be.
 	Resolved string `json:"resolved,omitempty"`
 	Error    string `json:"error,omitempty"`
+	// Plain says a file is plain text, which tlog shows itself instead of
+	// handing it to the desktop.
+	Plain bool `json:"plain,omitempty"`
 }
 
 // Links resolves everything a block points at: [[pages]] to their files,
@@ -70,6 +73,7 @@ func (s *Service) Links(a Addr) ([]LinkView, error) {
 			v.Resolved = resolved
 			if !strings.Contains(resolved, "://") && !strings.HasPrefix(resolved, "mailto:") {
 				v.Kind = "file"
+				v.Plain = readText(resolved) != nil
 			}
 		}
 		out = append(out, v)

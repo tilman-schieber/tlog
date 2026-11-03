@@ -38,6 +38,9 @@ func (m *Model) View() string {
 	if m.mode == modeLog {
 		return m.logView()
 	}
+	if m.mode == modeFile {
+		return m.fileViewString()
+	}
 	if m.mode == modeSettings {
 		return m.settingsView()
 	}

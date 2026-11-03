@@ -140,9 +140,20 @@ func (m *Model) openHit(h linkHit) {
 	m.openLink(h.page)
 }
 
-// openURL hands an address or a file to the desktop: xdg-open, or open on a
-// Mac. The core decides what may be opened and what a relative path means.
+// openURL follows an address or a file. A plain-text file is shown here;
+// anything else goes to the desktop: xdg-open, or open on a Mac. The core
+// decides what may be opened and what a relative path means.
 func (m *Model) openURL(target string) {
+	f, err := m.svc.LinkedText(m.doc.Rel, target)
+	if err != nil {
+		m.errMsg = err.Error()
+		return
+	}
+	if f != nil {
+		m.leave()
+		m.showFile(f)
+		return
+	}
 	if err := m.svc.OpenLink(m.doc.Rel, target); err != nil {
 		m.errMsg = err.Error()
 		return

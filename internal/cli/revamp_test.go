@@ -279,6 +279,39 @@ func TestLinksAreResolved(t *testing.T) {
 	}
 }
 
+func TestLinksSayWhichFilesArePlainText(t *testing.T) {
+	dir := t.TempDir()
+	if code, _, errs := runCLI(t, dir, "add", "see [rules](../assets/rules.md) and ![plot](../assets/plot.png)"); code != 0 {
+		t.Fatal(errs)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{"rules.md": "# Regeln\n", "plot.png": "\x89PNG\x00"} {
+		if err := os.WriteFile(filepath.Join(dir, "assets", name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	code, out, errs := runCLI(t, dir, "links", firstAddr(t, dir, "see"), "-json")
+	if code != 0 {
+		t.Fatalf("%d %s", code, errs)
+	}
+	type link struct {
+		Kind, Target string
+		Plain        bool
+	}
+	got := map[string]bool{}
+	for _, l := range jsonOut[[]link](t, out) {
+		if l.Kind != "file" {
+			t.Errorf("not a file: %+v", l)
+		}
+		got[l.Target] = l.Plain
+	}
+	if !got["../assets/rules.md"] || got["../assets/plot.png"] {
+		t.Fatalf("plain: %v", got)
+	}
+}
+
 func TestUndoFromAScriptGoesThroughGit(t *testing.T) {
 	dir := t.TempDir()
 	if code, _, errs := runCLI(t, dir, "add", "first"); code != 0 {

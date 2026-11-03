@@ -132,3 +132,36 @@ func TestDateChoicesSayWhatTheyMean(t *testing.T) {
 		t.Fatalf("got %+v", got)
 	}
 }
+
+func TestLinkedTextReadsOnlyPlainTextFiles(t *testing.T) {
+	s := newSvc(t)
+	assets := filepath.Join(s.Store.Root, "assets")
+	if err := os.MkdirAll(assets, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name string, data []byte) {
+		if err := os.WriteFile(filepath.Join(assets, name), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("Regeln Übersicht.md", []byte("\xef\xbb\xbf# Regeln\r\nText\r\n"))
+	write("plot.png", []byte("\x89PNG\r\n\x1a\n\x00\x00"))
+	write("latin1.txt", []byte("Gr\xfc\xdfe"))
+	write("big.txt", []byte(strings.Repeat("x", maxTextFile+1)))
+
+	f, err := s.LinkedText("pages/NOA.md", "../assets/Regeln%20%C3%9Cbersicht.md")
+	if err != nil || f == nil {
+		t.Fatalf("the markdown file was not read: %v %v", f, err)
+	}
+	if f.Name != "Regeln Übersicht.md" || f.Lang != "markdown" || f.Text != "# Regeln\nText\n" {
+		t.Fatalf("got %+v", f)
+	}
+	for _, other := range []string{"../assets/plot.png", "../assets/latin1.txt", "../assets/big.txt", "https://go.dev"} {
+		if f, err := s.LinkedText("pages/NOA.md", other); err != nil || f != nil {
+			t.Errorf("%s: got %v, %v; want nothing to show and no error", other, f, err)
+		}
+	}
+	if _, err := s.LinkedText("pages/NOA.md", "../assets/gone.md"); err == nil {
+		t.Error("a link to nothing was not an error")
+	}
+}

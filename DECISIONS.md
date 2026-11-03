@@ -201,6 +201,17 @@ is written in (which is how Logseq's `../assets` links are meant), and hands the
 rest to `xdg-open` or `open` without waiting. The window used to hold its own
 copy of the scheme list; it calls the core now.
 
+**A linked text file is shown, not handed over.** Attaching a long document as
+an `.md` is how a note stays short, and then following the link did nothing:
+the desktop often has no handler for text/markdown, and `xdg-open` starts, finds
+none and says so to nobody. `Service.LinkedText` reads a linked local file when
+it is plain text — valid UTF-8, no NUL byte, at most 2 MiB, whatever the
+extension — and the outliner shows it read-only, headings bold and fences
+highlighted, with `o` to hand it to the desktop after all. It is a viewer and
+not an editor on purpose: an attached file is not a note, has no addresses and
+no compare-and-swap, and editing it belongs to an editor. `tlog links` marks
+such a file `"plain": true`.
+
 **A drop onto the terminal is a paste of paths.** A terminal cannot hand over
 files, only type their names — shell-escaped, quoted or as `file://` addresses,
 depending on the terminal. `app.DroppedFiles` treats a paste as a drop only when

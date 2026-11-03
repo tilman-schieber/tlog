@@ -33,6 +33,7 @@ const (
 	modeSettings
 	modeAgenda
 	modeLog
+	modeFile
 )
 
 type rowKind int
@@ -80,6 +81,7 @@ type Model struct {
 	settings *settings
 	agenda   *agenda
 	log      *logView
+	file     *fileView
 
 	// embeds resolves each block's references by offset, so that a reference
 	// can be drawn as the block it points at rather than as a page name. It is
@@ -460,6 +462,8 @@ func (m *Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.agendaKey(k)
 	case modeLog:
 		return m.logKey(k)
+	case modeFile:
+		return m.fileKey(k)
 	case modeHelp:
 		return m.helpKey(k)
 	default:

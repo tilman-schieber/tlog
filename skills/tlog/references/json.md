@@ -107,6 +107,8 @@ One element of `blocks` above.
    "exists": true, "addr": "pages/Timetable.md:0@…", "text": "the lecture is at nine"},
   {"kind": "url",   "target": "https://go.dev/doc", "resolved": "https://go.dev/doc"},
   {"kind": "file",  "target": "../assets/plan.png", "resolved": "/Users/…/assets/plan.png"},
+  {"kind": "file",  "target": "../assets/rules.md", "resolved": "/Users/…/assets/rules.md",
+   "plain": true},                                                              // plain text: read it with cat
   {"kind": "url",   "target": "ftp://x", "error": "…"}                           // cannot be opened
 ]
 ```

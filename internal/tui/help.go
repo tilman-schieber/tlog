@@ -55,7 +55,7 @@ func (m *Model) helpParts() []helpPart {
 		key("/", "search every block"),
 		key("t  [  ]", "today, the day before, the day after"),
 		key("b", "back to where you came from"),
-		key("g  o", "follow the link in this block: a page, a website, a file"),
+		key("g  o", "follow the link in this block: a page, a website, a file — a text file, such as an attached .md, opens right here"),
 		key("x", "tick the task off, or make the block one"),
 		key("dd", "delete the block and everything under it — git keeps the old version"),
 		key("z  h l", "fold and unfold"),
