@@ -31,7 +31,7 @@ cmd/tlog/            main — the CLI and the outliner
 app/                 the desktop app (Wails): main.go, api.go, frontend/
 internal/markdown/   the dialect: parse, render, structural edits
 internal/store/      the notes directory: paths, CAS writes, git
-internal/attach/     the shelf shared with att
+internal/attach/     attachments: the notes' assets/ folder
 internal/config/     ~/.config/tlog/config.toml
 internal/dates/      typed shorthand in, ISO out
 internal/fuzzy/      ranking strings against a typed prefix; knows nothing of notes
@@ -93,10 +93,12 @@ there and in `internal/config`, never in an adapter.
 compare-and-swap writes and the dialect are settled; `DECISIONS.md` says why. A
 setting for one of them is a supported way to break it.
 
-**Attachments share att's directory and att's format.** `internal/attach`
-restates att's rules because Go forbids importing another module's internal
-packages. If either side's link format changes they must change together, and
-`TestLinkFormat` is what would catch it.
+**Attachments live in the notes.** Pasted pictures and dropped files are
+copied into `assets/` inside the notes directory, committed with the note that
+links them, and linked relatively as `../assets/name`. Their location is not a
+setting, and nothing may write a link to a file outside the notes. The store
+skips `assets/` when listing, so an attached `.md` is never a page.
+`TestLinkFormat` pins the link.
 
 **Dates are stored as ISO, always.** `internal/dates` is forgiving on input and
 strict on output. Anything that cannot be parsed is refused rather than guessed

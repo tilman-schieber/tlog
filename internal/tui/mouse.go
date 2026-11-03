@@ -171,7 +171,7 @@ func (m *Model) pickerMouse(msg tea.MouseMsg) {
 // --- dropping files -----------------------------------------------------------
 
 // dropFiles is what dragging files onto the terminal means. The terminal
-// types their paths; the files go onto the shelf `att` shares, and their links
+// types their paths; the files are copied into the notes' assets/, and their links
 // go where you are — at the caret while writing, as a block of their own after
 // the highlighted one while moving.
 func (m *Model) dropFiles(paths []string) {
@@ -199,7 +199,7 @@ func (m *Model) dropFiles(paths []string) {
 		m.apply(m.svc.AppendBlock(m.doc.Rel, m.doc.Hash, text))
 	}
 	if m.errMsg == "" {
-		m.status = fmt.Sprintf("attached %s — on the shelf in %s", plural(len(added), "file"), m.svc.AttachDir())
+		m.status = fmt.Sprintf("attached %s — copied into %s", plural(len(added), "file"), m.svc.AttachDir())
 	}
 }
 

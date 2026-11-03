@@ -423,3 +423,27 @@ func TestAutoPushRefusedWithoutARemote(t *testing.T) {
 		t.Fatal("auto-push turned on with nowhere to push")
 	}
 }
+
+// An attached markdown file is a file a note links to, not a page.
+func TestListSkipsAssets(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, rel := range []string{"pages/Real.md", "assets/minutes.md"} {
+		p := s.Abs(rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("- x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != filepath.Join("pages", "Real.md") {
+		t.Fatalf("listed %v", got)
+	}
+}

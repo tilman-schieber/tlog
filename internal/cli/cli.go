@@ -27,9 +27,10 @@ usage:
   tlog add -todo [-due d] <t> add an open task, with a deadline; -p for a page
   tlog todo                   every open task, dated first, then the undated ones
   tlog due [-all]             what is dated and still open, soonest first
-  tlog attach [-p page] FILE  put files on the ~/.att shelf and link them here
-  tlog attach -link-only FILE shelve a file and print its link, writing no note
-  tlog files [query] [-links] what is on the shelf, newest first
+  tlog attach [-p page] FILE  copy files into the notes' assets/ and link them here
+  tlog attach -link-only FILE copy a file into assets/ and print its link, no note
+  tlog attach -migrate        bring files linked on the old ~/.att shelf into assets/
+  tlog files [query] [-links] what is attached, newest first
   tlog alias <page> <name>    give a page another name
   tlog config                 the settings; <key> reads one, <key> <value> sets it
   tlog push [-auto on|off]    push the notes now, or set pushing on every commit
@@ -357,9 +358,23 @@ func cmdConfig(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 func cmdAttach(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 	fs := flags("attach", stderr)
 	page := fs.String("p", "", "attach to this page instead of today's journal")
-	only := fs.Bool("link-only", false, "put the file on the shelf and print the link, writing no note")
+	only := fs.Bool("link-only", false, "copy the file into assets/ and print the link, writing no note")
 	asJSON := fs.Bool("json", false, "print what was attached as JSON")
+	migrate := fs.Bool("migrate", false, "copy every file notes link on the old att shelf into assets/ and relink it")
+	from := fs.String("from", "", "with -migrate: the old shelf (default ~/.att/store)")
+	dry := fs.Bool("dry-run", false, "with -migrate: say what would happen, change nothing")
 	if err := parseFlags(fs, args); err != nil {
+		return exitUsage
+	}
+	if *migrate {
+		if fs.NArg() > 0 {
+			fmt.Fprintln(stderr, "tlog attach -migrate: takes no files; it finds them in the notes")
+			return exitUsage
+		}
+		return migrateShelf(stdout, stderr, svc, *from, *dry, *asJSON)
+	}
+	if *from != "" || *dry {
+		fmt.Fprintln(stderr, "tlog attach: -from and -dry-run only go with -migrate")
 		return exitUsage
 	}
 	if fs.NArg() == 0 {
@@ -411,6 +426,44 @@ func cmdAttach(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 	return exitOK
 }
 
+func migrateShelf(stdout, stderr io.Writer, svc *app.Service, from string, dry, asJSON bool) int {
+	m, err := svc.MigrateShelf(from, dry)
+	if !dry {
+		settle(stderr, svc)
+	}
+	if asJSON && m != nil {
+		if eerr := emit(stdout, m); eerr != nil {
+			return fail(stderr, eerr)
+		}
+		if err != nil {
+			return fail(stderr, err)
+		}
+		return exitOK
+	}
+	if m != nil {
+		verb, files := "rewrote", "copied"
+		if dry {
+			verb, files = "would rewrite", "would copy"
+		}
+		for _, c := range m.Copied {
+			if c.Rel != "" {
+				fmt.Fprintf(stdout, "%s → %s\n", c.From, c.Rel)
+			} else {
+				fmt.Fprintf(stdout, "%s\n", c.From)
+			}
+		}
+		for _, x := range m.Missing {
+			fmt.Fprintf(stdout, "not on this machine, left as it is: %s  (%s)\n", x.Target, x.Note)
+		}
+		fmt.Fprintf(stdout, "%s %d files from %s; %s %d links in %d notes\n",
+			files, len(m.Copied), m.From, verb, m.Links, len(m.Notes))
+	}
+	if err != nil {
+		return fail(stderr, err)
+	}
+	return exitOK
+}
+
 func cmdFiles(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 	fs := flags("files", stderr)
 	links := fs.Bool("links", false, "print the Markdown links instead of a table")
@@ -430,7 +483,7 @@ func cmdFiles(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 		return exitOK
 	}
 	if len(items) == 0 {
-		fmt.Fprintf(stdout, "nothing on the shelf at %s\n", svc.AttachDir())
+		fmt.Fprintf(stdout, "nothing attached yet in %s\n", svc.AttachDir())
 		return exitOK
 	}
 	for _, a := range items {

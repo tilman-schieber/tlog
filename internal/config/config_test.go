@@ -81,7 +81,7 @@ func TestTheWrittenFileExplainsItself(t *testing.T) {
 	data, _ := os.ReadFile(Path())
 	text := string(data)
 	for _, must := range []string{
-		"$TLOG_DIR", "$ATT_DIR", "tlog.autopush", "att's rule is that files keep",
+		"$TLOG_DIR", "tlog.autopush", "in assets/, and are committed",
 		"reformats each file", "end_of_week",
 	} {
 		if !strings.Contains(text, must) {
@@ -97,18 +97,13 @@ func TestTheEnvironmentBeatsTheFile(t *testing.T) {
 	at(t)
 	c := Default()
 	c.Notes = "/from/file"
-	c.Attachments.Dir = "/shelf/from/file"
 
 	if got := c.NotesDir(); got != "/from/file" {
 		t.Fatalf("got %q", got)
 	}
 	t.Setenv("TLOG_DIR", "/from/env")
-	t.Setenv("ATT_DIR", "/shelf/from/env")
 	if got := c.NotesDir(); got != "/from/env" {
 		t.Fatalf("notes: %q", got)
-	}
-	if got := c.AttachDir(); got != "/shelf/from/env" {
-		t.Fatalf("attachments: %q", got)
 	}
 }
 
@@ -117,10 +112,6 @@ func TestTildeIsExpanded(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	c := Default()
 	if got := c.NotesDir(); got != filepath.Join(home, "notes") {
-		t.Fatalf("got %q", got)
-	}
-	c.Attachments.Dir = "~"
-	if got := c.AttachDir(); got != home {
 		t.Fatalf("got %q", got)
 	}
 	c.Notes = "/absolute/stays"

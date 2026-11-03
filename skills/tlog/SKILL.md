@@ -82,7 +82,7 @@ tlog block <addr> prop status open               # a Key:: value; no value remov
 tlog block <addr> indent | outdent | up | down | merge | delete
 tlog block <addr> cmd <name> [arg]               # any slash command: tlog commands
 tlog block <addr> ref                            # a durable [[Page#^anchor]] link
-tlog attach -p "Grant" ./report.pdf              # onto the shelf, linked in the page
+tlog attach -p "Grant" ./report.pdf              # into the notes' assets/, linked in the page
 tlog undo [rel]                                  # the last thing tlog committed
 ```
 

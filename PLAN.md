@@ -7,8 +7,8 @@ looked at and left alone.
 
 Quotes, ordered and bulleted lists inside a block, fenced and inline code as
 monospace, syntax highlighting, `csv` fences drawn as tables, pipe tables,
-headings, horizontal rules, images, and linking for bare URLs and the `file://`
-paths `att` writes.
+headings, horizontal rules, images, and linking for bare URLs and `file://`
+paths.
 
 Every one of those is **rendering only**. Nothing about how a file is stored
 changed, so the round-trip invariant never moved and no existing note was

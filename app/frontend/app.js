@@ -229,12 +229,12 @@ function decorate(text, fences, embeds = []) {
   return out.join("");
 }
 
-// imageSrc is where the page fetches a picture from. A file:// address — the
-// way att links everything on the shelf — will not load into a page with an
-// origin of its own, so it is asked of the app at /file/<path>, which serves
-// the shelf and nothing else. The note keeps its file:// link.
+// imageSrc is where the page fetches a picture from. A note links an
+// attachment relative to itself, ../assets/name, which means nothing to a page
+// with an origin of its own, so it is asked of the app at /assets/name, which
+// serves the notes' assets/ and nothing else. The note keeps its link.
 function imageSrc(src) {
-  return src.startsWith("file://") ? "/file" + src.slice("file://".length) : src;
+  return src.startsWith("../assets/") ? src.slice("..".length) : src;
 }
 
 // A ```csv fence is drawn as a table. Pipe tables are miserable to type and
@@ -355,7 +355,7 @@ function decorateInline(text, embeds, cursor) {
     hold(`<span class="link" data-url="${url}">${label}</span>`)
   );
 
-  // A bare URL is a link too, including the file:// ones `att` writes.
+  // A bare URL is a link too, file:// ones included.
   out = out.replace(/(^|\s)((?:https?|file|mailto):[^\s<>]+)/g, (_, pre, url) =>
     pre + hold(`<span class="link" data-url="${url}">${url.replace(/^file:\/\//, "")}</span>`)
   );
@@ -728,8 +728,8 @@ function wireBlock(el, b) {
 
   el.addEventListener("input", () => updateCompletion(el));
 
-  // A picture on the clipboard — a screenshot, most of the time — goes on the
-  // shelf and its link is typed at the caret. Text pastes as text.
+  // A picture on the clipboard — a screenshot, most of the time — is copied into the
+  // notes' assets/ and its link is typed at the caret. Text pastes as text.
   el.addEventListener("paste", async (e) => {
     const file = pastedImage(e.clipboardData);
     if (!file) return;
@@ -966,7 +966,7 @@ async function updateCompletion(el) {
     const cmds = await call(() => api().Commands(slash.name));
     if (cmds && cmds.length) {
       const sel = completion && completion.cmds ? Math.min(completion.sel, cmds.length - 1) : 0;
-      // A file command shows the shelf itself: what you choose between is the
+      // A file command shows the attachments themselves: what you choose between is the
       // attachments, not a menu entry called "attachment".
       if (cmds.length === 1 && cmds[0].arg === "attachment") {
         const files = await call(() => api().Attachments(slash.arg));
@@ -1383,7 +1383,7 @@ function moveCaret(n) {
 async function runCommand() {
   const c = completion;
   if (!c || !c.cmds || !c.cmds.length) return hideCompletion();
-  // When the menu was the shelf or the days, the selection names the file
+  // When the menu was the attachments or the days, the selection names the file
   // or the date and the command is the one that was typed.
   const cmd = c.files || c.dates ? c.cmds[0] : c.cmds[c.sel];
   const arg = c.files
@@ -1904,7 +1904,7 @@ function toggleHelp() {
   box.hidden = false;
 }
 
-// Wails reports a file drop here. The files go on the shared shelf and their
+// Wails reports a file drop here. The files are copied into the notes' assets/ and their
 // links into the page currently open. The drop is reported only when it lands
 // on a drop target, which is what --wails-drop-target in style.css makes the
 // layout; without that rule every drop was discarded without a word.

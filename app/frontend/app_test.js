@@ -309,16 +309,16 @@ eq(
   '{"kind":"ref","prefix":"lect"}'
 );
 
-// --- pictures: shown from the shelf, pasted onto it -------------------------
+// --- pictures: shown from assets/, pasted into it ---------------------------
 
-eq("a picture on the shelf is fetched from the app, not from file://",
-  imageSrc("file:///Users/ada/.att/store/my%20plan.png"),
-  "/file/Users/ada/.att/store/my%20plan.png");
+eq("an attached picture is fetched from the app, not relative to the page",
+  imageSrc("../assets/my%20plan.png"),
+  "/assets/my%20plan.png");
 eq("a picture on the web is left alone",
   imageSrc("https://x.example/p.png"), "https://x.example/p.png");
 eq("the embed in a block goes through the same door",
-  decorateInline("![plan](file:///home/ada/.att/store/plan.png)"),
-  '<img src="/file/home/ada/.att/store/plan.png" alt="plan" loading="lazy">');
+  decorateInline("![plan](../assets/plan.png)"),
+  '<img src="/assets/plan.png" alt="plan" loading="lazy">');
 
 const clip = (items, text = "") => ({
   items: items.map((it) => ({ ...it, getAsFile: () => it })),

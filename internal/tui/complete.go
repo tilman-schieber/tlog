@@ -290,7 +290,7 @@ func (m *Model) slashCompletion() bool {
 		}
 	}
 
-	// A file command shows the shelf itself: what you are choosing between is
+	// A file command shows the attachments themselves: what you are choosing between is
 	// the attachments, not a menu entry called "attachment".
 	if len(cmds) == 1 && cmds[0].TakesAttachment() {
 		found, err := m.svc.Attachments(arg, 8)
@@ -430,7 +430,7 @@ func (m *Model) acceptCompletion() {
 // identically.
 func (m *Model) runCommand() {
 	// The selection indexes the rows shown, which are commands, files on the
-	// shelf or days — not always the commands, of which there may be one.
+	// attachments or days — not always the commands, of which there may be one.
 	if m.comp == nil || len(m.comp.cmds) == 0 || m.edBlock == nil {
 		return
 	}
@@ -440,7 +440,7 @@ func (m *Model) runCommand() {
 	cmd := m.comp.cmds[0]
 	arg := m.comp.arg
 	if m.comp.files != nil {
-		// The menu was the shelf, so the selection names the file.
+		// The menu was the attachments, so the selection names the file.
 		if m.comp.sel < len(m.comp.files) {
 			arg = m.comp.files[m.comp.sel].Name
 		}

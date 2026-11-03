@@ -191,8 +191,6 @@ func TestOutOfRangeSpanIsRefused(t *testing.T) {
 }
 
 func TestSlashFileInsertsTheLink(t *testing.T) {
-	shelf := t.TempDir()
-	t.Setenv("ATT_DIR", shelf)
 	src := filepath.Join(t.TempDir(), "Protokoll.pdf")
 	if err := os.WriteFile(src, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
@@ -206,7 +204,7 @@ func TestSlashFileInsertsTheLink(t *testing.T) {
 	run(t, s, rel, 0, "siehe /file protokoll", "file", "protokoll", 6, 21)
 
 	got := body(t, s, rel)
-	if !strings.Contains(got, "[Protokoll.pdf](file://") {
+	if !strings.Contains(got, "[Protokoll.pdf](../assets/Protokoll.pdf)") {
 		t.Fatalf("no link: %q", got)
 	}
 	if strings.Contains(got, "/file") {
@@ -214,12 +212,11 @@ func TestSlashFileInsertsTheLink(t *testing.T) {
 	}
 }
 
-func TestSlashFileWithNothingOnTheShelfSaysWhereToPutOne(t *testing.T) {
-	t.Setenv("ATT_DIR", t.TempDir())
+func TestSlashFileWithNothingAttachedSaysWhereToPutOne(t *testing.T) {
 	s := newSvc(t)
 	rel, _ := s.AddToday("x")
 	_, err := s.RunCommand(addrOf(t, s, rel, 0), "file", "nope", "x", 1, 1)
-	if err == nil || !strings.Contains(err.Error(), "att drop") {
+	if err == nil || !strings.Contains(err.Error(), "tlog attach") {
 		t.Fatalf("expected a message naming how to put one there, got %v", err)
 	}
 	if got := body(t, s, rel); got != "- x\n" {

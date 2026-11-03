@@ -1,14 +1,12 @@
-// Package attach puts files beside the notes that mention them.
+// Package attach keeps files inside the notes: pasted pictures, dropped
+// documents, anything a note links to. They live in assets/ beside journals/
+// and pages/, so they are committed, pushed and pulled with the notes that
+// mention them, and a copy of the notes directory is a copy of everything.
 //
-// It shares a directory with `att` rather than inventing another one: the same
-// ~/.att/store, the same flat layout with original names, the same collision
-// rule and byte-for-byte the same Markdown link. So `att drop` and `tlog
-// attach` fill one shelf, and a link written by either is understood by both.
-//
-// att's packages are internal to its module and cannot be imported, so the
-// handful of rules that matter are restated here and pinned by tests. They are
-// small and they are not going to move: a file keeps its name, a clash gets a
-// numeric suffix, and nothing is ever overwritten.
+// The rules are few and do not move: a file keeps its name, a clash gets a
+// numeric suffix, nothing is ever overwritten, and the link is relative —
+// ../assets/name — which is right from every note, because notes live exactly
+// one directory down, and which any markdown reader follows.
 package attach
 
 import (
@@ -22,45 +20,35 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/tilman-schieber/tlog/internal/store"
 )
+
+// Dir is the directory inside the notes that holds attachments. The store
+// owns the name, because it is the store that must not mistake one for a note.
+const Dir = store.AssetsDir
 
 // Entry is one stored file.
 type Entry struct {
 	Name    string    `json:"name"`
 	Path    string    `json:"path"`
+	Rel     string    `json:"rel"` // relative to the notes directory, for git
 	Size    int64     `json:"size"`
 	ModTime time.Time `json:"modTime"`
 	Link    string    `json:"link"`
 }
 
-// Store is the attachment directory.
+// Store is the assets directory of one notes directory.
 type Store struct{ Root string }
 
-// DefaultRoot is $ATT_DIR, or ~/.att — exactly where att looks.
-func DefaultRoot() string {
-	if d := os.Getenv("ATT_DIR"); d != "" {
-		return d
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ".att"
-	}
-	return filepath.Join(home, ".att")
-}
-
-// Open returns the shared attachment store. It does not create anything: a
-// missing directory simply means there are no attachments yet.
-func Open(root string) *Store {
-	if root == "" {
-		root = DefaultRoot()
-	}
-	return &Store{Root: root}
-}
+// Open returns the attachments of the notes directory at root. It does not
+// create anything: a missing directory simply means there are none yet.
+func Open(root string) *Store { return &Store{Root: root} }
 
 // Dir is where the files themselves live.
-func (s *Store) Dir() string { return filepath.Join(s.Root, "store") }
+func (s *Store) Dir() string { return filepath.Join(s.Root, Dir) }
 
-// List returns everything on the shelf, newest first, because the thing you
+// List returns every attachment, newest first, because the thing you
 // want to link is almost always the thing you just put there.
 func (s *Store) List() ([]Entry, error) {
 	entries, err := os.ReadDir(s.Dir())
@@ -86,12 +74,13 @@ func (s *Store) List() ([]Entry, error) {
 }
 
 func newEntry(path string, info fs.FileInfo) Entry {
-	e := Entry{Name: filepath.Base(path), Path: path, Size: info.Size(), ModTime: info.ModTime()}
+	name := filepath.Base(path)
+	e := Entry{Name: name, Path: path, Rel: Dir + "/" + name, Size: info.Size(), ModTime: info.ModTime()}
 	e.Link = Link(e)
 	return e
 }
 
-// Add copies a file onto the shelf and returns it. The original is left alone:
+// Add copies a file into the notes and returns it. The original is left alone:
 // attaching a file to a note should not move it out from under whatever else
 // refers to it.
 func (s *Store) Add(src string) (Entry, error) { return s.add(src, filepath.Base(src)) }
@@ -147,7 +136,7 @@ func reserve(dir, name string) (*os.File, string, error) {
 	}
 }
 
-// candidate is att's naming rule: report.pdf, then report-2.pdf, report-3.pdf.
+// candidate is the naming rule: report.pdf, then report-2.pdf, report-3.pdf.
 func candidate(name string, n int) string {
 	if n <= 1 {
 		return name
@@ -172,21 +161,26 @@ var imageExts = map[string]bool{
 
 var labelEscaper = strings.NewReplacer(`\`, `\\`, `[`, `\[`, `]`, `\]`)
 
-// Link renders the Markdown link, byte for byte as att writes it: an image
-// becomes an embed, and the path is percent-encoded by net/url so a space in a
-// filename does not break the link.
+// Link renders the Markdown link a note uses: an image becomes an embed, the
+// path is relative to the note — every note is one directory below the notes
+// root — and percent-encoded, so a space or a bracket in a filename does not
+// break the link.
 func Link(e Entry) string {
-	u := url.URL{Scheme: "file", Path: filepath.ToSlash(e.Path)}
 	prefix := ""
 	if imageExts[strings.ToLower(filepath.Ext(e.Name))] {
 		prefix = "!"
 	}
-	return fmt.Sprintf("%s[%s](%s)", prefix, labelEscaper.Replace(e.Name), u.String())
+	return fmt.Sprintf("%s[%s](%s)", prefix, labelEscaper.Replace(e.Name), Target(e))
+}
+
+// Target is the address part of the link: ../assets/name, percent-encoded.
+func Target(e Entry) string {
+	u := url.URL{Path: "../" + Dir + "/" + e.Name}
+	return u.String()
 }
 
 // Match finds attachments by name: everything containing the query, and if
-// nothing does, everything whose letters appear in order. Same rule as att, so
-// a name that works there works here.
+// nothing does, everything whose letters appear in order.
 func Match(entries []Entry, query string) []Entry {
 	q := strings.ToLower(strings.TrimSpace(query))
 	if q == "" {
@@ -235,8 +229,8 @@ func Human(n int64) string {
 // Options change how a file is taken in.
 type Options struct {
 	// Sanitize tidies the name: "meeting notes (final).pdf" becomes
-	// "meeting-notes-final.pdf". Off unless asked for, because att's rule is
-	// that files keep their names and att writes to this same directory.
+	// "meeting-notes-final.pdf". Off unless asked for: a file keeps the name
+	// it was given.
 	Sanitize bool
 	// Lowercase goes further, and only applies with Sanitize.
 	Lowercase bool

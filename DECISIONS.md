@@ -192,8 +192,8 @@ copy of the scheme list; it calls the core now.
 files, only type their names — shell-escaped, quoted or as `file://` addresses,
 depending on the terminal. `app.DroppedFiles` treats a paste as a drop only when
 every word in it is an existing file, so pasting prose that mentions a path is
-still pasting prose. The files go onto att's shelf through the same
-`Service.Attach` the window's drop uses. Not every terminal brackets a drop, so
+still pasting prose. The files are copied into the notes' `assets/` through
+the same `Service.Attach` the window's drop uses. Not every terminal brackets a drop, so
 several runes arriving in one message count as a paste too — typing delivers
 one at a time — and a path pasted by hand attaches as well, because a terminal
 cannot tell the two apart. Some terminals write one plain path per line, spaces
@@ -254,18 +254,18 @@ two commits, and a window in which the file can move between them and leave half
 the split on disk. `SplitBlock` and `MergeIntoPrevious` take one load and one
 save, so the pair is atomic or it is refused.
 
-**The window serves the shelf to itself, and nothing else.** The page has an
-origin of its own, and WebKit will not load `file://` into it, so an attachment
-linked the way att writes it drew as a broken image. The frontend asks for
-`/file/<path>` and `app/files.go` answers for files inside the shelf only, with
-symlinks resolved on both sides before comparing, so neither `../` nor a link
-out of the shelf reaches the rest of the disk, and under a policy that draws an
-SVG without running it. The note keeps its `file://` link, which att and the
-outliner read; the rewrite happens while drawing.
+**The window serves `assets/` to itself, and nothing else.** The page has an
+origin of its own, so a note's relative `../assets/name` link means nothing to
+it. The frontend asks for `/assets/<name>` and `app/files.go` answers for files
+inside the notes' `assets/` only, with symlinks resolved on both sides before
+comparing, so neither `../` nor a link out of it reaches the notes or the rest
+of the disk, and under a policy that draws an SVG without running it. The note
+keeps its relative link, which the outliner and any markdown reader follow;
+the rewrite happens while drawing.
 
 **A screenshot becomes a file the moment it is pasted.** The clipboard holds
-bytes with no name, and the shelf holds files, so `Service.AttachImage` writes
-the bytes under `screenshot-<date>-<time>` and puts that on the shelf through
+bytes with no name, and `assets/` holds files, so `Service.AttachImage` writes
+the bytes under `screenshot-<date>-<time>` and copies that into `assets/` through
 the same `Attach` everything else uses — same collision rule, same link. The
 kind is read from the bytes rather than the clipboard's claim, anything that is
 not a picture is refused, and a limit of fifty megabytes bounds a stray paste.
@@ -419,22 +419,41 @@ Both are announced rather than left to be discovered.
 
 ## Attachments
 
-**Share att's directory rather than inventing one.** `att` already owns the
-attachment store, it is already live in these notes, and it owns the half of the
-workflow tlog has no business in — a drop folder and a watcher. tlog does the
-other half: shelving a file from inside a note, and finding one again while
-writing.
+**Attachments are part of the notes, in `assets/`.** They used to share att's
+shelf in `~/.att/store`, linked by absolute `file://` address. That broke the
+moment the notes were on a second machine: the notes travelled by git and the
+files did not, and every link named one home directory on one computer. Files
+as truth means the files a note shows are in the same repository as the note.
+So attachments live in `assets/` beside `journals/` and `pages/`, are committed
+with the note that links them, and are pushed and pulled with everything else.
+att is no longer used; nothing about it is kept.
 
-**The rules are restated, not imported.** att's packages are internal to its
-module, so Go forbids importing them. The handful that matter — a file keeps its
-name, a clash gets a numeric suffix, nothing is overwritten, an image becomes an
-embed — are small, unlikely to move, and pinned by tests that were checked
-against att's real output byte for byte, escaped brackets and percent-encoded
-spaces included.
+**The link is relative: `../assets/name`.** Every note is exactly one directory
+below the notes root, so the same link is right from a journal and from a page,
+survives the notes moving to another path or machine, and is what Logseq and
+any markdown reader already follow. It is percent-encoded, so a space or a
+bracket in a filename cannot break it, and an image becomes an embed.
 
-**The original is never moved.** att's `add` copies and so does tlog's:
-attaching a file to a note should not take it away from whatever else refers to
-it.
+**Where attachments go is not a setting.** `attachments.dir` and `$ATT_DIR` are
+gone. A setting for the location would be a supported way to put files back
+outside the repository, which is the thing this decision exists to stop.
+
+**`assets/` is not notes.** The store skips it when listing, so an attached
+markdown file is a file a note links to, never a page.
+
+**The naming rules stayed.** A file keeps its name, a clash gets a numeric
+suffix, nothing is overwritten. They were att's and they were right.
+
+**The original is never moved.** Attaching copies: a file attached to a note
+should not be taken away from whatever else refers to it.
+
+**Old links are brought in once, by request.** `tlog attach -migrate` finds
+every link a note makes into the old shelf, copies each file into `assets/`
+once and rewrites the links, each note through the usual compare-and-swap
+write. A link whose file is not on this machine is reported and left exactly
+as it was, so running it where the files are not is harmless and running it
+twice does nothing; `-dry-run` says what it would do. It is a command and not
+something done on start, because reading never writes.
 
 **A window can be dropped onto, and a terminal cannot.** File drop is the one
 thing the desktop app does that the outliner has no equivalent for, and it is

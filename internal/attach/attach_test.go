@@ -3,7 +3,6 @@ package attach
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
@@ -46,8 +45,7 @@ func TestAddKeepsTheNameAndLeavesTheOriginal(t *testing.T) {
 	}
 }
 
-// att's rule, restated here because att's packages cannot be imported: a clash
-// gets a numeric suffix and nothing is ever overwritten.
+// A clash gets a numeric suffix and nothing is ever overwritten.
 func TestClashesAreSuffixedAndNothingIsOverwritten(t *testing.T) {
 	s := newStore(t)
 	src := t.TempDir()
@@ -76,19 +74,23 @@ func TestNameWithoutExtension(t *testing.T) {
 	}
 }
 
-// The link is what lands in a note, so it has to match att byte for byte.
+// The link is what lands in a note: relative, so it survives the notes moving
+// to another machine or another home directory, and escaped, so an odd
+// filename cannot break it.
 func TestLinkFormat(t *testing.T) {
 	cases := map[string]string{
-		"/a/report.pdf":       "[report.pdf](file:///a/report.pdf)",
-		"/a/shot.png":         "![shot.png](file:///a/shot.png)",
-		"/a/Shot.JPG":         "![Shot.JPG](file:///a/Shot.JPG)",
-		"/a/meeting notes.md": "[meeting notes.md](file:///a/meeting%20notes.md)",
-		"/a/b[c].txt":         `[b\[c\].txt](file:///a/b%5Bc%5D.txt)`,
+		"report.pdf":       "[report.pdf](../assets/report.pdf)",
+		"shot.png":         "![shot.png](../assets/shot.png)",
+		"Shot.JPG":         "![Shot.JPG](../assets/Shot.JPG)",
+		"meeting notes.md": "[meeting notes.md](../assets/meeting%20notes.md)",
+		"b[c].txt":         `[b\[c\].txt](../assets/b%5Bc%5D.txt)`,
+		"a:b.pdf":          "[a:b.pdf](../assets/a:b.pdf)",
+		"Übersicht.pdf":    "[Übersicht.pdf](../assets/%C3%9Cbersicht.pdf)",
 	}
-	for path, want := range cases {
-		got := Link(Entry{Name: filepath.Base(path), Path: path})
+	for name, want := range cases {
+		got := Link(Entry{Name: name})
 		if got != want {
-			t.Errorf("%s\n  got  %s\n  want %s", path, got, want)
+			t.Errorf("%s\n  got  %s\n  want %s", name, got, want)
 		}
 	}
 }
@@ -110,7 +112,7 @@ func TestListIsNewestFirst(t *testing.T) {
 		t.Fatalf("order: %+v", got)
 	}
 	// Every listed entry carries the link that would be written.
-	if !strings.HasPrefix(got[0].Link, "[c.txt](file://") {
+	if got[0].Link != "[c.txt](../assets/c.txt)" || got[0].Rel != "assets/c.txt" {
 		t.Fatalf("link: %q", got[0].Link)
 	}
 }

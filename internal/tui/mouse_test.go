@@ -146,7 +146,6 @@ func TestClickingInThePaletteGoesThere(t *testing.T) {
 
 func dropped(t *testing.T, names ...string) []string {
 	t.Helper()
-	t.Setenv("ATT_DIR", t.TempDir())
 	dir := t.TempDir()
 	var paths []string
 	for _, n := range names {
@@ -172,14 +171,14 @@ func TestDroppingAFileWhileWritingPutsItsLinkAtTheCaret(t *testing.T) {
 	send(t, m, k(tea.KeyEsc))
 
 	got := onDisk(t, m)
-	if !strings.HasPrefix(got, "- see ![plan.png](file://") || !strings.Contains(got, "[my notes.pdf](file://") {
+	if got != "- see ![plan.png](../assets/plan.png) [my notes.pdf](../assets/my%20notes.pdf)\n" {
 		t.Fatalf("got %q", got)
 	}
-	// The files are on the shelf, not merely linked where they lay.
-	shelf := m.svc.AttachDir()
+	// The files are in the notes, not merely linked where they lay.
+	assets := m.svc.AttachDir()
 	for _, n := range []string{"plan.png", "my notes.pdf"} {
-		if _, err := os.Stat(filepath.Join(shelf, n)); err != nil {
-			t.Fatalf("%s is not on the shelf: %v", n, err)
+		if _, err := os.Stat(filepath.Join(assets, n)); err != nil {
+			t.Fatalf("%s is not in assets/: %v", n, err)
 		}
 	}
 	if strings.Contains(got, filepath.Dir(paths[0])) {
@@ -193,7 +192,7 @@ func TestDroppingAFileWhileMovingMakesABlock(t *testing.T) {
 	send(t, m, k(tea.KeyEsc))
 	send(t, m, paste(paths[0]))
 	got := onDisk(t, m)
-	if !strings.HasPrefix(got, "- one\n\n- ![plan.png](file://") || !strings.HasSuffix(got, "\n\n- two\n") {
+	if got != "- one\n\n- ![plan.png](../assets/plan.png)\n\n- two\n" {
 		t.Fatalf("got %q", got)
 	}
 }
@@ -216,7 +215,7 @@ func TestGOpensAnOrdinaryLink(t *testing.T) {
 	}
 }
 
-func TestSlashFileCanPickAnyFileOnTheShelf(t *testing.T) {
+func TestSlashFileCanPickAnyAttachedFile(t *testing.T) {
 	paths := dropped(t, "alpha.pdf", "beta.pdf")
 	m := newModel(t)
 	if _, err := m.svc.Attach(paths...); err != nil {
@@ -264,7 +263,7 @@ func TestADropNobodyBracketedIsStillADrop(t *testing.T) {
 	// of runes; typed by hand it would have come one rune at a time.
 	send(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(paths[0])})
 	got := onDisk(t, m)
-	if !strings.HasPrefix(got, "- one\n\n- ![plan.png](file://") {
+	if got != "- one\n\n- ![plan.png](../assets/plan.png)\n\n- two\n" {
 		t.Fatalf("got %q", got)
 	}
 }

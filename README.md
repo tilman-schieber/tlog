@@ -43,8 +43,8 @@ tlog open "Project Foo"       # print a page's path, creating it if needed
 tlog add "buy milk"           # append a block to today's journal
 tlog add -p "Project Foo" "implement the parser"
 echo "note" | tlog add        # append from a pipe
-tlog attach report.pdf        # onto the shelf, and linked in today's journal
-tlog files                    # what is on the shelf, newest first
+tlog attach report.pdf        # into the notes' assets/, linked in today's journal
+tlog files                    # what is attached, newest first
 tlog due                      # what is dated and still open, soonest first
 tlog import                   # one-time import from a Logseq graph
 tlog push                     # send the notes to their remote
@@ -104,7 +104,7 @@ commands in the palette: `p`, then a few letters of the name.
 hover one to see the address in the footer, click it to open it (`xdg-open`, or
 `open` on a Mac). Click a block to put the caret there, a `▸`/`▾` bullet to
 fold, the box of a task to tick it, and the wheel moves. **Drop files onto the
-terminal** and they go onto the attachment shelf `att` shares, with their links
+terminal** and they are copied into the notes' `assets/`, with their links
 at the caret, or as a block of their own while moving. With the mouse in use,
 hold shift to select text in the terminal.
 
@@ -186,11 +186,11 @@ clicked near it. A checkbox, once there, ticks off on a click.
 Errors stay in the corner until dismissed and are kept in Messages afterwards —
 a push that failed while you were looking elsewhere is still there.
 
-**Pictures.** Drop files on the window and they go onto the shelf, linked in the
-page you are reading. Paste a screenshot (`⌘⌃⇧4` on a Mac) into a block and it
-goes onto the shelf as `screenshot-<date>-<time>.png`, with its link typed at
-the caret; a clipboard with words on it pastes the words. Pictures on the shelf
-are shown in the page. The text size is the `app.font_size` setting, in pixels
+**Pictures.** Drop files on the window and they are copied into `assets/`,
+linked in the page you are reading. Paste a screenshot (`⌘⌃⇧4` on a Mac) into a
+block and it is saved in `assets/` as `screenshot-<date>-<time>.png`, with its
+link typed at the caret; a clipboard with words on it pastes the words.
+Attached pictures are shown in the page. The text size is the `app.font_size` setting, in pixels
 from 10 to 28; the outliner uses the terminal's font and ignores it.
 
 
@@ -200,8 +200,7 @@ tagged pages and linked references below it. `⌘F` searches, `⌘T` jumps to to
 
 Markdown is rendered while you read and raw while you write: the block under the
 caret shows the characters that are actually in the file, everything else is
-drawn. Rendered are links (wiki, markdown, bare URLs and the `file://` ones
-`att` writes), **bold**, *italics*, `inline code`, ~~strikethrough~~, fenced
+drawn. Rendered are links (wiki, markdown, bare URLs and `file://` ones), **bold**, *italics*, `inline code`, ~~strikethrough~~, fenced
 code as a highlighted monospace block, `>` quotations, numbered and bulleted
 lists, tables, headings, rules and images. Clicking a page name follows it, a tag opens the tag
 page, and a web or file link opens in the system.
@@ -275,7 +274,7 @@ is its effect, never a slash.
 | `/deadline fr` | a checkbox and `Deadline:: 2026-09-25` on the block |
 | `/date morgen` | `[[2026-09-25]]` inline, a link to that day's journal |
 | `/quote` `/code` `/table` | a quotation, a code fence, a `csv` table |
-| `/file report` | a link to an attachment, chosen from the shelf |
+| `/file report` | a link to an attachment, chosen from `assets/` |
 | `/page` `/tag` | a `[[link]]` or a `#tag`, where completion takes over |
 | `/prop status offen` | `status:: offen` on the block; no value removes it |
 | `/alias Ada` | another name this page answers to |
@@ -344,7 +343,6 @@ comments are replaced; values are not.
 |---|---|
 | `notes` | where the notes live — `$TLOG_DIR` overrides |
 | `startup` | open today's journal, or whatever was written last |
-| `attachments.dir` | the shelf shared with att — `$ATT_DIR` overrides |
 | `attachments.sanitize` | tidy filenames on the way in |
 | `attachments.lowercase` | …and lowercase them |
 | `git.autocommit` | commit as you write |
@@ -382,40 +380,51 @@ each file the next time that file is written — the content is untouched, but
 the diff will be large.
 
 **On `attachments.sanitize`:** it renames `meeting notes.pdf` to
-`meeting-notes.pdf` on the way in. Off by default, because att's own rule is
-that files keep their names and att writes to the same directory — turning it
-on means the two tools name things differently. Umlauts are kept either way:
+`meeting-notes.pdf` on the way in. Off by default: a file keeps the name it was
+given. Umlauts are kept either way:
 they are valid in filenames, they survive percent-encoding in a link, and
 mangling a German word to look English helps nobody.
 
 ## Attachments
 
-Files live in `~/.att`, shared with [att](https://github.com/tilman-schieber/att)
-rather than in a second place of tlog's own: the same flat store with original
-names, the same collision rule, and byte-for-byte the same Markdown link. So
-`att drop` and `tlog attach` fill one shelf, and a link written by either is
-understood by both.
+Attachments are part of the notes. They live in `assets/` beside `journals/`
+and `pages/`, are committed with the note that links them, and are pushed and
+pulled with everything else — a screenshot pasted on one machine is there on
+the next. A note links one relatively, `![plan.png](../assets/plan.png)`, which
+is right from every note and which any markdown reader follows.
 
 ```sh
-tlog attach report.pdf slides.pptx   # onto the shelf, linked in today's journal
+tlog attach report.pdf slides.pptx   # into assets/, linked in today's journal
 tlog attach -p "Projekt" report.pdf  # ...or on a page
-tlog attach -link-only report.pdf    # shelved, link printed, no note written
-tlog files                           # the shelf, newest first
+tlog attach -link-only report.pdf    # copied, link printed, no note written
+tlog files                           # what is attached, newest first
 tlog files budget                    # narrowed, fuzzily if nothing contains it
 ```
 
-In a note, `/file` offers the shelf. **In the desktop app, drop files on the
-window** — they land on the shelf and their links land in the page you are
-reading. Clicking one opens it in the Finder; a picture is shown in the page,
-and a screenshot pasted into a block goes onto the shelf the same way.
+In a note, `/file` offers what is attached. **Drop files onto the terminal or
+the window** and they are copied into `assets/` with their links where you are;
+a picture is shown in the page, and a screenshot pasted into a block is saved
+the same way.
 
 The original file is never moved: attaching it to a note should not take it
 away from whatever else refers to it. Images become `![embeds]`, everything
-else a plain link, and nothing on the shelf is ever overwritten — a clash gets
-a numeric suffix, `report.pdf` then `report-2.pdf`.
+else a plain link, and nothing is ever overwritten — a clash gets a numeric
+suffix, `report.pdf` then `report-2.pdf`. An attached markdown file is a file,
+not a page.
 
-att is not required. It owns the workflow tlog does not have — a drop folder
-and a watcher — and if it is installed the two simply share a directory.
+**Coming from `~/.att`.** Attachments used to live on att's shelf, linked by
+absolute `file://` address, which only worked on the machine that had the
+files. Run this where the files are, once:
+
+```sh
+tlog attach -migrate -dry-run   # what would be copied and relinked
+tlog attach -migrate            # copy into assets/, rewrite the links, commit
+```
+
+Each linked file is copied once, the links are rewritten to `../assets/…`, and
+links to files this machine does not have are reported and left alone, so it is
+harmless anywhere and does nothing the second time. `-from` names a shelf other
+than `~/.att/store`.
 
 ## Pushing
 

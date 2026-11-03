@@ -42,11 +42,9 @@ func (s *Service) Settings() []Setting {
 		{"startup", c.Startup, "text",
 			"What tlog opens on", "today or last", "config"},
 
-		{"attachments.dir", c.Attachments.Dir, "text",
-			"The shelf, shared with att", "$ATT_DIR overrides this", "config"},
 		{"attachments.sanitize", boolStr(c.Attachments.Sanitize), "bool",
 			"Tidy filenames on the way in",
-			"att leaves names as they are — both write here", "config"},
+			"off: a file keeps its name", "config"},
 		{"attachments.lowercase", boolStr(c.Attachments.Lowercase), "bool",
 			"…and lowercase them", "only has an effect when sanitize is on", "config"},
 
@@ -128,7 +126,7 @@ func (s *Service) ToggleSetting(key string) (string, error) {
 // consequence says what a change does not do immediately.
 func consequence(before, after config.Config) string {
 	switch {
-	case after.Notes != before.Notes || after.Attachments.Dir != before.Attachments.Dir:
+	case after.Notes != before.Notes:
 		return "takes effect at the next start"
 	case after.Format.BlankLines != before.Format.BlankLines:
 		return "files are reformatted the next time they are written"
@@ -148,8 +146,6 @@ func setConfigValue(c config.Config, key, v string) (config.Config, error) {
 			return c, fmt.Errorf("%q is not today or last", v)
 		}
 		c.Startup = l
-	case "attachments.dir":
-		c.Attachments.Dir = v
 	case "attachments.sanitize":
 		b, err := parseBool(v)
 		if err != nil {

@@ -23,7 +23,7 @@ other than `$TLOG_DIR` / `~/notes`.
 | `tlog mentions <query>` | the `@` menu: people first, then days, then pages, then "new person" | `kind`, `name`, `insert`, `detail` |
 | `tlog date [shorthand]` | what typed dates mean: `fri`, `in 3 days`, `12.11`, `eow`; nothing typed gives the usual days | `phrase`, `iso`, `short`, `label`, `state` |
 | `tlog commands` | the slash commands `block … cmd` can run | `name`, `title`, `hint`, `arg` |
-| `tlog files [query] [-links]` | the attachment shelf, newest first | name, size, date; `-links` the markdown links |
+| `tlog files [query] [-links]` | what is attached (the notes' `assets/`), newest first | name, size, date; `-links` the markdown links; `-json` adds `rel` |
 | `tlog config [key]` | every setting, or one | key, value, hint; `-json` the list |
 | `tlog sync` | remote, auto-push, last push error | one line; `-json` `remote`, `autoPush`, `lastError` |
 | `tlog today` | the path of today's journal (does not create it) | a path |
@@ -39,8 +39,9 @@ is the one read-like command that creates the page and prints its path.
 | `tlog add -p <page> <text>` | …at the end of a page, created if needed | as above |
 | `tlog add -todo [-due <d>] [-p page] <text>` | …as an open task, with a deadline when given; an unreadable date is exit 3 and writes nothing | as above |
 | `tlog append <rel> [-if-match <hash>] <text>` | a block at the end of a file by path, refused (4) if the file's hash is not `hash` | the new `addr` |
-| `tlog attach [-p page] FILE…` | copies files onto the shelf (`~/.att`), links them as one block in today's journal or a page | names and sizes, then the file's path |
-| `tlog attach -link-only FILE…` | shelves and prints the links, writes no note | links |
+| `tlog attach [-p page] FILE…` | copies files into the notes' `assets/` (committed with them), links them as `../assets/name` in one block in today's journal or a page | names and sizes, then the file's path |
+| `tlog attach -link-only FILE…` | copies into `assets/` and prints the links, writes no note | links |
+| `tlog attach -migrate [-from dir] [-dry-run]` | copies files that notes link on the old `~/.att/store` shelf into `assets/` and rewrites those links; files missing here are reported and left alone | one line per file, then a summary; `-json` `copied`, `notes`, `links`, `missing` |
 | `tlog alias <page> <name>` | another name for a page, in its frontmatter | a line |
 
 `<text>` may be `-` to read it from standard input; several lines become one

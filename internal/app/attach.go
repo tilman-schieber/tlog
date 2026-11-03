@@ -11,15 +11,15 @@ import (
 	"github.com/tilman-schieber/tlog/internal/attach"
 )
 
-// Attachments are shared with `att`, which is where they already live and
-// which owns the workflow that matters — a drop folder and a watcher. tlog's
-// job is the other half: putting a file on the shelf from inside a note, and
-// finding one again when writing.
+// Attachments live inside the notes, in assets/, so that a picture pasted on
+// one machine is there on the next: they are committed with the note that
+// links them and pushed with everything else.
 
 // AttachView is one stored file, ready to show and to insert.
 type AttachView struct {
 	Name string `json:"name"`
 	Path string `json:"path"`
+	Rel  string `json:"rel"`
 	Size string `json:"size"`
 	Link string `json:"link"`
 	When string `json:"when"`
@@ -29,21 +29,21 @@ func attachView(e attach.Entry) AttachView {
 	return AttachView{
 		Name: e.Name,
 		Path: e.Path,
+		Rel:  e.Rel,
 		Size: attach.Human(e.Size),
 		Link: e.Link,
 		When: e.ModTime.Format("2006-01-02"),
 	}
 }
 
-// AttachDir is where the shared shelf is, shown so it is never a mystery.
-func (s *Service) AttachDir() string { return s.shelf().Dir() }
+// AttachDir is where attachments are kept, shown so it is never a mystery.
+func (s *Service) AttachDir() string { return s.assets().Dir() }
 
-func (s *Service) shelf() *attach.Store { return attach.Open(s.Cfg.AttachDir()) }
+func (s *Service) assets() *attach.Store { return attach.Open(s.Store.Root) }
 
-// Attachments lists the shelf, newest first, narrowed by a query the same way
-// `att find` narrows it.
+// Attachments lists what is attached, newest first, narrowed by a query.
 func (s *Service) Attachments(query string, limit int) ([]AttachView, error) {
-	all, err := s.shelf().List()
+	all, err := s.assets().List()
 	if err != nil {
 		return nil, err
 	}
@@ -58,10 +58,10 @@ func (s *Service) Attachments(query string, limit int) ([]AttachView, error) {
 	return out, nil
 }
 
-// Attach copies files onto the shelf and returns them. The originals are left
-// where they are.
+// Attach copies files into the notes and returns them. The originals are left
+// where they are. Each one is committed like a note, so it travels with them.
 func (s *Service) Attach(paths ...string) ([]AttachView, error) {
-	store := s.shelf()
+	store := s.assets()
 	opt := attach.Options{
 		Sanitize:  s.Cfg.Attachments.Sanitize,
 		Lowercase: s.Cfg.Attachments.Lowercase,
@@ -72,12 +72,13 @@ func (s *Service) Attach(paths ...string) ([]AttachView, error) {
 		if err != nil {
 			return out, fmt.Errorf("%s: %w", p, err)
 		}
+		s.Git.Touch(e.Rel)
 		out = append(out, attachView(e))
 	}
 	return out, nil
 }
 
-// AttachTo copies files onto the shelf and writes their links into a file as
+// AttachTo copies files into the notes and writes their links into a file as
 // one block, which is the whole point: the note and the file arrive together.
 func (s *Service) AttachTo(rel string, paths ...string) ([]AttachView, error) {
 	added, err := s.Attach(paths...)
@@ -99,7 +100,7 @@ func (s *Service) AttachTo(rel string, paths ...string) ([]AttachView, error) {
 
 // MaxImage is the largest picture taken from the clipboard. A screenshot of a
 // large display is a few megabytes; this leaves room to spare while bounding
-// what a stray paste can put on the shelf.
+// what a stray paste can put into the notes.
 const MaxImage = 50 << 20
 
 // imageTypes is what a pasted picture may be, keyed by what its bytes say.
@@ -111,10 +112,10 @@ var imageTypes = map[string]string{
 }
 
 // AttachImage puts a picture that is not a file yet — a screenshot on the
-// clipboard — on the shelf, named for the moment it arrived, and returns it
+// clipboard — into the notes, named for the moment it arrived, and returns it
 // like anything else attached. What it is is read from the bytes rather than
 // taken on trust, so a paste of anything else is refused; two in one second
-// get two names, because the shelf never overwrites.
+// get two names, because nothing is ever overwritten.
 func (s *Service) AttachImage(data []byte, now time.Time) (AttachView, error) {
 	if len(data) == 0 {
 		return AttachView{}, fmt.Errorf("the clipboard holds no picture")
@@ -128,8 +129,8 @@ func (s *Service) AttachImage(data []byte, now time.Time) (AttachView, error) {
 		return AttachView{}, fmt.Errorf("not a picture tlog can show (%s)", kind)
 	}
 
-	// The shelf copies from a path, so the bytes become a file first, under
-	// the name they should have; the copy on the shelf is the one that stays.
+	// Attaching copies from a path, so the bytes become a file first, under
+	// the name they should have; the copy in assets/ is the one that stays.
 	tmp, err := os.MkdirTemp("", "tlog-paste-")
 	if err != nil {
 		return AttachView{}, err

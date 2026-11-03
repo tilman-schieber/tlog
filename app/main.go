@@ -42,17 +42,18 @@ func main() {
 		Height:    760,
 		MinWidth:  520,
 		MinHeight: 360,
-		// Pictures on the shelf are served to the page by the app itself,
-		// because the WebView will not load file:// into it. Nothing else is.
-		AssetServer:   &assetserver.Options{Assets: ui, Handler: shelfFiles(svc.AttachDir)},
+		// Attached pictures are served to the page by the app itself, from
+		// the notes' assets/, because a relative link means nothing to a
+		// page that is not on disk. Nothing else is.
+		AssetServer:   &assetserver.Options{Assets: ui, Handler: assetFiles(svc.AttachDir)},
 		Bind:          []any{api},
 		OnBeforeClose: api.onClose,
 		OnStartup: func(ctx context.Context) {
 			api.ctx = ctx
 			api.startWatching(ctx)
 		},
-		// A window can be dropped onto, which a terminal cannot. Files land on
-		// the shared shelf and their links land in the page being read.
+		// A window can be dropped onto, which a terminal cannot. Files are copied
+		// into the notes' assets/ and their links land in the page being read.
 		DragAndDrop: &options.DragAndDrop{
 			EnableFileDrop:     true,
 			DisableWebViewDrop: true,

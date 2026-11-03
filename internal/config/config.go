@@ -47,12 +47,12 @@ const (
 	DefaultFontSize = 14
 )
 
-// Attachments is the shelf shared with att.
+// Attachments is how files are taken into the notes. Where they go is not a
+// setting: they live in the notes directory's assets/, so that they travel
+// with the notes that link to them. An old config's `dir` is ignored.
 type Attachments struct {
-	Dir string `toml:"dir"`
 	// Sanitize renames a file on the way in: "meeting notes.pdf" becomes
-	// "meeting-notes.pdf". Off by default, because att's rule is that files
-	// keep their names and both tools write to this directory.
+	// "meeting-notes.pdf". Off by default: a file keeps the name it was given.
 	Sanitize bool `toml:"sanitize"`
 	// Lowercase goes further, and only applies when Sanitize is on.
 	Lowercase bool `toml:"lowercase"`
@@ -107,15 +107,14 @@ type Dates struct {
 // Default is what tlog does when nothing says otherwise.
 func Default() Config {
 	return Config{
-		Notes:       "~/notes",
-		Startup:     "today",
-		Attachments: Attachments{Dir: "~/.att"},
-		Git:         Git{AutoCommit: true, Debounce: "30s"},
-		Format:      Format{BlankLines: true},
-		Deadline:    Deadline{Property: "Deadline"},
-		Dates:       Dates{EndOfWeek: "friday"},
-		Watch:       Watch{Enabled: true, Interval: "1s"},
-		App:         App{FontSize: DefaultFontSize},
+		Notes:    "~/notes",
+		Startup:  "today",
+		Git:      Git{AutoCommit: true, Debounce: "30s"},
+		Format:   Format{BlankLines: true},
+		Deadline: Deadline{Property: "Deadline"},
+		Dates:    Dates{EndOfWeek: "friday"},
+		Watch:    Watch{Enabled: true, Interval: "1s"},
+		App:      App{FontSize: DefaultFontSize},
 	}
 }
 
@@ -179,14 +178,6 @@ func (c Config) FontSizePx() int {
 		return DefaultFontSize
 	}
 	return c.App.FontSize
-}
-
-// AttachDir is the shared shelf, after the environment has had its say.
-func (c Config) AttachDir() string {
-	if d := os.Getenv("ATT_DIR"); d != "" {
-		return d
-	}
-	return expand(c.Attachments.Dir)
 }
 
 // DebounceDuration is the commit delay, falling back to the default rather than
@@ -275,14 +266,10 @@ func (c Config) render() string {
 	fmt.Fprintf(&b, "startup = %q\n\n", c.Startup)
 
 	b.WriteString(`[attachments]
-# The shelf, shared with att. $ATT_DIR overrides it.
-`)
-	fmt.Fprintf(&b, "dir = %q\n", c.Attachments.Dir)
-	b.WriteString(`
+# Attached files live in the notes, in assets/, and are committed with them.
+
 # Rename a file on the way in: "meeting notes.pdf" becomes
-# "meeting-notes.pdf". Off by default, because att's rule is that files keep
-# their names and att writes to this same directory — turning this on means
-# the two tools name things differently.
+# "meeting-notes.pdf". Off by default: a file keeps the name it was given.
 `)
 	fmt.Fprintf(&b, "sanitize = %v\n", c.Attachments.Sanitize)
 	b.WriteString("\n# Go further and lowercase the name. Only applies when sanitize is on.\n")

@@ -345,16 +345,16 @@ func (a *API) Due(includeDone bool) ([]tapp.DueItem, error) { return a.svc.Due(i
 
 // --- attachments ------------------------------------------------------------
 
-// AttachDir is the shared shelf, shown so it is never a mystery where a
+// AttachDir is the notes' assets/, shown so it is never a mystery where a
 // dropped file went.
 func (a *API) AttachDir() string { return a.svc.AttachDir() }
 
-// Attachments lists the shelf, narrowed by a query.
+// Attachments lists what is attached, narrowed by a query.
 func (a *API) Attachments(query string) ([]tapp.AttachView, error) {
 	return a.svc.Attachments(query, 12)
 }
 
-// AttachFiles puts files on the shelf and writes their links into a page as one
+// AttachFiles copies files into assets/ and writes their links into a page as one
 // block — what a drag and drop onto the window means.
 func (a *API) AttachFiles(rel string, paths []string) (*Edit, error) {
 	if len(paths) == 0 {
@@ -372,7 +372,7 @@ func (a *API) AttachFiles(rel string, paths []string) (*Edit, error) {
 }
 
 // PasteImage puts a picture from the clipboard — a screenshot, most of the
-// time — on the shelf and returns the link to type at the caret. The bytes
+// time — into assets/ and returns the link to type at the caret. The bytes
 // come base64-encoded because that is how a WebView hands a file across; the
 // core decides whether they are a picture at all.
 func (a *API) PasteImage(b64 string) (string, error) {

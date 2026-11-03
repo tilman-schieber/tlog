@@ -19,6 +19,9 @@ import (
 const (
 	JournalsDir = "journals"
 	PagesDir    = "pages"
+	// AssetsDir holds what notes link to: pictures, PDFs, anything attached.
+	// It is part of the notes, committed and pushed with them.
+	AssetsDir   = "assets"
 	JournalDate = "2006-01-02"
 )
 
@@ -313,6 +316,11 @@ func (s *Store) List() ([]string, error) {
 		}
 		if d.IsDir() {
 			if strings.HasPrefix(d.Name(), ".") && path != s.Root {
+				return filepath.SkipDir
+			}
+			// Attachments are files a note links to, not notes, even when one
+			// of them happens to be markdown.
+			if path == filepath.Join(s.Root, AssetsDir) {
 				return filepath.SkipDir
 			}
 			return nil

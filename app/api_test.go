@@ -358,9 +358,6 @@ func TestMonthIsLaidOutMondayFirst(t *testing.T) {
 // --- attachments ------------------------------------------------------------
 
 func TestAttachFromTheApp(t *testing.T) {
-	shelf := t.TempDir()
-	t.Setenv("ATT_DIR", shelf)
-
 	src := filepath.Join(t.TempDir(), "Quartalsbericht.pdf")
 	if err := os.WriteFile(src, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
@@ -369,13 +366,13 @@ func TestAttachFromTheApp(t *testing.T) {
 	a := newAPI(t)
 	p, _ := a.Today()
 
-	// What a drop on the window means: the file onto the shelf, the link into
+	// What a drop on the window means: the file into assets/, the link into
 	// the page being read.
 	e, err := a.AttachFiles(p.Rel, []string{src})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(e.Page.Blocks) != 1 || !strings.Contains(e.Page.Blocks[0].Text, "file://") {
+	if len(e.Page.Blocks) != 1 || e.Page.Blocks[0].Text != "[Quartalsbericht.pdf](../assets/Quartalsbericht.pdf)" {
 		t.Fatalf("blocks: %+v", e.Page.Blocks)
 	}
 	if !strings.Contains(e.Page.Blocks[0].Text, "Quartalsbericht.pdf") {
@@ -386,9 +383,9 @@ func TestAttachFromTheApp(t *testing.T) {
 	if _, err := os.Stat(src); err != nil {
 		t.Fatalf("the original was moved: %v", err)
 	}
-	// And the shelf is the shared one.
-	if !strings.HasPrefix(a.AttachDir(), shelf) {
-		t.Fatalf("shelf: %q", a.AttachDir())
+	// And the file is in the notes.
+	if _, err := os.Stat(filepath.Join(a.AttachDir(), "Quartalsbericht.pdf")); err != nil || filepath.Base(a.AttachDir()) != "assets" {
+		t.Fatalf("not in the notes' assets/: %q %v", a.AttachDir(), err)
 	}
 
 	found, err := a.Attachments("quartal")
@@ -508,8 +505,6 @@ func blockAt(bs []tapp.BlockView, off int) *tapp.BlockView {
 }
 
 func TestPastingAScreenshotFromTheApp(t *testing.T) {
-	shelf := t.TempDir()
-	t.Setenv("ATT_DIR", shelf)
 	a := newAPI(t)
 
 	var buf bytes.Buffer
@@ -520,12 +515,12 @@ func TestPastingAScreenshotFromTheApp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(link, "![screenshot-") || !strings.Contains(link, "](file://") || !strings.HasSuffix(link, ".png)") {
+	if !strings.HasPrefix(link, "![screenshot-") || !strings.Contains(link, "](../assets/screenshot-") || !strings.HasSuffix(link, ".png)") {
 		t.Fatalf("link: %q", link)
 	}
-	entries, _ := os.ReadDir(filepath.Join(shelf, "store"))
+	entries, _ := os.ReadDir(a.AttachDir())
 	if len(entries) != 1 {
-		t.Fatalf("the shelf holds %d files", len(entries))
+		t.Fatalf("assets/ holds %d files", len(entries))
 	}
 
 	if _, err := a.PasteImage(base64.StdEncoding.EncodeToString([]byte("just words"))); err == nil {

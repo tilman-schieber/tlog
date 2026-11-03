@@ -811,9 +811,7 @@ func TestSlashMenuCanBeDismissed(t *testing.T) {
 	}
 }
 
-func TestSlashFileOffersTheShelf(t *testing.T) {
-	shelf := t.TempDir()
-	t.Setenv("ATT_DIR", shelf)
+func TestSlashFileOffersTheAttachments(t *testing.T) {
 	src := filepath.Join(t.TempDir(), "Quartalsbericht.pdf")
 	if err := os.WriteFile(src, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
@@ -827,7 +825,7 @@ func TestSlashFileOffersTheShelf(t *testing.T) {
 	send(t, m, k(tea.KeyEnter))
 	typeText(t, m, "siehe /file quartal")
 	if m.comp == nil || m.comp.files == nil {
-		t.Fatalf("the shelf was not offered: %+v", m.comp)
+		t.Fatalf("the attachments were not offered: %+v", m.comp)
 	}
 	if !strings.Contains(m.comp.items[0], "Quartalsbericht.pdf") {
 		t.Fatalf("wrong candidate: %q", m.comp.items[0])
@@ -837,7 +835,7 @@ func TestSlashFileOffersTheShelf(t *testing.T) {
 	send(t, m, k(tea.KeyEsc))
 
 	got := onDisk(t, m)
-	if !strings.Contains(got, "[Quartalsbericht.pdf](file://") {
+	if !strings.Contains(got, "[Quartalsbericht.pdf](../assets/Quartalsbericht.pdf)") {
 		t.Fatalf("no link written: %q", got)
 	}
 	if strings.Contains(got, "/file") {
@@ -846,13 +844,12 @@ func TestSlashFileOffersTheShelf(t *testing.T) {
 }
 
 func TestSlashFileWithNoMatchSaysSo(t *testing.T) {
-	t.Setenv("ATT_DIR", t.TempDir())
 	m := newModel(t)
 	typeText(t, m, "/file")
-	// Nothing on the shelf, so the command is offered but has nothing to insert.
+	// Nothing attached, so the command is offered but has nothing to insert.
 	m.comp = &completion{active: true, cmds: []tapp.Command{{Name: "file", Arg: "attachment"}}, sel: 0, start: 0}
 	m.runCommand()
-	if m.errMsg == "" || !strings.Contains(m.errMsg, "att drop") {
+	if m.errMsg == "" || !strings.Contains(m.errMsg, "tlog attach") {
 		t.Fatalf("expected a message naming how to put one there, got %q", m.errMsg)
 	}
 }
