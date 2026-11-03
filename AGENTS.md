@@ -8,10 +8,16 @@ that are designed but not built.
 ## Build and test
 
 ```sh
-just test      # go vet ./... && go test ./...
+just test      # go vet, go test, the frontend's node tests, the widget's test
+just ci        # the same with -race and gofmt, as CI runs it
 just build
 just install   # GOBIN=~/.local/bin go install ./cmd/tlog
 ```
+
+`just test` is not only the Go half: `app/frontend/app_test.js` and
+`omarchy/tests/model_test.js` run too. The frontend smoke test needs `jsdom`
+on `NODE_PATH` and silently skips without it, so a green run without jsdom has
+not exercised the window.
 
 Everything is testable without a terminal. The outliner is driven headlessly by
 sending `tea.KeyMsg` values to `Model.Update` and asserting on what lands on
@@ -28,12 +34,15 @@ internal/store/      the notes directory: paths, CAS writes, git
 internal/attach/     the shelf shared with att
 internal/config/     ~/.config/tlog/config.toml
 internal/dates/      typed shorthand in, ISO out
+internal/fuzzy/      ranking strings against a typed prefix; knows nothing of notes
 internal/graph/      derived view: pages, links, backlinks, search
+internal/watch/      noticing edits made elsewhere: a stat sweep, not fsnotify
 internal/app/        the core — every semantic operation
 internal/importer/   one-way Logseq conversion
-internal/cli/        adapter
+internal/cli/        adapter, and the surface scripts and agents drive
 internal/tui/        adapter
 omarchy/             the Omarchy bar widget (Quickshell), over `tlog todo -json`
+skills/tlog/         the skill that teaches an agent to use the command line
 ```
 
 ## The rules that matter
@@ -43,6 +52,17 @@ including the block mutations (`mutate.go`) and the read model (`view.go`). The
 TUI, the CLI and the desktop app are adapters. If something can be done in one
 of them but not through `app.Service`, that is a bug — it is what makes the tool scriptable and
 agent-addressable, which is the whole point.
+
+**The command line is the agent surface.** `internal/cli` is how a script or
+an agent reaches the core, so it keeps a contract: every read that can be acted
+on carries an address (`rel:offset@hash`), every write takes one and prints the
+one the block ended up at, `-json` exists on everything, empty lists are `[]`,
+flags work on either side of the arguments, `-` reads text from stdin, and the
+exit code says which kind of no it was — 2 not a command or address, 3 that does
+not exist, 4 the file moved since it was read. A new core operation gets a CLI
+form and a test in `internal/cli/revamp_test.go`; `tlog block … cmd <name>`
+already covers a new slash command. `skills/tlog/` documents the contract for
+an agent using tlog; change it when the contract changes.
 
 **Never write without a hash.** `store.Write` takes an `ifMatch` checksum and
 refuses if the file changed. Pass an empty one only for files nothing else could
@@ -107,9 +127,13 @@ character silently corrupts what the reader sees.
 
 ## Things deliberately absent
 
-No daemon, no socket, no SQLite, no file watcher, no Neovim plugin, no MCP
-server yet. Each was considered and cut; `DECISIONS.md` says why. Do not add
-them back without a measured reason.
+No daemon, no socket, no SQLite, no fsnotify, no Neovim plugin, no MCP server.
+Each was considered and cut; `DECISIONS.md` says why. Do not add them back
+without a measured reason. `internal/watch` is not the file watcher that was
+cut: it is a stat sweep that runs in process, only while the outliner or the
+window is open, and nothing runs when they are closed. The command line is the
+agent surface; an MCP server would sit on exactly that and is not built until
+something needs it.
 
 The desktop app deliberately has no build step: the frontend is plain
 HTML/CSS/JS served from `app/frontend`, so there is no npm in a Go repo.

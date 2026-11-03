@@ -32,6 +32,12 @@ ci:
 install:
     GOBIN="$HOME/.local/bin" go install ./cmd/tlog
 
+# Teach Claude Code to drive tlog: link the skill into ~/.claude/skills
+skill-install:
+    mkdir -p "$HOME/.claude/skills"
+    ln -sfn "$(pwd)/skills/tlog" "$HOME/.claude/skills/tlog"
+    @echo "linked ~/.claude/skills/tlog — say 'add a task to my notes' and watch it use tlog"
+
 # One-time: the Wails CLI, needed to build the desktop app.
 # Goes to ~/.local/bin because that is what is on PATH here, not ~/go/bin.
 app-setup:

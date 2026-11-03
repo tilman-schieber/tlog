@@ -557,6 +557,14 @@ reading again would help:
 Nothing here is a special agent mode: `tlog block` is the same `app.Service`
 call the outliner makes when you press Tab.
 
+**For Claude Code there is a skill.** `skills/tlog/` teaches an agent the
+loop above — read for an address, write with it, carry on from the one the
+write printed — together with the exit codes, the JSON shapes and the habits
+that keep notes intact (check a date with `tlog date` before writing it, ask
+`tlog mentions` before writing a name, prefer `done` over `task`). `just
+skill-install` links it into `~/.claude/skills`; the repository's own
+`.claude/skills/tlog` already points at it.
+
 ## Design
 
 The core is the product. The outliner, the CLI and the desktop app are adapters
