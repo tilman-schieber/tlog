@@ -10,22 +10,20 @@ import (
 	"github.com/tilman-schieber/tlog/internal/fuzzy"
 )
 
-// PersonTag is the tag that makes a page a person. It is matched without
-// regard to case, so the "tags: Person" a Logseq import writes and a
-// [[Ada #person]] typed here mean the same thing.
-const PersonTag = "person"
-
-// Mention is one entry in the @ menu: a person, a date, another page, or a
-// person who does not exist yet. Whatever it is, accepting it writes an
-// ordinary link — people are special in how they are found, not in how they
-// are stored.
+// Mention is one entry in the @ menu: a page, a date, or a page that does not
+// exist yet. Whatever it is, accepting it writes an ordinary link. No kind of
+// page is special in how it is found: everything is ranked by how recently and
+// how often it is mentioned, and its tags are shown, so a person and a project
+// with similar names are told apart in the menu rather than by being sorted
+// into different sections.
 type Mention struct {
-	Kind   string `json:"kind"`   // "person", "date", "page" or "new"
-	Name   string `json:"name"`   // the page, or what the date is called
-	Insert string `json:"insert"` // what accepting writes in place of the @…
-	Detail string `json:"detail"` // why it is here: "12 mentions", "Fr 07.11.  in 4 days"
-	ISO    string `json:"iso,omitempty"`
-	State  string `json:"state,omitempty"`
+	Kind   string   `json:"kind"`   // "page", "date" or "new"
+	Name   string   `json:"name"`   // the page, or what the date is called
+	Insert string   `json:"insert"` // what accepting writes in place of the @…
+	Detail string   `json:"detail"` // why it is here: "person · 12 mentions", "Fr 07.11.  in 4 days"
+	Tags   []string `json:"tags,omitempty"`
+	ISO    string   `json:"iso,omitempty"`
+	State  string   `json:"state,omitempty"`
 }
 
 // usage is how much a page is talked about: how often, and when last — the
@@ -141,60 +139,48 @@ func (l *Lookup) rankNames(names []string, query string) []match {
 	return hits
 }
 
-// People is every page tagged as a person.
-func (l *Lookup) People() []string { return l.g.PagesWithTag(PersonTag) }
+// Tagged is every page a tag has been asserted on, by its frontmatter or by a
+// [[Page #tag]] anywhere.
+func (l *Lookup) Tagged(tag string) []string {
+	return l.g.PagesWithTag(strings.TrimPrefix(strings.TrimSpace(tag), "#"))
+}
+
+// People is every page tagged person: the same as Tagged("person"), kept for
+// the callers that ask for exactly that.
+func (l *Lookup) People() []string { return l.Tagged("person") }
 
 // Mentions is the @ menu for what has been typed after the @.
 //
-// People come first, because they are most of what gets mentioned; then the
-// days the typing could mean, so @fri still works; then other pages. A name
-// that starts with what was typed beats a loose match whatever it is, so @noa
-// finds the page NOA before a person whose name merely contains n, o and a.
-// When nobody matches, or a whole name has been typed, the last entry makes a
-// new person: meeting someone and writing them down is the same act. It writes
-// [[Name #person]], which is how the dialect already says what a page is.
+// Every page is a candidate, ranked by how recently and how often it is
+// mentioned: the people and projects written about most come first because
+// they are written about most, not because of what they are. A name that
+// starts with what was typed beats a loose match, an exact name or alias beats
+// both, and the days the typing could mean sit between the strong and the loose
+// matches, so @fri still works. When nothing answers to a whole name, the last
+// entry makes a new page; what it is can be said with a tag inside the link,
+// [[Name #person]], now or whenever.
 func (l *Lookup) Mentions(query string, limit int) []Mention {
 	q := strings.TrimSpace(query)
 
-	people := l.People()
-	isPerson := map[string]bool{}
-	for _, p := range people {
-		isPerson[strings.ToLower(p)] = true
-	}
-	personHits := take(l.rankNames(people, q), 5)
-
-	var pageHits []match
-	if q != "" {
-		var pages []string
-		for _, n := range l.targets() {
-			if !isPerson[strings.ToLower(n)] {
-				pages = append(pages, n)
-			}
-		}
-		pageHits = take(l.rankNames(pages, q), 4)
+	var hits []match
+	if q == "" {
+		hits = take(l.rankNames(l.targets(), ""), 5)
+	} else {
+		hits = take(l.rankNames(l.targets(), q), 8)
 	}
 
-	person := func(m match) Mention {
-		return Mention{Kind: "person", Name: m.name, Insert: "[[" + m.name + "]]", Detail: plural(l.usage(m.name).count, "mention")}
-	}
 	page := func(m match) Mention {
-		return Mention{Kind: "page", Name: m.name, Insert: "[[" + m.name + "]]", Detail: "page"}
+		tags := l.g.PageTags(m.name)
+		detail := plural(l.usage(m.name).count, "mention")
+		if len(tags) > 0 {
+			detail = strings.Join(tags, ", ") + " · " + detail
+		}
+		return Mention{Kind: "page", Name: m.name, Insert: "[[" + m.name + "]]", Detail: detail, Tags: tags}
 	}
 
 	var out []Mention
-	// An exact name first, then strong matches of either kind, people first;
-	// then the days; then the loose matches.
-	if len(pageHits) > 0 && pageHits[0].exact && (len(personHits) == 0 || !personHits[0].exact) {
-		out = append(out, page(pageHits[0]))
-		pageHits = pageHits[1:]
-	}
-	for _, m := range personHits {
-		if m.strong {
-			out = append(out, person(m))
-		}
-	}
-	for _, m := range pageHits {
-		if m.strong {
+	for _, m := range hits {
+		if m.strong || m.exact {
 			out = append(out, page(m))
 		}
 	}
@@ -204,24 +190,19 @@ func (l *Lookup) Mentions(query string, limit int) []Mention {
 			Detail: d.Short + "  " + d.Label, ISO: d.ISO, State: d.State,
 		})
 	}
-	for _, m := range personHits {
-		if !m.strong {
-			out = append(out, person(m))
-		}
-	}
-	for _, m := range pageHits {
-		if !m.strong {
+	for _, m := range hits {
+		if !m.strong && !m.exact {
 			out = append(out, page(m))
 		}
 	}
 	out = take(out, limit)
 
-	strongPerson := len(personHits) > 0 && personHits[0].strong
-	if q != "" && !l.exists(q) && looksLikeAName(q) && (!strongPerson || strings.Contains(q, " ")) {
-		if len(out) >= limit {
-			out = out[:limit-1] // the way to make someone new is never crowded out
+	strong := len(hits) > 0 && (hits[0].strong || hits[0].exact)
+	if q != "" && !l.exists(q) && looksLikeAName(q) && (!strong || strings.Contains(q, " ")) {
+		if len(out) >= limit && limit > 0 {
+			out = out[:limit-1] // the way to make a page is never crowded out
 		}
-		out = append(out, Mention{Kind: "new", Name: q, Insert: "[[" + q + " #" + PersonTag + "]]", Detail: "new person"})
+		out = append(out, Mention{Kind: "new", Name: q, Insert: "[[" + q + "]]", Detail: "new page"})
 	}
 	return out
 }
@@ -252,20 +233,20 @@ func (l *Lookup) exists(name string) bool {
 	return ok
 }
 
-// looksLikeAName keeps "@fri", "@in 3" and a stray "@here" from being offered
-// as people: a name is capitalised or has a space in it, the way names are
-// written.
+// looksLikeAName keeps "@fri", "@in 3 days" and a stray "@here" from being
+// offered as new pages: a name is capitalised or has a space in it, the way
+// names are written, and what reads as a day is a day — unless it is a
+// capitalised name with a space, as "Mai Tran" is somebody. A topic in lower
+// case is still a page; it is written #moodle or [[moodle]].
 func looksLikeAName(s string) bool {
 	r := []rune(s)
 	if len(r) < 2 || !(unicode.IsUpper(r[0]) || strings.Contains(s, " ")) {
 		return false
 	}
-	for _, r := range s {
-		if r >= '0' && r <= '9' {
-			return false
-		}
+	if len(DateChoices(s, 1)) == 0 {
+		return true
 	}
-	return len(DateChoices(s, 1)) == 0 || strings.Contains(s, " ")
+	return strings.Contains(s, " ") && unicode.IsUpper(r[0])
 }
 
 func take[T any](xs []T, n int) []T {
@@ -286,7 +267,7 @@ func plural(n int, unit string) string {
 }
 
 // rankPages is the [[ completion: the same matching as @, over every name a
-// link could point at, so the people and pages you write about come first.
+// link could point at, so the pages you write about come first.
 func (l *Lookup) rankPages(prefix string, limit int) []string {
 	hits := take(l.rankNames(l.targets(), prefix), limitOr(limit))
 	out := make([]string, len(hits))

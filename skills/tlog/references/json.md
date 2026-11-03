@@ -121,14 +121,26 @@ One element of `blocks` above.
 
 ```json
 [
-  {"kind": "person", "name": "Julia Rausenberger", "insert": "[[Julia Rausenberger]]", "detail": "12 mentions"},
-  {"kind": "date",   "name": "friday", "insert": "[[2026-11-06]]", "detail": "Fr 06.11.  in 3 days", "iso": "2026-11-06", "state": "soon"},
-  {"kind": "page",   "name": "Jour fixe", "insert": "[[Jour fixe]]", "detail": "page"},
-  {"kind": "new",    "name": "Jr", "insert": "[[Jr #person]]", "detail": "new person"}
+  {"kind": "page", "name": "Julia Rausenberger", "insert": "[[Julia Rausenberger]]", "detail": "person · 12 mentions", "tags": ["person"]},
+  {"kind": "date", "name": "friday", "insert": "[[2026-11-06]]", "detail": "Fr 06.11.  in 3 days", "iso": "2026-11-06", "state": "soon"},
+  {"kind": "page", "name": "Jour fixe", "insert": "[[Jour fixe]]", "detail": "1 mention"},
+  {"kind": "new",  "name": "Jr Neu", "insert": "[[Jr Neu]]", "detail": "new page"}
 ]
 ```
 
-Write `insert` as given.
+Write `insert` as given. `tags` says what a page is; it is absent when the page
+has none.
+
+## `tag <tag> -json`
+
+```json
+[
+  {"name": "tlog", "rel": "pages/tlog.md", "exists": true, "tags": ["repo", "projekt"]},
+  {"name": "Ada Lovelace", "rel": "pages/Ada Lovelace.md", "exists": false, "tags": ["person"]}
+]
+```
+
+`exists` is false for a page that is only linked, as `[[Ada Lovelace #person]]`.
 
 ## `index -json` and `places -json`
 

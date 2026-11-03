@@ -102,8 +102,9 @@ Names make pages. A misspelt `[[Julia Rausenberg]]` is a new, empty person.
 Ask who is meant before writing a mention:
 
 ```sh
-tlog mentions jr -json     # [{"kind":"person","insert":"[[Julia Rausenberger]]",...}]
-tlog people -json          # everyone tagged #person
+tlog mentions jr -json     # [{"kind":"page","insert":"[[Julia Rausenberger]]","tags":["person"],...}]
+tlog tag person -json      # everyone tagged person; tlog tag repo for repos
+tlog tag repo tlog         # say what a page is (untag takes it back)
 ```
 
 Use the `insert` text as given. A deadline is written as a property the person

@@ -153,19 +153,32 @@ everything older, and a persisted undo log would be a second history to keep
 consistent with the first. Ctrl+Shift+Z cannot be told from Ctrl+Z in a
 terminal, so redo is Ctrl+Y there.
 
-**People are special in how they are found, not in how they are stored.** Most
-links in these notes are to people, and `[[Julia Rausenberger]]` is a lot to type.
-A syntax of their own (`@Julia`) was considered and refused: names have spaces,
-so an `@name` has no clear end, no other tool would read it as a link, and the
-dialect only grows when nothing standard will do. "Is a person" was already data
-— `tags: Person` on the page, or `[[Ada #person]]` anywhere — so `@` became a
-way in rather than a way to store: one menu of people (ranked by how recently
-and how often you mention them, matched on first names, initials and aliases),
-then days, then pages, writing an ordinary `[[link]]` whichever is chosen. A
-name nobody has yet is offered as a new person and written `[[Name #person]]`,
-so meeting someone and writing them down is one act. Offering a new person is
-held back until the typing looks like a name — capitalised, or with a space —
-so a stray `@here` never becomes somebody.
+**No kind of page is special in how it is found.** The @ menu used to put
+people first and offer to make a new name a person, `[[Name #person]]`, because
+"is a person" was the one kind tlog knew. Both were special cases, and they
+grew a second: a project mentioned daily sat below a person mentioned once.
+Now every page is a candidate, ranked by how recently and how often it is
+mentioned — people still come first when they are what you write about, which
+they usually are — and its tags are shown beside it, so a person and a project
+with similar names are told apart in the menu rather than sorted into
+sections. A name nothing answers to is offered as a new page, a plain
+`[[Name]]`; what it is, is said with a tag inside the link (`#` completes tag
+names there) or with `tlog tag`, now or later. A syntax of its own (`@Julia`)
+is still refused: names have spaces, so an `@name` has no clear end, no other
+tool would read it as a link, and `@` stays a way in rather than a way to
+store. Matching on first names, initials and aliases is kept, for every page.
+The offer of a new page is held back until the typing looks like a name —
+capitalised, or with a space — so a stray `@here` never becomes a page; a topic
+in lower case is written `#moodle` or `[[moodle]]`.
+
+**A tag is set on a page by a command too.** `tlog tag <tag> <page>…` and
+`tlog untag` write the page's `tags:` frontmatter through the same
+compare-and-swap as every edit, so a script can say what a page is without
+typing frontmatter. `tlog tag <tag>` lists a tag's pages — `tlog people` is
+`tlog tag person` under the name people look for. Tagging a page that only
+exists as links makes its file, because saying what a page is is a reason to
+have one. Untagging refuses what the frontmatter does not say: a `[[Page #tag]]`
+elsewhere is said in that note and is changed there.
 
 **`[[` closes itself.** Typing the second `[` adds the `]]`, typing `]` steps
 over one, and backspace in an empty pair removes both. Completion replaces what

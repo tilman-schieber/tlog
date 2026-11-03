@@ -422,7 +422,8 @@ func cmdDate(args []string, stdout, stderr io.Writer, _ *app.Service) int {
 	return exitOK
 }
 
-// cmdPeople lists every page tagged as a person.
+// cmdPeople lists every page tagged person. It is `tlog tag person` under the
+// name people look for, and keeps its JSON a plain list of names.
 func cmdPeople(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 	fs := flags("people", stderr)
 	asJSON := fs.Bool("json", false, "print as JSON")
@@ -442,6 +443,70 @@ func cmdPeople(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 	for _, p := range people {
 		fmt.Fprintln(stdout, p)
 	}
+	return exitOK
+}
+
+// cmdTag lists the pages carrying a tag, or, given pages, puts the tag on them.
+func cmdTag(args []string, stdout, stderr io.Writer, svc *app.Service) int {
+	fs := flags("tag", stderr)
+	asJSON := fs.Bool("json", false, "print as JSON")
+	if err := parseFlags(fs, args); err != nil {
+		return exitUsage
+	}
+	if fs.NArg() == 0 {
+		fmt.Fprintln(stderr, "tlog tag: which tag? tlog tag person, or tlog tag repo tlog to tag a page")
+		return exitUsage
+	}
+	tag := fs.Arg(0)
+	if fs.NArg() == 1 {
+		pages, err := svc.Tagged(tag)
+		if err != nil {
+			return fail(stderr, err)
+		}
+		if *asJSON {
+			if err := emit(stdout, pages); err != nil {
+				return fail(stderr, err)
+			}
+			return exitOK
+		}
+		for _, p := range pages {
+			fmt.Fprintln(stdout, p.Name)
+		}
+		return exitOK
+	}
+	return tagPages(stdout, stderr, svc, tag, fs.Args()[1:], svc.Tag, "is tagged")
+}
+
+// cmdUntag takes a tag out of pages' frontmatter.
+func cmdUntag(args []string, stdout, stderr io.Writer, svc *app.Service) int {
+	fs := flags("untag", stderr)
+	if err := parseFlags(fs, args); err != nil {
+		return exitUsage
+	}
+	if fs.NArg() < 2 {
+		fmt.Fprintln(stderr, "tlog untag: which tag, from which pages? tlog untag repo tlog")
+		return exitUsage
+	}
+	return tagPages(stdout, stderr, svc, fs.Arg(0), fs.Args()[1:], svc.Untag, "is no longer tagged")
+}
+
+// tagPages applies a tag operation to each named page. A page is found the way
+// a link finds it, aliases included; one that has never been written is made,
+// because saying what a page is is a reason to have one.
+func tagPages(stdout, stderr io.Writer, svc *app.Service, tag string, pages []string,
+	apply func(rel, tag string) error, done string) int {
+	for _, name := range pages {
+		rel, _, err := svc.ResolvePage(name)
+		if err != nil {
+			return fail(stderr, err)
+		}
+		if err := apply(rel, tag); err != nil {
+			settle(stderr, svc)
+			return fail(stderr, err)
+		}
+		fmt.Fprintf(stdout, "%s %s %s\n", name, done, strings.TrimPrefix(tag, "#"))
+	}
+	settle(stderr, svc)
 	return exitOK
 }
 

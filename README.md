@@ -71,7 +71,7 @@ around with single letters; `enter` picks it back up.
 | `alt+↑` `alt+↓` | move the block and its children |
 | `backspace` | at the start of a block: join it to the one above (an empty one goes) |
 | `↑ ↓ ← →` | move; they run on from one block into the next |
-| `@` | mention someone: people you write about first, then days and pages; a new name makes a new person |
+| `@` | mention a page: the ones you write about most recently first, with their tags, then days; a new name makes a new page |
 | `[[` `((` `/` | link a page (the `]]` closes itself) · block reference · commands like `/todo` |
 | `ctrl+z` `ctrl+y` | undo, redo — typing a word at a time, then each thing written |
 | `esc` | stop writing and move around (saves the block) |
@@ -479,7 +479,9 @@ tags: person, colleague
 ---
 ```
 
-Both are read; neither is required. Tags inside brackets describe the page being
+Both are read; neither is required. From a script, `tlog tag repo tlog` puts
+`repo` into the tlog page's frontmatter, `tlog untag repo tlog` takes it out,
+and `tlog tag repo` lists every page tagged `repo`. Tags inside brackets describe the page being
 linked to, a bare `#tag` in prose is a mention of the tag itself, and only the
 latter shows up as a linked reference — otherwise a tag's page would fill with
 one identical line per page ever typed.
@@ -545,8 +547,8 @@ input, for a block of several lines. Flags go before or after the arguments;
 what follows `--` is never a flag.
 
 The rest of what a person can do has a command too: `tlog date fri` says what
-a shorthand means before it is written; `tlog people` and `tlog mentions jr`
-find who is meant, so a script writes `[[Julia Rausenberger]]` rather than a
+a shorthand means before it is written; `tlog tag person` (or `tlog people`)
+and `tlog mentions jr` find who is meant, so a script writes `[[Julia Rausenberger]]` rather than a
 misspelling that makes a new page; `tlog alias <page> <name>`, `tlog places
 <query>`, `tlog sync`, `tlog config <key>`; and `tlog undo [rel]` takes back
 the last thing tlog committed, through git, refusing if the file has changed

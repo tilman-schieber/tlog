@@ -121,9 +121,9 @@ func (m *Model) refCompletion() bool {
 	return true
 }
 
-// mentionCompletion opens the @ menu when an @ starts a word: the people you
-// write about, then the days the typing could mean, then other pages, and a
-// new person when nobody matches. Whatever is chosen is written as an ordinary
+// mentionCompletion opens the @ menu when an @ starts a word: the pages you
+// write about most, with their tags, the days the typing could mean, and a new
+// page when nothing answers to the name. Whatever is chosen is written as an ordinary
 // link. When nothing could be meant the menu closes and the @ is just a
 // character, so an address like a@b.ch is never interrupted.
 func (m *Model) mentionCompletion() bool {
@@ -147,14 +147,15 @@ func (m *Model) mentionCompletion() bool {
 	return true
 }
 
-// mentionLabels marks each entry with what it is, so a person, a day and a
-// page are told apart before a word of them is read.
+// mentionLabels marks each entry with what it is, so a day, a page and a new
+// page are told apart before a word of them is read; a page's tags are in its
+// detail, so two pages of similar name but different kinds are told apart too.
 func mentionLabels(found []tapp.Mention) []string {
 	items := make([]string, 0, len(found))
 	for _, f := range found {
-		mark := map[string]string{"person": "", "date": "󰃭", "page": "󰈙", "new": "󰐕"}[f.Kind]
+		mark := map[string]string{"date": "󰃭", "page": "󰈙", "new": "󰐕"}[f.Kind]
 		if f.Kind == "new" {
-			items = append(items, mark+" new person: "+f.Name)
+			items = append(items, mark+" new page: "+f.Name)
 			continue
 		}
 		items = append(items, fmt.Sprintf("%s %-24s %s", mark, f.Name, styleMuted.Render(f.Detail)))
@@ -194,7 +195,7 @@ func (m *Model) acceptMention() {
 	m.ed.replaceBefore(len([]rune(m.comp.prefix))+1, f.Insert)
 	m.comp = nil
 	if f.Kind == "new" {
-		m.status = f.Name + " is a person now — their page lists every mention"
+		m.status = "linked " + f.Name + " — type #tag before the ]] to say what it is"
 	}
 }
 

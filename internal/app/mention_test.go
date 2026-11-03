@@ -37,23 +37,26 @@ func peopleService(t *testing.T) *Lookup {
 	return l
 }
 
-func TestMentionsPutPeopleFirstByUse(t *testing.T) {
+func TestMentionsRankEveryPageByUse(t *testing.T) {
 	l := peopleService(t)
 	got := mentionNames(l.Mentions("", 8))
-	if len(got) < 4 || got[0] != "person:Julia Rausenberger" || got[1] != "person:Juliane Reck" {
+	// Julia is written about most and most recently; nothing is first for
+	// being a person.
+	if len(got) < 4 || got[0] != "page:Julia Rausenberger" || got[1] != "page:Juliane Reck" {
 		t.Fatalf("got %v", got)
 	}
 	if !strings.HasPrefix(got[len(got)-1], "date:") {
-		t.Fatalf("the usual days should follow the people: %v", got)
+		t.Fatalf("the usual days should follow the pages: %v", got)
 	}
-	if m := l.Mentions("", 8)[0]; m.Insert != "[[Julia Rausenberger]]" || m.Detail != "2 mentions" {
-		t.Fatalf("got %+v", m)
+	m := l.Mentions("", 8)[0]
+	if m.Insert != "[[Julia Rausenberger]]" || m.Detail != "Person · 2 mentions" || len(m.Tags) != 1 {
+		t.Fatalf("a page's tags are shown beside it: %+v", m)
 	}
 }
 
 func TestMentionsMatchInitialsAndFirstNames(t *testing.T) {
 	l := peopleService(t)
-	for q, want := range map[string]string{"jr": "person:Julia Rausenberger", "oli": "person:Oliver Mülken", "julia": "person:Julia Rausenberger"} {
+	for q, want := range map[string]string{"jr": "page:Julia Rausenberger", "oli": "page:Oliver Mülken", "julia": "page:Julia Rausenberger"} {
 		if got := mentionNames(l.Mentions(q, 8)); len(got) == 0 || got[0] != want {
 			t.Errorf("@%s: %v", q, got)
 		}
@@ -67,6 +70,31 @@ func TestMentionsMatchInitialsAndFirstNames(t *testing.T) {
 	}
 }
 
+// A project mentioned more than a person comes first: what something is shows
+// beside it, it does not decide where it is.
+func TestAProjectMentionedMoreOutranksAPerson(t *testing.T) {
+	s := newSvc(t)
+	if err := s.Store.Write("pages/Tilda Meyer.md", []byte("---\ntags: person\n---\n\n- x\n"), ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Store.Write("pages/tlog.md", []byte("---\ntags: repo\n---\n\n- x\n"), ""); err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range []string{"[[Tilda Meyer]]", "[[tlog]]", "[[tlog]] again"} {
+		if _, err := s.AddToday(line); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l, err := s.Lookup()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := l.Mentions("t", 8)
+	if len(got) < 2 || got[0].Name != "tlog" || got[0].Detail != "repo · 2 mentions" || got[1].Name != "Tilda Meyer" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
 func TestMentionsStillPickDates(t *testing.T) {
 	got := peopleService(t).Mentions("fri", 8)
 	if len(got) != 1 || got[0].Kind != "date" || !strings.HasPrefix(got[0].Insert, "[[20") {
@@ -74,23 +102,33 @@ func TestMentionsStillPickDates(t *testing.T) {
 	}
 }
 
-func TestANewPersonIsOfferedOnlyWhenNobodyIsMeant(t *testing.T) {
+func TestANewPageIsOfferedOnlyWhenNothingIsMeant(t *testing.T) {
 	l := peopleService(t)
-	// Halfway through typing Julia, nobody new is meant.
+	// Halfway through typing Julia, nothing new is meant.
 	for _, m := range l.Mentions("ju", 8) {
 		if m.Kind == "new" {
-			t.Fatalf("@ju offered a new person: %+v", m)
+			t.Fatalf("@ju offered a new page: %+v", m)
 		}
 	}
+	// A whole new name is offered as a plain link: what it is can be said
+	// with a tag inside it, now or later.
 	got := l.Mentions("Maria Muster", 8)
 	last := got[len(got)-1]
-	if last.Kind != "new" || last.Insert != "[[Maria Muster #person]]" {
+	if last.Kind != "new" || last.Insert != "[[Maria Muster]]" || last.Detail != "new page" {
 		t.Fatalf("got %+v", got)
 	}
-	// Someone who exists is not offered again as new.
-	for _, m := range l.Mentions("Oliver Mülken", 8) {
-		if m.Kind == "new" {
-			t.Fatalf("an existing person was offered as new: %+v", m)
+	// What exists is not offered again as new, and a lower-case word or a
+	// day is not a name.
+	for _, q := range []string{"Oliver Mülken", "here", "fri", "in 3 days"} {
+		for _, m := range l.Mentions(q, 8) {
+			if m.Kind == "new" {
+				t.Fatalf("@%s offered a new page: %+v", q, m)
+			}
 		}
+	}
+	// A capitalised name is a name even when it starts like a month.
+	got = l.Mentions("Mai Tran", 8)
+	if got[len(got)-1].Kind != "new" {
+		t.Fatalf("@Mai Tran: %+v", got)
 	}
 }

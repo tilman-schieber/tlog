@@ -1833,22 +1833,22 @@ func TestAtFindsAPersonByFirstNameOrInitials(t *testing.T) {
 	}
 }
 
-func TestAtMakesANewPersonAndRemembersThem(t *testing.T) {
+func TestAtMakesANewPageAndRemembersIt(t *testing.T) {
 	m := newModel(t)
 	typeText(t, m, "met @Maria Muster")
 	last := m.comp.mentions[len(m.comp.mentions)-1]
 	if last.Kind != "new" {
-		t.Fatalf("no new person offered: %+v", m.comp.mentions)
+		t.Fatalf("no new page offered: %+v", m.comp.mentions)
 	}
 	m.comp.sel = len(m.comp.mentions) - 1
 	send(t, m, k(tea.KeyEnter), k(tea.KeyEnter)) // accept, then a new block
 	// The next @ already knows her: the save dropped the old snapshot.
 	typeText(t, m, "@mar")
-	if m.comp == nil || len(m.comp.mentions) == 0 || m.comp.mentions[0].Name != "Maria Muster" || m.comp.mentions[0].Kind != "person" {
-		t.Fatalf("the new person was not offered next time: %+v", m.comp)
+	if m.comp == nil || len(m.comp.mentions) == 0 || m.comp.mentions[0].Name != "Maria Muster" || m.comp.mentions[0].Kind != "page" {
+		t.Fatalf("the new page was not offered next time: %+v", m.comp)
 	}
 	send(t, m, k(tea.KeyEsc), k(tea.KeyEsc))
-	if got := onDisk(t, m); !strings.HasPrefix(got, "- met [[Maria Muster #person]]\n") {
+	if got := onDisk(t, m); !strings.HasPrefix(got, "- met [[Maria Muster]]\n") {
 		t.Fatalf("got %q", got)
 	}
 }

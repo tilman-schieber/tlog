@@ -1046,11 +1046,11 @@ function drawCompletion() {
   if (completion.mentions) {
     const list = document.createElement("div");
     list.className = "cmds mentions";
-    const mark = { person: "@", date: "◷", page: "▤", new: "+" };
+    const mark = { date: "◷", page: "▤", new: "+" };
     completion.mentions.forEach((m, i) => {
       const item = document.createElement("div");
       item.className = "item kind-" + m.kind + (i === completion.sel ? " sel" : "");
-      const name = m.kind === "new" ? "new person: " + m.name : m.name;
+      const name = m.kind === "new" ? "new page: " + m.name : m.name;
       item.innerHTML =
         `<span class="mark">${mark[m.kind] || ""}</span><b>${escapeHTML(name)}</b>` +
         `<span class="hint${m.state ? " t-" + escapeHTML(m.state) : ""}"> ${escapeHTML(m.detail)}</span>`;
@@ -1310,7 +1310,7 @@ async function moveDateCalendar() {
 }
 
 // moveMentionCalendar redraws the @ menu, with a calendar when the chosen
-// entry is a day and without one when it is a person or a page.
+// entry is a day and without one when it is a page.
 async function moveMentionCalendar() {
   const c = completion;
   const m = c.mentions[c.sel];
@@ -1323,9 +1323,9 @@ async function moveMentionCalendar() {
   drawCompletion();
 }
 
-// acceptMention writes the chosen person, day or page as an ordinary link in
-// place of the @ and whatever was typed after it. A new person is written as
-// [[Name #person]], which is what makes them one.
+// acceptMention writes the chosen day or page as an ordinary link in place of
+// the @ and whatever was typed after it. A new page is just a link; what it is
+// can be said with a tag inside it.
 function acceptMention() {
   const c = completion;
   const m = c && c.mentions && c.mentions[c.sel];

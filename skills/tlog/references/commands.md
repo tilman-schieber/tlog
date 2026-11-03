@@ -19,8 +19,10 @@ other than `$TLOG_DIR` / `~/notes`.
 | `tlog links <addr>` | what a block points at, resolved | page links with their file, block refs with the target's address and text, urls and files with what would open, or why not |
 | `tlog index` | every journal, page and tag | lines; `-json` places: `kind`, `name`, `rel` |
 | `tlog places [query]` | the same, ranked against a query like the palette does | as `index -json` |
-| `tlog people` | every page tagged `#person` | names |
-| `tlog mentions <query>` | the `@` menu: people first, then days, then pages, then "new person" | `kind`, `name`, `insert`, `detail` |
+| `tlog tag <tag>` | every page carrying a tag, by frontmatter or by `[[Page #tag]]` anywhere; `tlog people` is `tag person` | names; `-json` `name`, `rel`, `exists`, `tags` |
+| `tlog tag <tag> <page>…` | puts the tag into each page's `tags:` frontmatter (a page only ever linked gets a file); twice is harmless | a line per page |
+| `tlog untag <tag> <page>…` | takes it out; refused (3) when the frontmatter does not carry it | a line per page |
+| `tlog mentions <query>` | the `@` menu: every page ranked by use, with its tags, then days, then a "new page" when a name nothing answers to was typed | `kind`, `name`, `insert`, `detail` |
 | `tlog date [shorthand]` | what typed dates mean: `fri`, `in 3 days`, `12.11`, `eow`; nothing typed gives the usual days | `phrase`, `iso`, `short`, `label`, `state` |
 | `tlog commands` | the slash commands `block … cmd` can run | `name`, `title`, `hint`, `arg` |
 | `tlog files [query] [-links]` | what is attached (the notes' `assets/`), newest first | name, size, date; `-links` the markdown links; `-json` adds `rel` |

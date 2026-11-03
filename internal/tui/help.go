@@ -75,10 +75,11 @@ func (m *Model) helpParts() []helpPart {
 		heading("Mentioning"),
 		para("Mention someone or something and it is linked. Everything that mentions a page is listed " +
 			"under it, so going to a person shows every note about them."),
-		key("@", "people first — the ones you write about most recently — then days, then pages. "+
-			"@jr finds Julia Rausenberger, @fri Friday. A name nobody has yet makes a new person"),
+		key("@", "the pages you write about most recently, with their tags, then days. "+
+			"@jr finds Julia Rausenberger, @fri Friday. A name nothing answers to makes a new page"),
 		key("[[", "link any page; the ]] closes itself, and the match is fuzzy"),
-		key("[[Ada #person]]", "link Ada and say she is a person, which is all a person is: @ offers her from then on"),
+		key("[[Ada #person]]", "link Ada and say she is a person — the tag shows beside her in the @ menu"),
+		key("#moodle", "a topic: the block is listed on the moodle page; several at the end of a line read like hashtags"),
 		key("((", "point at one block anywhere, found by a word in it; it is shown as that block's text"),
 
 		heading("Tasks and dates"),

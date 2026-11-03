@@ -44,3 +44,29 @@ func TestAttachMigrate(t *testing.T) {
 		t.Fatalf("page: %q", got)
 	}
 }
+
+func TestTagCommands(t *testing.T) {
+	dir := t.TempDir()
+	if code, _, errs := runCLI(t, dir, "add", "-p", "tlog", "the outliner"); code != 0 {
+		t.Fatal(errs)
+	}
+	if code, out, errs := runCLI(t, dir, "tag", "repo", "tlog"); code != 0 || !strings.Contains(out, "tlog is tagged repo") {
+		t.Fatalf("tag: %d %q %q", code, out, errs)
+	}
+	if code, out, _ := runCLI(t, dir, "tag", "repo"); code != 0 || strings.TrimSpace(out) != "tlog" {
+		t.Fatalf("list: %d %q", code, out)
+	}
+	code, out, _ := runCLI(t, dir, "tag", "repo", "-json")
+	if code != 0 || !strings.Contains(out, `"rel": "pages/tlog.md"`) {
+		t.Fatalf("json: %d %q", code, out)
+	}
+	if code, _, _ := runCLI(t, dir, "untag", "repo", "tlog"); code != 0 {
+		t.Fatal("untag failed")
+	}
+	if code, _, _ := runCLI(t, dir, "untag", "repo", "tlog"); code != exitRefused {
+		t.Fatalf("untagging what is not there: exit %d", code)
+	}
+	if code, _, _ := runCLI(t, dir, "tag"); code != exitUsage {
+		t.Fatal("no tag should be a usage error")
+	}
+}

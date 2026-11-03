@@ -50,7 +50,9 @@ for scripts and agents (every one takes -json; writes print the new address):
   tlog index                  every journal, page and tag; -json gives paths
   tlog places [query]         the same, ranked against a query
   tlog date [shorthand]       what a typed date means before writing it
-  tlog people                 every page tagged #person
+  tlog tag <tag>              every page tagged <tag>; tlog people is tag person
+  tlog tag <tag> <page>…      put a tag in pages' frontmatter
+  tlog untag <tag> <page>…    take it out again
   tlog mentions <query>       who or what a few letters could mean
   tlog commands               the slash commands, for: tlog block <addr> cmd
   tlog undo [rel]             take back the last thing tlog committed
@@ -111,7 +113,7 @@ func Main(args []string, stdout, stderr io.Writer) int {
 		"due": cmdDue, "attach": cmdAttach, "config": cmdConfig, "files": cmdFiles,
 		"search": cmdSearch, "view": cmdView, "index": cmdIndex, "block": cmdBlock,
 		"alias": cmdAlias, "commands": cmdCommands, "date": cmdDate, "people": cmdPeople,
-		"mentions": cmdMentions, "links": cmdLinks, "undo": cmdUndo, "append": cmdAppend,
+		"mentions": cmdMentions, "tag": cmdTag, "untag": cmdUntag, "links": cmdLinks, "undo": cmdUndo, "append": cmdAppend,
 		"sync": cmdSync, "places": cmdPlaces,
 	}
 
