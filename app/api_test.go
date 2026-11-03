@@ -530,3 +530,38 @@ func TestPastingAScreenshotFromTheApp(t *testing.T) {
 		t.Fatal("garbage was accepted")
 	}
 }
+
+func TestALinkedTextFileIsShownNotHandedOver(t *testing.T) {
+	a := newAPI(t)
+	p, _ := a.Today()
+	var launched []string
+	a.svc.Launch = func(target string) error { launched = append(launched, target); return nil }
+
+	dir := filepath.Join(a.Root(), "assets")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{"Regeln.md": "# Regeln\n", "run.py": "def f(): pass\n", "plot.png": "\x89PNG\x00"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Relative to the note it is written in, as the outliner resolves it.
+	f, err := a.OpenURL(p.Rel, "../assets/Regeln.md")
+	if err != nil || f == nil || f.Name != "Regeln.md" || f.Text != "# Regeln\n" || len(f.Tokens) != 0 {
+		t.Fatalf("markdown: %+v %v", f, err)
+	}
+	if f, err := a.OpenURL(p.Rel, "../assets/run.py"); err != nil || f == nil || len(f.Tokens) == 0 {
+		t.Fatalf("code should come with its colours: %+v %v", f, err)
+	}
+	if len(launched) != 0 {
+		t.Fatalf("a text file went to the desktop: %v", launched)
+	}
+	if f, err := a.OpenURL(p.Rel, "../assets/plot.png"); err != nil || f != nil || len(launched) != 1 {
+		t.Fatalf("a picture should go to the desktop: %+v %v %v", f, err, launched)
+	}
+	if err := a.OpenOutside(filepath.Join(dir, "Regeln.md")); err != nil || len(launched) != 2 {
+		t.Fatalf("open outside: %v %v", err, launched)
+	}
+}

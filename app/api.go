@@ -9,6 +9,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/tilman-schieber/tlog/internal/dates"
+	"github.com/tilman-schieber/tlog/internal/markdown"
 
 	tapp "github.com/tilman-schieber/tlog/internal/app"
 	"github.com/tilman-schieber/tlog/internal/store"
@@ -204,11 +205,39 @@ func (a *API) onClose(ctx context.Context) bool {
 	return false
 }
 
-// OpenURL hands a link to the system: a web address to the browser, a file —
-// an attachment, an image — to whatever opens that kind of file. Which schemes
-// are allowed, and what a relative path is relative to, is the core's rule, so
-// the window and the outliner open exactly the same things.
-func (a *API) OpenURL(url string) error { return a.svc.OpenLink("", url) }
+// FileView is a linked text file, as the window shows it: the file, and for
+// anything but markdown its text split into coloured runs, the same runs a
+// code fence in a note is drawn with.
+type FileView struct {
+	*tapp.TextFile
+	Tokens []markdown.Token `json:"tokens,omitempty"`
+}
+
+// OpenURL follows a link written in the note rel. A plain-text file — an
+// attached .md, a script — comes back to be shown in the window, because the
+// desktop often has nothing that opens markdown. Anything else goes to the
+// system: a web address to the browser, a picture or a PDF to whatever opens
+// it, and the answer is nil. Which schemes are allowed, and that a relative
+// path is relative to the note, is the core's rule, so the window and the
+// outliner open exactly the same things.
+func (a *API) OpenURL(rel, url string) (*FileView, error) {
+	f, err := a.svc.LinkedText(rel, url)
+	if err != nil {
+		return nil, err
+	}
+	if f != nil {
+		v := &FileView{TextFile: f}
+		if f.Lang != "markdown" && markdown.HighlightSupported(f.Lang) {
+			v.Tokens = markdown.Highlight(f.Lang, f.Text)
+		}
+		return v, nil
+	}
+	return nil, a.svc.OpenLink(rel, url)
+}
+
+// OpenOutside hands a file the window is showing to the system after all, for
+// when an editor is what is wanted.
+func (a *API) OpenOutside(path string) error { return a.svc.OpenLink("", path) }
 
 // Undo takes back the last thing written, from this window, and returns the
 // page it was on. It is refused if the file has been changed elsewhere since,

@@ -1688,7 +1688,7 @@ document.addEventListener("mousedown", (e) => {
   }
   if (d.url) {
     e.preventDefault();
-    return call(() => api().OpenURL(d.url));
+    return followURL(d.url);
   }
 });
 
@@ -1776,6 +1776,7 @@ document.addEventListener("keydown", (e) => {
   // Escape backs out of whatever is covering the page, innermost first.
   if (e.key === "Escape") {
     if (!$("palette").hidden) return void ($("palette").hidden = true);
+    if (!$("file").hidden) return void ($("file").hidden = true);
     if (!$("log").hidden) return void ($("log").hidden = true);
     if (!$("help").hidden) return void ($("help").hidden = true);
     if (!$("settings").hidden) return void ($("settings").hidden = true);
@@ -1869,6 +1870,64 @@ async function choosePlace() {
   if (p.kind === "tag" || !p.rel) return open_(p.name);
   openRel(p.rel);
 }
+
+// --- a linked text file -------------------------------------------------------
+//
+// A link to a plain-text file — an attached .md, a script — is shown here,
+// read-only, because the desktop often has nothing that opens markdown and
+// handing it over did nothing at all. The core decides what counts as text;
+// anything else still goes to the system.
+
+let shownFile = null;
+
+async function followURL(url) {
+  const f = await call(() => api().OpenURL(page ? page.rel : "", url));
+  if (f) showFile(f);
+}
+
+function showFile(f) {
+  shownFile = f;
+  $("filename").textContent = f.name;
+  $("filepath").textContent = f.path;
+  $("filetext").innerHTML = fileHTML(f);
+  $("filetext").scrollTop = 0;
+  $("file").hidden = false;
+}
+
+// fileHTML draws a text file: markdown with its headings standing out and its
+// fences dimmed, code in the runs the core coloured it in, anything else as
+// written.
+function fileHTML(f) {
+  if (f.tokens && f.tokens.length) {
+    return f.tokens
+      .map((t) => (t.kind ? `<span class="t-${t.kind}">${escapeHTML(t.text)}</span>` : escapeHTML(t.text)))
+      .join("");
+  }
+  if (f.lang !== "markdown") return escapeHTML(f.text);
+  let fence = "";
+  return f.text
+    .split("\n")
+    .map((line) => {
+      const t = line.trim();
+      if (fence) {
+        if (t.startsWith(fence)) {
+          fence = "";
+          return `<span class="fence">${escapeHTML(line)}</span>`;
+        }
+        return `<span class="code">${escapeHTML(line)}</span>`;
+      }
+      if (t.startsWith("```") || t.startsWith("~~~")) {
+        fence = t.slice(0, 3);
+        return `<span class="fence">${escapeHTML(line)}</span>`;
+      }
+      if (t.startsWith("#")) return `<strong>${escapeHTML(line)}</strong>`;
+      return escapeHTML(line);
+    })
+    .join("\n");
+}
+
+$("closefile").onclick = () => ($("file").hidden = true);
+$("fileoutside").onclick = () => shownFile && call(() => api().OpenOutside(shownFile.path));
 
 function openLog() {
   renderLog();

@@ -890,3 +890,48 @@ table.cal td.sel { background: var(--accent); color: #fff; font-weight: 600; }
 }
 .cmds .kind-person .mark { color: var(--accent); }
 .cmds .kind-new .mark { color: var(--done); }
+
+/* A linked text file, shown read-only over the page. */
+#file {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.28);
+}
+#file .sheet {
+  width: min(900px, 94vw);
+  height: 86vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--bg);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.3);
+}
+#file header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+#file .filename { min-width: 0; display: flex; flex-direction: column; }
+#file h2 { margin: 0; font-size: 1rem; }
+#file #filepath { color: var(--fg-muted); font-size: 0.857rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#file .filebuttons { display: flex; gap: 8px; flex: none; }
+#filetext {
+  flex: 1;
+  margin: 0;
+  padding: 14px 18px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.893rem;
+  line-height: 1.5;
+  tab-size: 4;
+}
+#filetext .fence { color: var(--fg-muted); }

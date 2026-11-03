@@ -46,6 +46,7 @@ eval(lift("function bracketKey"));
 eval(lift("function imageSrc"));
 eval(lift("function pastedImage"));
 eval(lift("function dataURLBody"));
+eval(lift("function fileHTML"));
 
 let failures = 0;
 function eq(label, got, want) {
@@ -419,5 +420,15 @@ for (const probe of [
 eq("a quote in text is an entity", escapeHTML('say "hi"'), "say &quot;hi&quot;");
 
 console.log(failures === 0 ? "frontend: all pass" : `frontend: ${failures} FAILURES`);
+// A linked text file: headings stand out, fences dim, nothing is lost or
+// let through as markup.
+eq("markdown file",
+  fileHTML({ lang: "markdown", text: "# Regeln\nNote < 4\n```\n# kein Titel\n```" }),
+  "<strong># Regeln</strong>\nNote &lt; 4\n<span class=\"fence\">```</span>\n" +
+  "<span class=\"code\"># kein Titel</span>\n<span class=\"fence\">```</span>");
+eq("code file", fileHTML({ lang: "go", text: "x", tokens: [{ kind: "keyword", text: "func" }, { text: " <x>" }] }),
+  "<span class=\"t-keyword\">func</span> &lt;x&gt;");
+eq("plain file", fileHTML({ lang: "txt", text: "a <b>" }), "a &lt;b&gt;");
+
 process.exit(failures ? 1 : 0);
 

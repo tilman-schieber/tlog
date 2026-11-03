@@ -191,7 +191,9 @@ a push that failed while you were looking elsewhere is still there.
 linked in the page you are reading. Paste a screenshot (`⌘⌃⇧4` on a Mac) into a
 block and it is saved in `assets/` as `screenshot-<date>-<time>.png`, with its
 link typed at the caret; a clipboard with words on it pastes the words.
-Attached pictures are shown in the page. The text size is the `app.font_size` setting, in pixels
+Attached pictures are shown in the page, and clicking a link to a text file —
+an attached `.md`, a script — shows it over the page, with **Open outside** to
+hand it to the system. The text size is the `app.font_size` setting, in pixels
 from 10 to 28; the outliner uses the terminal's font and ignores it.
 
 
