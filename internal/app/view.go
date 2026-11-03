@@ -165,6 +165,16 @@ func (s *Service) viewWith(g *graph.Graph, d *Doc) *PageView {
 		Tags:      g.PageTags(title),
 		Aliases:   g.Aliases(title),
 		Tagged:    g.PagesWithTag(title),
+		// Lists are lists, even when empty: a caller reading JSON should
+		// never meet null where it was told to expect an array.
+		Blocks: []BlockView{},
+		Refs:   []RefView{},
+	}
+	if v.Tags == nil {
+		v.Tags = []string{}
+	}
+	if v.Tagged == nil {
+		v.Tagged = []string{}
 	}
 
 	d.Doc.Walk(func(b *markdown.Block) bool {

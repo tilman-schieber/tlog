@@ -426,6 +426,10 @@ func TestAMissingPageIsTheSameAnswerByNameOrByPath(t *testing.T) {
 
 func TestEmptyListsAreEmptyLists(t *testing.T) {
 	dir := t.TempDir()
+	// A page with nothing on it and nothing pointing at it: lists, not nulls.
+	if code, out, _ := runCLI(t, dir, "view", "-json"); code != 0 || strings.Contains(out, "null") {
+		t.Errorf("view -json of an empty day holds a null: code=%d out=%s", code, out)
+	}
 	for _, args := range [][]string{
 		{"search", "nothing", "-json"}, {"due", "-json"}, {"todo", "-json"},
 		{"places", "-json"}, {"index", "-json"}, {"people", "-json"}, {"files", "-json"},
