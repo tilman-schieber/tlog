@@ -42,3 +42,16 @@ dist:
     GOOS=darwin GOARCH=amd64 go build -o dist/tlog-darwin-amd64 ./cmd/tlog
     GOOS=linux  GOARCH=amd64 go build -o dist/tlog-linux-amd64 ./cmd/tlog
     GOOS=linux  GOARCH=arm64 go build -o dist/tlog-linux-arm64 ./cmd/tlog
+
+# Linux: install the icon the menu entry (Icon=tlog) shows, as SVG and PNGs
+icon-install:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    base="$HOME/.local/share/icons/hicolor"
+    install -Dm644 share/tlog.svg "$base/scalable/apps/tlog.svg"
+    for s in 32 48 64 128 256 512; do
+      mkdir -p "$base/${s}x${s}/apps"
+      rsvg-convert -w "$s" -h "$s" share/tlog.svg -o "$base/${s}x${s}/apps/tlog.png"
+    done
+    gtk-update-icon-cache -q -t "$base" 2>/dev/null || true
+    echo "installed the tlog icon into $base"

@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- tlog: an outline — a block, a child, a ticked task — on a dark card. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a2f45"/>
+      <stop offset="1" stop-color="#171a26"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.10"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="12" y="12" width="232" height="232" rx="54" fill="url(#bg)"/>
+  <rect x="12" y="12" width="232" height="232" rx="54" fill="url(#sheen)"/>
+  <rect x="12.75" y="12.75" width="230.5" height="230.5" rx="53.25" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="1.5"/>
+
+  <!-- the thread that nests the children under their parent -->
+  <path d="M66 92 V176 M66 128 H84 M66 176 H84" fill="none" stroke="#565f89" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- a block -->
+  <circle cx="66" cy="80" r="14" fill="#c0caf5"/>
+  <rect x="96" y="71" width="104" height="18" rx="9" fill="#c0caf5"/>
+
+  <!-- a child: a [[link]] -->
+  <circle cx="100" cy="128" r="11" fill="#7aa2f7"/>
+  <rect x="122" y="120" width="78" height="16" rx="8" fill="#7aa2f7"/>
+
+  <!-- a ticked task -->
+  <rect x="88" y="164" width="24" height="24" rx="6" fill="#9ece6a"/>
+  <path d="M94 176.5 l5 5 l8.5 -10" fill="none" stroke="#171a26" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="122" y="168" width="56" height="16" rx="8" fill="#9ece6a" fill-opacity="0.55"/>
+</svg>
