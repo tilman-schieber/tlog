@@ -57,7 +57,6 @@ func TestRoundTrip(t *testing.T) {
 	want.Format.BlankLines = false
 	want.Deadline.Property = "due"
 	want.Dates.EndOfWeek = "sunday"
-	want.App.FontSize = 16
 
 	if err := want.Save(); err != nil {
 		t.Fatal(err)
@@ -135,16 +134,6 @@ func TestNonsenseValuesFallBack(t *testing.T) {
 	c.Deadline.Property = "   "
 	if got := c.DeadlineProperty(); got != "Deadline" {
 		t.Fatalf("got %q", got)
-	}
-	for _, px := range []int{0, 9, 29, -14} {
-		c.App.FontSize = px
-		if got := c.FontSizePx(); got != DefaultFontSize {
-			t.Fatalf("font_size %d should fall back, got %d", px, got)
-		}
-	}
-	c.App.FontSize = 18
-	if got := c.FontSizePx(); got != 18 {
-		t.Fatalf("got %d", got)
 	}
 }
 

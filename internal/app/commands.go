@@ -360,7 +360,7 @@ type DateChoice struct {
 
 // DateChoices is the quick pick for a date being typed: the usual days when
 // nothing is typed yet, narrowing as it is. The outliner's @ menu, the slash
-// menus for /date and /deadline, and the window all draw this one list.
+// menus for /date and /deadline, and `tlog date` all draw this one list.
 func DateChoices(input string, limit int) []DateChoice {
 	now := time.Now()
 	var out []DateChoice

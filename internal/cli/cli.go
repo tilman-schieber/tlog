@@ -283,7 +283,7 @@ func cmdAlias(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 }
 
 // cmdConfig shows the settings, reads one, or changes one. The list is the
-// core's: the same one the outliner and the window show.
+// core's: the same one the outliner's settings screen shows.
 func cmdConfig(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 	fs := flags("config", stderr)
 	asJSON := fs.Bool("json", false, "print the settings as JSON")

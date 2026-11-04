@@ -152,8 +152,7 @@ func TestBadValuesAreRefusedAndChangeNothing(t *testing.T) {
 	for _, c := range [][2]string{
 		{"startup", "gestern"}, {"git.debounce", "banana"},
 		{"git.autocommit", "vielleicht"}, {"dates.end_of_week", "montag"},
-		{"deadline.property", ""}, {"nope", "x"},
-		{"app.font_size", "huge"}, {"app.font_size", "9"}, {"app.font_size", "29"},
+		{"deadline.property", ""}, {"nope", "x"}, {"app.font_size", "18"},
 	} {
 		if _, err := s.SetSetting(c[0], c[1]); err == nil {
 			t.Errorf("%s = %q was accepted", c[0], c[1])
@@ -204,25 +203,5 @@ func TestEverySettingIsDescribed(t *testing.T) {
 		if it.Kind != "bool" && it.Kind != "text" && it.Kind != "duration" {
 			t.Errorf("%s has kind %q", it.Key, it.Kind)
 		}
-	}
-}
-
-func TestTheWindowsTextSizeIsASettingLikeAnyOther(t *testing.T) {
-	s := cfgSvc(t)
-	if got := get(t, s, "app.font_size").Value; got != "14" {
-		t.Fatalf("default: %q", got)
-	}
-	note, err := s.SetSetting("app.font_size", "18px")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if note != "" {
-		t.Fatalf("it applies at once, yet the note says %q", note)
-	}
-	if got := get(t, s, "app.font_size").Value; got != "18" {
-		t.Fatalf("got %q", got)
-	}
-	if s.Cfg.App.FontSize != 18 {
-		t.Fatalf("not kept: %+v", s.Cfg.App)
 	}
 }

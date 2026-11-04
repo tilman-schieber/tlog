@@ -85,7 +85,7 @@ type Model struct {
 
 	// embeds resolves each block's references by offset, so that a reference
 	// can be drawn as the block it points at rather than as a page name. It is
-	// rebuilt with the rows, from the same read model the desktop app uses.
+	// rebuilt with the rows, from the same read model `tlog view` uses.
 	embeds map[int][]app.EmbedView
 
 	// look is a snapshot held only while a picker is open, so that filtering as
@@ -949,7 +949,7 @@ func addrFrom(res *app.Result) app.Addr {
 
 // structural sends the block under the cursor through a core mutation. Every
 // structural change in the outliner goes through here, so the outliner and the
-// desktop app cannot come to disagree about what indent means.
+// command line cannot come to disagree about what indent means.
 func (m *Model) structural(fn func(app.Addr) (*app.Result, error)) {
 	b := m.current()
 	if b == nil || !m.ensureOnDisk() {

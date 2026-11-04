@@ -7,8 +7,8 @@ import (
 	"github.com/tilman-schieber/tlog/internal/markdown"
 )
 
-// Noticing an edit made elsewhere. nvim, the outliner and the desktop app all
-// hold the same files, and until now an external edit only surfaced as a
+// Noticing an edit made elsewhere. nvim, the outliner and an agent at the
+// command line all hold the same files, and until now an external edit only surfaced as a
 // refused write and a manual R.
 //
 // The change arrives as an ordinary message through a tea.Cmd rather than by

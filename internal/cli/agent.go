@@ -14,7 +14,7 @@ import (
 )
 
 // The surface a script or an agent works through. It is the same core the
-// outliner and the window use — these commands hold no logic, and every one of
+// outliner uses — these commands hold no logic, and every one of
 // them is a call into app.Service.
 //
 // Two things make it safe to hand to something that is not a person. Every

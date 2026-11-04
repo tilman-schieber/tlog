@@ -2,9 +2,8 @@ package markdown
 
 import "strings"
 
-// Syntax highlighting lives here rather than in either adapter, so the outliner
-// and the desktop app colour code the same way and a JSON caller gets the same
-// tokens. It is deliberately a small generic scanner driven by a per-language
+// Syntax highlighting lives here rather than in an adapter, so every view of a
+// note colours code the same way and a JSON caller gets the same tokens. It is deliberately a small generic scanner driven by a per-language
 // table: enough to read a snippet in a note, not a compiler front end.
 //
 // A language that is not in the table yields one plain token, which renders as

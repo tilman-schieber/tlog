@@ -7,8 +7,8 @@ description: Read and change a person's notes kept in tlog, the markdown-first k
 
 tlog keeps notes as plain markdown in a git repository, usually `~/notes`:
 `journals/2026-11-03.md` for days, `pages/Name.md` for everything else, each a
-tree of `- ` bullets. The person may have the outliner or the desktop window
-open on the same files while you work. The command line is the one way in that
+tree of `- ` bullets. The person may have the outliner open on the same files
+while you work. The command line is the one way in that
 cannot collide with them, so use it for every read that leads to a write and
 for every write. Do not edit the files with your own tools: a plain rewrite
 skips the concurrency check, breaks the outline shape, leaves dates in forms

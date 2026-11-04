@@ -240,6 +240,21 @@ stays legible over ssh and in tmux.
 
 ## The desktop app
 
+**Retired, November 2026.** The window was deleted from `main`; its last state
+is the tag `desktop-app-final`. It had been a third adapter, and the outliner
+caught up with it one feature at a time: the agenda, the message log, mouse and
+clickable links, file drops onto the terminal, and finally showing a linked text
+file in place. What was left — pictures drawn in the page, a pasted screenshot,
+proportional type — did not justify a second program to build, test and keep in
+step, with a WebKitGTK dependency that broke the build on Linux. The core never
+depended on it, so removing it took nothing from `internal/`: the `app.font_size`
+setting went, and the config ignores an old `[app]` table. A branch was not
+kept, because it would stop building against `main` within weeks; a separate
+repository was impossible, because `app/` imports `internal/` packages, which
+Go forbids from another module. The sections below and "Testing the window" are
+kept as the record of how it was built, for whoever builds a GUI next — which
+should again be an adapter with no logic of its own.
+
 **Wails, not Electron, SwiftUI, Gio or Tauri.** The core is a Go package, so the
 question was which host can call it *in process*, with no protocol to invent.
 Wails binds Go methods straight into the WebView, which makes the adapter 100
@@ -432,7 +447,8 @@ tlog's settings, marked with where they are kept — display and storage are
 different questions, and answering them separately is what avoids two sources of
 truth for one fact.
 
-**The text size is the one look-and-feel setting, and it is the window's.**
+**The text size was the one look-and-feel setting, and it was the window's.**
+It went with the desktop app.
 `app.font_size` is described once like every other setting, so `tlog config`,
 the outliner's menu and the window all show and change it; the outliner ignores
 the value, because a terminal program uses the terminal's font. Every text size
@@ -482,9 +498,9 @@ as it was, so running it where the files are not is harmless and running it
 twice does nothing; `-dry-run` says what it would do. It is a command and not
 something done on start, because reading never writes.
 
-**A window can be dropped onto, and a terminal cannot.** File drop is the one
-thing the desktop app does that the outliner has no equivalent for, and it is
-the reason to have the app open while writing.
+**A window can be dropped onto, and a terminal cannot** — this was the reason
+to keep the desktop app open while writing, until the outliner learned to read
+a drop as the paste of paths a terminal makes of it (above).
 
 ## Pushing
 

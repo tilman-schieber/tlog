@@ -21,7 +21,7 @@ var (
 	viewAnchorRe = regexp.MustCompile(`\[\[[^\[\]]*#\^[^\[\]]+\]\]`)
 	viewTagRe    = regexp.MustCompile(`(^|\s)(#[A-Za-z][A-Za-z0-9_/\-]*)`)
 	viewCheckRe  = regexp.MustCompile(`^\[( |x|X)\] `)
-	// The same rule the window draws headings by: hashes, a space, the text.
+	// A heading: hashes, a space, the text.
 	viewHeadingRe = regexp.MustCompile(`^\s*#{1,6}\s+(.*)$`)
 )
 
@@ -192,8 +192,8 @@ func (m *Model) renderRowHits(r row, selected, editing bool) ([]string, [][]link
 		text = m.ed.String()
 	}
 
-	// Fenced regions are drawn from the same prepared form the desktop app
-	// uses: highlighted, or laid out as a table when they are ```csv.
+	// Fenced regions are drawn from the core's prepared form, the one
+	// `tlog view -json` carries too: highlighted, or laid out as a table when they are ```csv.
 	if !editing && !selected && strings.Contains(text, "```") {
 		if out, hits := m.renderFenced(r, text, indent, bullet); out != nil {
 			return out, hits
@@ -438,8 +438,7 @@ func (m *Model) highlight(s string, r row) (string, []linkHit) {
 		body, hits := inlineWithLinks(rest, cursor, 2)
 		return styleDone.Render("☑ " + stripANSI(body)), hits
 	}
-	// A markdown heading is drawn as the window draws it: bold, without its
-	// hashes. Nothing about the file changes; the hashes are there while
+	// A markdown heading is drawn bold, without its hashes. Nothing about the file changes; the hashes are there while
 	// writing.
 	if h := viewHeadingRe.FindStringSubmatch(s); h != nil {
 		body, hits := inlineWithLinks(h[1], cursor, 0)

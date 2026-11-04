@@ -10,7 +10,7 @@ import (
 // What the outliner has said. There is one status line and one error line, and
 // both are replaced by the next thing that happens — so a push that failed
 // while you were typing was gone before you looked up, with nothing to go back
-// to. The window keeps a log; this is the same.
+// to. So the outliner keeps a log.
 
 type notice struct {
 	text string

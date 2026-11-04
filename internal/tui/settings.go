@@ -8,8 +8,8 @@ import (
 	tapp "github.com/tilman-schieber/tlog/internal/app"
 )
 
-// The settings screen. It edits the same list `tlog config` prints and the
-// desktop app shows, so the three cannot drift apart or disagree about what a
+// The settings screen. It edits the same list `tlog config` prints, so the
+// two cannot drift apart or disagree about what a
 // value means.
 
 type settings struct {

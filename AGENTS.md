@@ -8,16 +8,13 @@ that are designed but not built.
 ## Build and test
 
 ```sh
-just test      # go vet, go test, the frontend's node tests, the widget's test
+just test      # go vet, go test, the Omarchy widget's test
 just ci        # the same with -race and gofmt, as CI runs it
 just build
 just install   # GOBIN=~/.local/bin go install ./cmd/tlog
 ```
 
-`just test` is not only the Go half: `app/frontend/app_test.js` and
-`omarchy/tests/model_test.js` run too. The frontend smoke test needs `jsdom`
-on `NODE_PATH` and silently skips without it, so a green run without jsdom has
-not exercised the window.
+`just test` is not only Go: `omarchy/tests/model_test.js` runs too, with node.
 
 Everything is testable without a terminal. The outliner is driven headlessly by
 sending `tea.KeyMsg` values to `Model.Update` and asserting on what lands on
@@ -28,7 +25,6 @@ logic is in the wrong layer.
 
 ```
 cmd/tlog/            main — the CLI and the outliner
-app/                 the desktop app (Wails): main.go, api.go, frontend/
 internal/markdown/   the dialect: parse, render, structural edits
 internal/store/      the notes directory: paths, CAS writes, git
 internal/attach/     attachments: the notes' assets/ folder
@@ -49,7 +45,7 @@ skills/tlog/         the skill that teaches an agent to use the command line
 
 **The core is the product.** `internal/app` holds every semantic operation —
 including the block mutations (`mutate.go`) and the read model (`view.go`). The
-TUI, the CLI and the desktop app are adapters. If something can be done in one
+TUI and the CLI are adapters. If something can be done in one
 of them but not through `app.Service`, that is a bug — it is what makes the tool scriptable and
 agent-addressable, which is the whole point.
 
@@ -123,21 +119,18 @@ character silently corrupts what the reader sees.
 - Structural operations are golden-tested through `Render` in `edit_test.go`.
 - Importer changes should be checked against a real graph with
   `tlog import -dry-run -from ~/logseq` as well as the unit tests.
-- The desktop frontend has tests too: `node app/frontend/app_test.js`, run by
-  `just test`. They lift the pure helpers out of `app.js` so it can stay a plain
-  script the WebView loads with no module system.
 
 ## Things deliberately absent
 
 No daemon, no socket, no SQLite, no fsnotify, no Neovim plugin, no MCP server.
 Each was considered and cut; `DECISIONS.md` says why. Do not add them back
 without a measured reason. `internal/watch` is not the file watcher that was
-cut: it is a stat sweep that runs in process, only while the outliner or the
-window is open, and nothing runs when they are closed. The command line is the
+cut: it is a stat sweep that runs in process, only while the outliner is open,
+and nothing runs when it is closed. The command line is the
 agent surface; an MCP server would sit on exactly that and is not built until
 something needs it.
 
-The desktop app deliberately has no build step: the frontend is plain
-HTML/CSS/JS served from `app/frontend`, so there is no npm in a Go repo.
-Swapping in Svelte and Vite later is a `frontend:build` line in
-`app/wails.json`.
+There is no desktop app. A Wails window existed until November 2026 and was
+retired because the outliner had caught up with it; its code is at the tag
+`desktop-app-final`, and DECISIONS.md says why. Do not bring a GUI back as a
+second place for logic: anything one needs belongs in `app.Service` first.

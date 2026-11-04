@@ -10,10 +10,9 @@ import (
 	"github.com/tilman-schieber/tlog/internal/dates"
 )
 
-// Everything with a deadline, soonest first — the same list `tlog due` prints
-// and the window shows, from the same core call. It was the one thing the
-// window had that the outliner did not, which meant knowing what was due
-// required leaving the outliner.
+// Everything with a deadline, soonest first — the same list `tlog due` prints,
+// from the same core call, so knowing what is due does not mean leaving the
+// outliner.
 //
 // It is a view, not a page: nothing is written by looking at it, and enter on
 // a line goes to the block itself.

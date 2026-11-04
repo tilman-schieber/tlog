@@ -1,10 +1,3 @@
-# Two jobs, split by one fact: exactly one package (./app) depends on Wails,
-# and on Linux that needs gtk3 and webkit2gtk headers whose package names have
-# moved twice between Ubuntu releases. macOS builds it against the system SDK
-# with nothing to install, so the desktop adapter is checked there and Linux
-# checks everything else. Nothing is skipped; it is only checked where it is
-# cheap to check.
-
 name: CI
 
 on:
@@ -39,37 +32,13 @@ jobs:
             exit 1
           fi
 
-      - name: Packages under test
-        id: pkgs
-        run: echo "list=$(go list ./... | grep -v '/tlog/app$' | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
-
       - name: go vet
-        run: go vet ${{ steps.pkgs.outputs.list }}
+        run: go vet ./...
 
       # -race is not optional here: the watcher runs a sweep goroutine and the
       # store keeps a map of what it wrote.
       - name: go test -race
-        run: go test -race -count=1 ${{ steps.pkgs.outputs.list }}
-
-      # The frontend has no build step on purpose, so this is the whole of it:
-      # the file must parse, and its pure helpers must behave.
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      # jsdom is installed rather than vendored, and the smoke test skips
-      # without it: the repository stays free of npm, and the shipped page is
-      # still plain JS the WebView loads with no build step.
-      - name: Frontend test dependency
-        run: npm install --no-save --prefix "$RUNNER_TEMP/js" jsdom
-
-      - name: Frontend
-        env:
-          NODE_PATH: ${{ runner.temp }}/js/node_modules
-        run: |
-          node --check app/frontend/app.js
-          node app/frontend/app_test.js
-          node app/frontend/smoke_test.js
+        run: go test -race -count=1 ./...
 
       # The release targets, so a GOOS-specific mistake is caught on the commit
       # that made it rather than at release time.
@@ -79,20 +48,3 @@ jobs:
             GOOS=${target%/*} GOARCH=${target#*/} go build -o /dev/null ./cmd/tlog
           done
 
-  desktop:
-    name: macOS — the desktop adapter
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      # ./app is the only package Linux skips, so this is where it is built and
-      # where the 40 bound API methods are tested.
-      - name: Build and test everything
-        run: |
-          go build ./...
-          go test -race -count=1 ./...

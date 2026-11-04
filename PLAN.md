@@ -38,8 +38,8 @@ language is a table entry, not code. It covers go, js/ts, python, sh, sql, json,
 yaml and toml, and an unknown language yields one plain token, which renders as
 monospace — exactly what happened before.
 
-It lives in Go rather than JavaScript so that the outliner, the desktop app and
-a future `--json` caller all colour code the same way from one implementation.
+It lives in Go rather than JavaScript so that the outliner and
+a `--json` caller all colour code the same way from one implementation.
 `chroma` was not used: two hundred languages against one code fence in the
 corpus would roughly double the 8.4 MB bundle.
 
