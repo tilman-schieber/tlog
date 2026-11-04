@@ -646,6 +646,9 @@ func (m *Model) outlineKey(msg tea.KeyMsg, k string) (tea.Model, tea.Cmd) {
 		}
 		m.undoFile(true)
 		return m, nil
+	case "ctrl+v":
+		m.pasteClipboard()
+		return m, nil
 	case "ctrl+g":
 		if m.activateRow() {
 			return m, nil

@@ -43,6 +43,7 @@ is the one read-like command that creates the page and prints its path.
 | `tlog append <rel> [-if-match <hash>] <text>` | a block at the end of a file by path, refused (4) if the file's hash is not `hash` | the new `addr` |
 | `tlog attach [-p page] FILE…` | copies files into the notes' `assets/` (committed with them), links them as `../assets/name` in one block in today's journal or a page | names and sizes, then the file's path |
 | `tlog attach -link-only FILE…` | copies into `assets/` and prints the links, writes no note | links |
+| `tlog attach -clipboard [-p page] [-link-only]` | saves the picture on the system clipboard (a screenshot) into `assets/` as `screenshot-<date>-<time>.png` and links it like a file; exit 3 if the clipboard holds no picture | as for a file |
 | `tlog attach -migrate [-from dir] [-dry-run]` | copies files that notes link on the old `~/.att/store` shelf into `assets/` and rewrites those links; files missing here are reported and left alone | one line per file, then a summary; `-json` `copied`, `notes`, `links`, `missing` |
 | `tlog alias <page> <name>` | another name for a page, in its frontmatter | a line |
 

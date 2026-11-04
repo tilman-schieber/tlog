@@ -6,6 +6,7 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/tilman-schieber/tlog/internal/clipboard"
 	"os"
 	"strconv"
 	"strings"
@@ -37,6 +38,10 @@ type Service struct {
 	// Launch hands a link to the desktop. Nil means the system's own opener;
 	// tests put a recorder here so that nothing actually opens.
 	Launch func(target string) error
+
+	// Clipboard reads the system clipboard. Nil means the real one; tests put
+	// a fixed picture or text here.
+	Clipboard func() (clipboard.Content, error)
 
 	hist history // what Undo takes back; see undo.go
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/tilman-schieber/tlog/internal/app"
 	"github.com/tilman-schieber/tlog/internal/config"
@@ -29,6 +30,7 @@ usage:
   tlog due [-all]             what is dated and still open, soonest first
   tlog attach [-p page] FILE  copy files into the notes' assets/ and link them here
   tlog attach -link-only FILE copy a file into assets/ and print its link, no note
+  tlog attach -clipboard      the screenshot on the clipboard, into assets/ and linked here
   tlog attach -migrate        bring files linked on the old ~/.att shelf into assets/
   tlog files [query] [-links] what is attached, newest first
   tlog alias <page> <name>    give a page another name
@@ -361,6 +363,7 @@ func cmdAttach(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 	fs := flags("attach", stderr)
 	page := fs.String("p", "", "attach to this page instead of today's journal")
 	only := fs.Bool("link-only", false, "copy the file into assets/ and print the link, writing no note")
+	clip := fs.Bool("clipboard", false, "attach the picture on the clipboard — a screenshot — instead of a file")
 	asJSON := fs.Bool("json", false, "print what was attached as JSON")
 	migrate := fs.Bool("migrate", false, "copy every file notes link on the old att shelf into assets/ and relink it")
 	from := fs.String("from", "", "with -migrate: the old shelf (default ~/.att/store)")
@@ -379,8 +382,12 @@ func cmdAttach(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 		fmt.Fprintln(stderr, "tlog attach: -from and -dry-run only go with -migrate")
 		return exitUsage
 	}
-	if fs.NArg() == 0 {
-		fmt.Fprintln(stderr, "tlog attach: which file?")
+	if *clip && fs.NArg() > 0 {
+		fmt.Fprintln(stderr, "tlog attach -clipboard: takes no files; it reads the clipboard")
+		return exitUsage
+	}
+	if !*clip && fs.NArg() == 0 {
+		fmt.Fprintln(stderr, "tlog attach: which file? (or -clipboard for a screenshot)")
 		return exitUsage
 	}
 
@@ -394,7 +401,17 @@ func cmdAttach(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 	}
 	var added []app.AttachView
 	var err error
-	if *only {
+	if *clip {
+		target := rel
+		if *only {
+			target = ""
+		}
+		var a app.AttachView
+		a, err = svc.AttachClipboard(target, time.Now())
+		if err == nil {
+			added = []app.AttachView{a}
+		}
+	} else if *only {
 		added, err = svc.Attach(fs.Args()...)
 	} else {
 		added, err = svc.AttachTo(rel, fs.Args()...)

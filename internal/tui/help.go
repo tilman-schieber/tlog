@@ -39,6 +39,7 @@ func (m *Model) helpParts() []helpPart {
 		para("Where tlog opens. Typing types into the block under the caret, and leaving a block saves it."),
 		key("enter", "a new block, splitting this one at the caret"),
 		key("alt+enter", "a new line inside the block (also ctrl+j)"),
+		key("ctrl+v", "paste from the clipboard: a screenshot is saved into assets/ and linked here, copied files are attached, text is text"),
 		key("tab  shift+tab", "indent, outdent"),
 		key("alt+↑  alt+↓", "move the block, with everything under it"),
 		key("backspace", "at the start of a block, join it to the one above; an empty block goes"),

@@ -345,12 +345,18 @@ is right from every note and which any markdown reader follows.
 tlog attach report.pdf slides.pptx   # into assets/, linked in today's journal
 tlog attach -p "Projekt" report.pdf  # ...or on a page
 tlog attach -link-only report.pdf    # copied, link printed, no note written
+tlog attach -clipboard               # the screenshot on the clipboard, saved and linked
 tlog files                           # what is attached, newest first
 tlog files budget                    # narrowed, fuzzily if nothing contains it
 ```
 
 In a note, `/file` offers what is attached. **Drop files onto the terminal** and
-they are copied into `assets/` with their links where you are.
+they are copied into `assets/` with their links where you are. **Ctrl+V pastes
+a screenshot**: tlog reads the clipboard itself (`wl-paste`, `xclip`, or
+`osascript` on a Mac), saves the picture as `screenshot-<date>-<time>.png` and
+links it at the caret; files copied in a file manager attach the same way, and
+text pastes as text. It has to be plain Ctrl+V — Ctrl+Shift+V and Cmd+V are the
+terminal's own paste, which only ever delivers text.
 
 The original file is never moved: attaching it to a note should not take it
 away from whatever else refers to it. Images become `![embeds]`, everything

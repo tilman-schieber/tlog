@@ -215,6 +215,17 @@ not an editor on purpose: an attached file is not a note, has no addresses and
 no compare-and-swap, and editing it belongs to an editor. `tlog links` marks
 such a file `"plain": true`.
 
+**Ctrl+V reads the clipboard; the terminal's paste cannot.** A terminal's
+paste (ctrl+shift+v, cmd+v) is bracketed text and nothing else, so a screenshot
+on the clipboard never reaches a terminal program that way. Plain ctrl+v is not
+the terminal's: it arrives as a key, and tlog answers it by asking the system
+for the clipboard — `wl-paste` or `xclip`, `osascript` and `pbpaste` on a Mac —
+preferring a picture, then copied files (`text/uri-list`), then text. Nothing
+is linked against, and a missing tool is an error that names it.
+`internal/clipboard` only reads; the picture goes through the same
+`Service.AttachImage` the desktop app's paste used, and `tlog attach
+-clipboard` is the same operation for a script.
+
 **A linked picture is drawn by the terminal, full screen, or not at all.**
 Pictures inside the outline were considered and not built: Bubble Tea redraws
 line by line and knows nothing of an image sitting in its cells, so scrolling

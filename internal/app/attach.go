@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"github.com/tilman-schieber/tlog/internal/clipboard"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -109,6 +110,36 @@ var imageTypes = map[string]string{
 	"image/jpeg": ".jpg",
 	"image/gif":  ".gif",
 	"image/webp": ".webp",
+}
+
+// ReadClipboard is what is on the system clipboard: a picture in preference to
+// text. A terminal pastes only text, so this is how a screenshot reaches tlog.
+func (s *Service) ReadClipboard() (clipboard.Content, error) {
+	if s.Clipboard != nil {
+		return s.Clipboard()
+	}
+	return clipboard.Read()
+}
+
+// AttachClipboard puts the picture on the clipboard into the notes, like
+// AttachImage, and links it at the end of rel; with rel empty it only attaches,
+// for a caller that puts the link somewhere itself.
+func (s *Service) AttachClipboard(rel string, now time.Time) (AttachView, error) {
+	c, err := s.ReadClipboard()
+	if err != nil {
+		return AttachView{}, err
+	}
+	if c.Image == nil {
+		return AttachView{}, refuse("the clipboard holds no picture")
+	}
+	a, err := s.AttachImage(c.Image, now)
+	if err != nil || rel == "" {
+		return a, err
+	}
+	if _, err := s.Add(rel, a.Link); err != nil {
+		return a, err
+	}
+	return a, nil
 }
 
 // AttachImage puts a picture that is not a file yet — a screenshot on the

@@ -6,11 +6,13 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/tilman-schieber/tlog/internal/clipboard"
 	"github.com/tilman-schieber/tlog/internal/termimg"
 )
 
@@ -140,4 +142,59 @@ func TestATextFileIsNotMistakenForAPicture(t *testing.T) {
 	if m.mode != modeFile {
 		t.Fatalf("mode %v", m.mode)
 	}
+}
+
+func clip(m *Model, c clipboard.Content) {
+	m.svc.Clipboard = func() (clipboard.Content, error) { return c, nil }
+}
+
+func TestCtrlVPastesAScreenshotAtTheCaret(t *testing.T) {
+	m := treeModel(t, "- see\n")
+	clip(m, clipboard.Content{Image: []byte(pngBytes(t)), Type: "image/png"})
+	send(t, m, k(tea.KeyEnd), k(tea.KeyCtrlV), k(tea.KeyEsc))
+	body := readNote(t, m)
+	if !regexp.MustCompile(`- see !\[screenshot-[0-9-]+\.png\]\(\.\./assets/screenshot-[0-9-]+\.png\)`).MatchString(body) {
+		t.Fatalf("got %q", body)
+	}
+	entries, _ := os.ReadDir(filepath.Join(m.svc.Store.Root, "assets"))
+	if len(entries) != 1 {
+		t.Fatalf("assets: %v", entries)
+	}
+}
+
+func TestCtrlVPastesTextAndCopiedFiles(t *testing.T) {
+	m := treeModel(t, "- a\n")
+	clip(m, clipboard.Content{Text: "hello\n"})
+	send(t, m, k(tea.KeyEnd), k(tea.KeyCtrlV), k(tea.KeyEsc))
+	if body := readNote(t, m); !strings.Contains(body, "- ahello") {
+		t.Fatalf("text: %q", body)
+	}
+
+	src := filepath.Join(t.TempDir(), "my report.pdf")
+	if err := os.WriteFile(src, []byte("%PDF"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	clip(m, clipboard.Content{Text: "file://" + strings.ReplaceAll(src, " ", "%20") + "\r\n"})
+	send(t, m, k(tea.KeyCtrlV)) // while moving: a block of its own
+	if body := readNote(t, m); !strings.Contains(body, "[my report.pdf](../assets/my%20report.pdf)") {
+		t.Fatalf("copied file: %q", body)
+	}
+}
+
+func TestCtrlVSaysWhyNothingHappened(t *testing.T) {
+	m := treeModel(t, "- a\n")
+	m.svc.Clipboard = func() (clipboard.Content, error) { return clipboard.Content{}, clipboard.ErrEmpty }
+	m.Update(k(tea.KeyCtrlV))
+	if !strings.Contains(m.errMsg, "empty") {
+		t.Fatalf("error %q", m.errMsg)
+	}
+}
+
+func readNote(t *testing.T, m *Model) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(m.svc.Store.Root, m.doc.Rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }
