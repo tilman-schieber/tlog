@@ -215,6 +215,25 @@ not an editor on purpose: an attached file is not a note, has no addresses and
 no compare-and-swap, and editing it belongs to an editor. `tlog links` marks
 such a file `"plain": true`.
 
+**A linked picture is drawn by the terminal, full screen, or not at all.**
+Pictures inside the outline were considered and not built: Bubble Tea redraws
+line by line and knows nothing of an image sitting in its cells, so scrolling
+would tear or leave one behind, and every terminal without graphics would need
+a different layout. Full screen sidesteps all of it. The outliner hands the
+terminal over with `tea.Exec`, the way it would to an editor, so nothing redraws
+over the picture and no key is read twice; `internal/termimg` draws it in kitty
+graphics, sixel or iTerm2's protocol, scaled to fit and never enlarged, and any
+key gives the terminal back. Which protocol is read from the environment where
+that is conclusive and otherwise asked of the terminal (XTVERSION, a kitty
+query, DA1), once, after the outliner has let go of the input — foot commonly
+runs as `TERM=xterm-256color` and says nothing else about itself. Everything
+that can fail is tried before the screen is touched; a picture that cannot be
+decoded, a terminal that cannot draw, or tmux in the way all end at the
+system's opener, as following the link did before. The core only says what a
+file is (`Service.LinkedPicture`, by its bytes; `"picture": true` in
+`tlog links`); drawing is the adapter's business. WebP, BMP and TIFF come from
+`golang.org/x/image`, which is also the scaler.
+
 **A drop onto the terminal is a paste of paths.** A terminal cannot hand over
 files, only type their names — shell-escaped, quoted or as `file://` addresses,
 depending on the terminal. `app.DroppedFiles` treats a paste as a drop only when

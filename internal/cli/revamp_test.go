@@ -279,6 +279,10 @@ func TestLinksAreResolved(t *testing.T) {
 	}
 }
 
+// onePixelPNG is the smallest picture there is, for a test that needs a real one.
+const onePixelPNG = "\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89" +
+	"\x00\x00\x00\rIDATx\x9cc\xf8\xff\xff?\x00\x05\xfe\x02\xfe\xa7V\xbd\xfa\x00\x00\x00\x00IEND\xaeB`\x82"
+
 func TestLinksSayWhichFilesArePlainText(t *testing.T) {
 	dir := t.TempDir()
 	if code, _, errs := runCLI(t, dir, "add", "see [rules](../assets/rules.md) and ![plot](../assets/plot.png)"); code != 0 {
@@ -287,7 +291,7 @@ func TestLinksSayWhichFilesArePlainText(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "assets"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for name, body := range map[string]string{"rules.md": "# Regeln\n", "plot.png": "\x89PNG\x00"} {
+	for name, body := range map[string]string{"rules.md": "# Regeln\n", "plot.png": onePixelPNG} {
 		if err := os.WriteFile(filepath.Join(dir, "assets", name), []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -297,18 +301,21 @@ func TestLinksSayWhichFilesArePlainText(t *testing.T) {
 		t.Fatalf("%d %s", code, errs)
 	}
 	type link struct {
-		Kind, Target string
-		Plain        bool
+		Kind, Target   string
+		Plain, Picture bool
 	}
-	got := map[string]bool{}
+	got := map[string]link{}
 	for _, l := range jsonOut[[]link](t, out) {
 		if l.Kind != "file" {
 			t.Errorf("not a file: %+v", l)
 		}
-		got[l.Target] = l.Plain
+		got[l.Target] = l
 	}
-	if !got["../assets/rules.md"] || got["../assets/plot.png"] {
-		t.Fatalf("plain: %v", got)
+	if r := got["../assets/rules.md"]; !r.Plain || r.Picture {
+		t.Errorf("text file: %+v", r)
+	}
+	if p := got["../assets/plot.png"]; p.Plain || !p.Picture {
+		t.Errorf("picture: %+v", p)
 	}
 }
 

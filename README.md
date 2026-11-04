@@ -28,6 +28,7 @@ drive.
 
 ```sh
 just install      # the CLI and the outliner, into ~/.local/bin
+just icon-install # Linux: the icon a menu entry with Icon=tlog shows
 ```
 
 There used to be a desktop app as well; it was retired in November 2026 and its
@@ -85,7 +86,7 @@ around with single letters; `enter` picks it back up.
 | `/` | search every block |
 | `t` / `[` `]` | today · previous, next day |
 | `b` | back to where you came from |
-| `g` / `o` | follow a `[[link]]`, show a linked text file, or open any other link or file with `xdg-open` |
+| `g` / `o` | follow a `[[link]]`, show a linked text file or picture, or open any other link or file with `xdg-open` |
 | `x` | toggle the task checkbox |
 | `dd` | delete the block and everything in it |
 | `z` / `h` `l` | fold · unfold |
@@ -102,7 +103,13 @@ commands in the palette: `p`, then a few letters of the name.
 `![alt](url)` and bare addresses — are drawn as their label, images as `▣ alt`;
 hover one to see the address in the footer, click it to open it (`xdg-open`, or
 `open` on a Mac). A link to a plain-text file — an attached `.md`, a script, a
-CSV — is shown inside tlog, read-only; `o` there still hands it to the desktop. Click a block to put the caret there, a `▸`/`▾` bullet to
+CSV — is shown inside tlog, read-only; `o` there still hands it to the desktop.
+A link to a picture is drawn full screen in a terminal that can show one: kitty
+and ghostty (kitty graphics), foot, Konsole and other sixel terminals, iTerm2
+and WezTerm. tlog asks the terminal what it can do when the environment does not
+say; anywhere it cannot draw — alacritty, Terminal.app, inside tmux — the
+picture goes to `open` or `xdg-open` as before. `TLOG_IMAGES=kitty|sixel|iterm|none`
+overrides the guess. Click a block to put the caret there, a `▸`/`▾` bullet to
 fold, the box of a task to tick it, and the wheel moves. **Drop files onto the
 terminal** and they are copied into the notes' `assets/`, with their links
 at the caret, or as a block of their own while moving. With the mouse in use,

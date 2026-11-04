@@ -1,6 +1,9 @@
 package app
 
 import (
+	"bytes"
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -162,6 +165,39 @@ func TestLinkedTextReadsOnlyPlainTextFiles(t *testing.T) {
 		}
 	}
 	if _, err := s.LinkedText("pages/NOA.md", "../assets/gone.md"); err == nil {
+		t.Error("a link to nothing was not an error")
+	}
+}
+
+func TestLinkedPictureKnowsAPictureByItsBytes(t *testing.T) {
+	s := newSvc(t)
+	assets := filepath.Join(s.Store.Root, "assets")
+	if err := os.MkdirAll(assets, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, image.NewNRGBA(image.Rect(0, 0, 3, 2))); err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range map[string][]byte{
+		"screenshot": buf.Bytes(), // no extension, still a picture
+		"fake.png":   []byte("not a picture"),
+		"notes.md":   []byte("# Notes\n"),
+	} {
+		if err := os.WriteFile(filepath.Join(assets, name), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p, err := s.LinkedPicture("pages/X.md", "../assets/screenshot")
+	if err != nil || p == nil || p.Format != "png" || p.Width != 3 || p.Height != 2 {
+		t.Fatalf("got %+v, %v", p, err)
+	}
+	for _, other := range []string{"../assets/fake.png", "../assets/notes.md", "https://go.dev/x.png"} {
+		if p, err := s.LinkedPicture("pages/X.md", other); err != nil || p != nil {
+			t.Errorf("%s: got %+v, %v", other, p, err)
+		}
+	}
+	if _, err := s.LinkedPicture("pages/X.md", "../assets/gone.png"); err == nil {
 		t.Error("a link to nothing was not an error")
 	}
 }

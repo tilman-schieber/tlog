@@ -31,6 +31,7 @@ internal/attach/     attachments: the notes' assets/ folder
 internal/config/     ~/.config/tlog/config.toml
 internal/dates/      typed shorthand in, ISO out
 internal/fuzzy/      ranking strings against a typed prefix; knows nothing of notes
+internal/termimg/    drawing a picture in a terminal: kitty, sixel, iTerm2; knows nothing of notes
 internal/graph/      derived view: pages, links, backlinks, search
 internal/watch/      noticing edits made elsewhere: a stat sweep, not fsnotify
 internal/app/        the core — every semantic operation

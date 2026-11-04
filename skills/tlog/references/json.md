@@ -106,9 +106,11 @@ One element of `blocks` above.
   {"kind": "block", "target": "Timetable", "anchor": "k3f9q2", "rel": "pages/Timetable.md",
    "exists": true, "addr": "pages/Timetable.md:0@…", "text": "the lecture is at nine"},
   {"kind": "url",   "target": "https://go.dev/doc", "resolved": "https://go.dev/doc"},
-  {"kind": "file",  "target": "../assets/plan.png", "resolved": "/Users/…/assets/plan.png"},
+  {"kind": "file",  "target": "../assets/report.pdf", "resolved": "/Users/…/assets/report.pdf"},
   {"kind": "file",  "target": "../assets/rules.md", "resolved": "/Users/…/assets/rules.md",
    "plain": true},                                                              // plain text: read it with cat
+  {"kind": "file",  "target": "../assets/plot.png", "resolved": "/Users/…/assets/plot.png",
+   "picture": true},                                                            // a picture tlog can decode
   {"kind": "url",   "target": "ftp://x", "error": "…"}                           // cannot be opened
 ]
 ```

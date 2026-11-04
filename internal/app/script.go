@@ -30,6 +30,9 @@ type LinkView struct {
 	// Plain says a file is plain text, which tlog shows itself instead of
 	// handing it to the desktop.
 	Plain bool `json:"plain,omitempty"`
+	// Picture says a file is a picture tlog can decode, which the outliner
+	// draws itself in a terminal that can show one.
+	Picture bool `json:"picture,omitempty"`
 }
 
 // Links resolves everything a block points at: [[pages]] to their files,
@@ -74,6 +77,7 @@ func (s *Service) Links(a Addr) ([]LinkView, error) {
 			if !strings.Contains(resolved, "://") && !strings.HasPrefix(resolved, "mailto:") {
 				v.Kind = "file"
 				v.Plain = readText(resolved) != nil
+				v.Picture = !v.Plain && readPicture(resolved) != nil
 			}
 		}
 		out = append(out, v)

@@ -5,6 +5,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/tilman-schieber/tlog/internal/app"
 	"github.com/tilman-schieber/tlog/internal/markdown"
 	"github.com/tilman-schieber/tlog/internal/store"
+	"github.com/tilman-schieber/tlog/internal/termimg"
 )
 
 type mode int
@@ -83,6 +85,14 @@ type Model struct {
 	log      *logView
 	file     *fileView
 
+	// images is how this terminal draws a picture, if it can: read from the
+	// environment when the outliner starts, None in tests and anywhere it
+	// cannot tell.
+	images termimg.Protocol
+	// queued is a command something deep in a key or a click wants run —
+	// showing a picture hands the terminal over — returned with the update.
+	queued tea.Cmd
+
 	// embeds resolves each block's references by offset, so that a reference
 	// can be drawn as the block it points at rather than as a page name. It is
 	// rebuilt with the rows, from the same read model `tlog view` uses.
@@ -140,7 +150,7 @@ func Run(svc *app.Service, rel string) error {
 	if rel == "" {
 		rel = svc.StartupRel()
 	}
-	m := &Model{svc: svc, collapsed: map[string]bool{}}
+	m := &Model{svc: svc, collapsed: map[string]bool{}, images: termimg.Detect(os.Getenv)}
 	if err := m.load(rel); err != nil {
 		return err
 	}
@@ -420,6 +430,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.errMsg != beforeErr {
 		m.record(m.errMsg, true)
 	}
+	if m.queued != nil {
+		cmd = tea.Batch(cmd, m.queued)
+		m.queued = nil
+	}
 	return model, cmd
 }
 
@@ -433,6 +447,9 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.key(msg)
 	case tea.MouseMsg:
 		m.mouse(msg)
+		return m, nil
+	case pictureClosedMsg:
+		m.pictureClosed(msg)
 		return m, nil
 	case changedMsg:
 		m.changed(msg)

@@ -1,12 +1,17 @@
 package tui
 
 import (
+	"bytes"
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/tilman-schieber/tlog/internal/termimg"
 )
 
 func attachFile(t *testing.T, m *Model, name, body string) {
@@ -80,3 +85,59 @@ func TestATextFileIsWrappedAndScrolls(t *testing.T) {
 }
 
 func runes(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
+
+func pngBytes(t *testing.T) string {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, image.NewNRGBA(image.Rect(0, 0, 4, 3))); err != nil {
+		t.Fatal(err)
+	}
+	return buf.String()
+}
+
+func TestAPictureIsShownInATerminalThatCan(t *testing.T) {
+	m := treeModel(t, "- ![plot](../assets/plot.png)\n\n- below\n")
+	attachFile(t, m, "plot.png", pngBytes(t))
+	m.images = termimg.Kitty
+	got := opened(m)
+	send(t, m, k(tea.KeyEsc))
+	_, cmd := m.Update(runes("g"))
+	if cmd == nil || len(*got) != 0 {
+		t.Fatalf("the picture was not handed to the viewer: cmd %v, opened %v, error %q", cmd != nil, *got, m.errMsg)
+	}
+
+	// The viewer could not draw it after all: the opener, as before.
+	m.Update(pictureClosedMsg{viewer: &termimg.Viewer{}, err: termimg.ErrCannotShow, rel: m.doc.Rel, target: "../assets/plot.png"})
+	if len(*got) != 1 || !strings.HasSuffix((*got)[0], "plot.png") {
+		t.Fatalf("no fallback to the opener: %v", *got)
+	}
+	// o in the viewer: open it outside.
+	m.Update(pictureClosedMsg{viewer: &termimg.Viewer{Path: (*got)[0], Title: "plot.png", Opened: true}})
+	if len(*got) != 2 {
+		t.Fatalf("o did not open it: %v", *got)
+	}
+	// Any other key: back, nothing opened.
+	m.Update(pictureClosedMsg{viewer: &termimg.Viewer{Protocol: termimg.Kitty}})
+	if len(*got) != 2 || m.errMsg != "" {
+		t.Fatalf("closing opened something: %v %q", *got, m.errMsg)
+	}
+}
+
+func TestWhatTheTerminalSaidIsKept(t *testing.T) {
+	m := treeModel(t, "- x\n")
+	m.images = termimg.Ask
+	m.Update(pictureClosedMsg{viewer: &termimg.Viewer{Protocol: termimg.Sixel}})
+	if m.images != termimg.Sixel {
+		t.Fatalf("still %v", m.images)
+	}
+}
+
+func TestATextFileIsNotMistakenForAPicture(t *testing.T) {
+	m := treeModel(t, "- [r](../assets/r.md)\n")
+	attachFile(t, m, "r.md", "# R\n")
+	m.images = termimg.Sixel
+	send(t, m, k(tea.KeyEsc), runes("g"))
+	if m.mode != modeFile {
+		t.Fatalf("mode %v", m.mode)
+	}
+}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/tilman-schieber/tlog/internal/app"
 	"github.com/tilman-schieber/tlog/internal/markdown"
+	"github.com/tilman-schieber/tlog/internal/termimg"
 )
 
 // The mouse, and things dropped on the window.
@@ -153,6 +154,13 @@ func (m *Model) openURL(target string) {
 		m.leave()
 		m.showFile(f)
 		return
+	}
+	if m.images != termimg.None {
+		if p, err := m.svc.LinkedPicture(m.doc.Rel, target); err == nil && p != nil {
+			m.leave()
+			m.showPicture(p, target)
+			return
+		}
 	}
 	if err := m.svc.OpenLink(m.doc.Rel, target); err != nil {
 		m.errMsg = err.Error()
