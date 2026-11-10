@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 )
 
 func TestWrapRangesBreakAtWordsAndLoseNothing(t *testing.T) {
@@ -126,5 +127,22 @@ func TestTheBlockBeingEditedShowsExactlyWhatIsTyped(t *testing.T) {
 	frame := stripANSI(m.View())
 	if !strings.Contains(frame, "met [[Max Muster #Person]] today") {
 		t.Fatalf("the block under the caret hides part of its text:\n%s", frame)
+	}
+}
+
+func TestAnEmptyBlockIsVisiblyHighlightedWhileMoving(t *testing.T) {
+	// Without colours a highlighted space looks like any other.
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.ANSI)
+	defer lipgloss.SetColorProfile(prev)
+
+	m := treeModel(t, "- above\n\n- \n\n- below\n")
+	send(t, m, k(tea.KeyDown))
+	send(t, m, k(tea.KeyEsc))
+	if m.mode != modeMove || m.cur != 1 {
+		t.Fatalf("mode %v row %d: expected moving, on the empty block", m.mode, m.cur)
+	}
+	if !strings.Contains(m.View(), styleSelected.Render(" ")) {
+		t.Fatalf("the empty block under the cursor is not highlighted:\n%s", stripANSI(m.View()))
 	}
 }

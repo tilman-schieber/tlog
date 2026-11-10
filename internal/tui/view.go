@@ -274,7 +274,13 @@ func (m *Model) renderRowHits(r row, selected, editing bool) ([]string, [][]link
 		if selected && !editing {
 			// The highlight is drawn over what is shown, links collapsed, so
 			// the block does not change shape when the cursor reaches it.
-			body = styleSelected.Render(stripANSI(body))
+			// An empty block has nothing to highlight, so it gets one
+			// highlighted cell: the cursor must never be invisible.
+			plain := stripANSI(body)
+			if plain == "" {
+				plain = " "
+			}
+			body = styleSelected.Render(plain)
 		}
 		if editing {
 			body = m.renderEditLine(l, i)
