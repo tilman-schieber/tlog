@@ -49,6 +49,13 @@ func (m *Model) mouse(msg tea.MouseMsg) {
 		m.hover = m.hitAt(line, msg.X)
 	case msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft:
 		m.click(line, msg.X)
+	case msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonRight:
+		// The terminal's own selection is off while tlog has the mouse, and
+		// a collapsed link could not be selected anyway: right-click copies
+		// what it points at.
+		if h := m.hitAt(line, msg.X); h != nil {
+			m.copyItem(pickItem{url: h.url, link: h.page})
+		}
 	}
 }
 

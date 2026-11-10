@@ -1,5 +1,5 @@
 // Package clipboard reads what is on the system clipboard: a picture if there
-// is one, otherwise text. A terminal can only paste text, so a screenshot on
+// is one, otherwise text — and puts text there. A terminal can only paste text, so a screenshot on
 // the clipboard never reaches a terminal program through the terminal; this
 // asks the system for it instead, through the tools every desktop already has.
 //
@@ -125,4 +125,39 @@ func readMac(run runner) (Content, error) {
 		return Content{}, ErrEmpty
 	}
 	return Content{Text: string(out)}, nil
+}
+
+// Write puts text on the clipboard, with the same tools Read uses.
+func Write(text string) error {
+	return write(runtime.GOOS, os.Getenv, text, feed)
+}
+
+// feeder hands text to a tool on its standard input; a seam for tests.
+type feeder func(text, name string, args ...string) error
+
+// feed runs a tool with text on its input. Its output is not captured: wl-copy
+// and xclip leave a process behind that serves the clipboard, and waiting for
+// that process to close a pipe would wait forever.
+func feed(text, name string, args ...string) error {
+	if _, err := exec.LookPath(name); err != nil {
+		return fmt.Errorf("copying needs %s, which is not installed", name)
+	}
+	cmd := exec.Command(name, args...)
+	cmd.Stdin = strings.NewReader(text)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%s: %v", name, err)
+	}
+	return nil
+}
+
+func write(goos string, getenv func(string) string, text string, feed feeder) error {
+	switch {
+	case goos == "darwin":
+		return feed(text, "pbcopy")
+	case getenv("WAYLAND_DISPLAY") != "":
+		return feed(text, "wl-copy")
+	case getenv("DISPLAY") != "":
+		return feed(text, "xclip", "-selection", "clipboard")
+	}
+	return errors.New("no clipboard to copy to: neither Wayland nor X11 is running")
 }

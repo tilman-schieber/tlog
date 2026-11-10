@@ -587,6 +587,12 @@ func (m *Model) moveKey(msg tea.KeyMsg, k string) (tea.Model, tea.Cmd) {
 		m.structural(func(a app.Addr) (*app.Result, error) { return m.svc.Move(a, -1) })
 	case "alt+down":
 		m.structural(func(a app.Addr) (*app.Result, error) { return m.svc.Move(a, 1) })
+	case "y":
+		if b := m.current(); b != nil {
+			m.copy(b.Text, "the block")
+		}
+	case "Y":
+		m.copyLink()
 	case "u":
 		m.undoFile(false)
 	case "U":
@@ -1363,6 +1369,44 @@ func (m *Model) followLink() tea.Cmd {
 		m.mode = modeLinks
 		return nil
 	}
+}
+
+// copyLink puts a link of the highlighted block on the clipboard, asking
+// which when there are several.
+func (m *Model) copyLink() {
+	b := m.current()
+	if b == nil {
+		return
+	}
+	items := blockLinks(b)
+	switch len(items) {
+	case 0:
+		m.status = "no link in this block"
+	case 1:
+		m.copyItem(items[0])
+	default:
+		for i := range items {
+			it := items[i]
+			items[i].run = func(m *Model) { m.mode = modeMove; m.copyItem(it) }
+		}
+		m.pick = newPicker("copy link", items)
+		m.mode = modeLinks
+	}
+}
+
+func (m *Model) copyItem(it pickItem) {
+	a := m.svc.LinkAddress(m.doc.Rel, it.link, it.url)
+	m.copy(a, shortAddress(a))
+}
+
+// copy puts text on the clipboard and says what went there.
+func (m *Model) copy(text, what string) {
+	if err := m.svc.Copy(text); err != nil {
+		m.errMsg = err.Error()
+		return
+	}
+	m.errMsg = ""
+	m.status = "copied " + what
 }
 
 func (m *Model) openLink(l markdown.Link) {

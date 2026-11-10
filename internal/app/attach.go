@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"github.com/tilman-schieber/tlog/internal/clipboard"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -10,6 +9,8 @@ import (
 	"time"
 
 	"github.com/tilman-schieber/tlog/internal/attach"
+	"github.com/tilman-schieber/tlog/internal/clipboard"
+	"github.com/tilman-schieber/tlog/internal/markdown"
 )
 
 // Attachments live inside the notes, in assets/, so that a picture pasted on
@@ -119,6 +120,27 @@ func (s *Service) ReadClipboard() (clipboard.Content, error) {
 		return s.Clipboard()
 	}
 	return clipboard.Read()
+}
+
+// Copy puts text on the system clipboard.
+func (s *Service) Copy(text string) error {
+	if s.CopyTo != nil {
+		return s.CopyTo(text)
+	}
+	return clipboard.Write(text)
+}
+
+// LinkAddress is what copying a link gives: a page link as [[Page]], ready to
+// paste into another note; an address as it is; and a file as its full path,
+// which is what it takes to use it anywhere outside the notes.
+func (s *Service) LinkAddress(fromRel string, page markdown.Link, target string) string {
+	if target == "" {
+		return markdown.Link{Page: page.Page, Anchor: page.Anchor}.String()
+	}
+	if r, err := s.ResolveLink(fromRel, target); err == nil {
+		return r
+	}
+	return target
 }
 
 // AttachClipboard puts the picture on the clipboard into the notes, like

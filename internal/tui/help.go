@@ -61,6 +61,7 @@ func (m *Model) helpParts() []helpPart {
 		key("dd", "delete the block and everything under it — git keeps the old version"),
 		key("z  h l", "fold and unfold"),
 		key("a", "the agenda: everything with a deadline"),
+		key("y  Y", "copy the block's text, copy a link in it — the address, a file's full path, or [[the page]]"),
 		key("u  U", "undo, redo — a change on another page takes you there"),
 		key("q", "quit"),
 
@@ -99,6 +100,7 @@ func (m *Model) helpParts() []helpPart {
 
 		heading("The mouse"),
 		key("click", "a block to write there, a link to open it, ▸ ▾ to fold, ☐ to tick"),
+		key("right-click", "a link, to copy where it points"),
 		key("wheel", "move through the page"),
 		key("shift+drag", "select text, as in any program that uses the mouse"),
 

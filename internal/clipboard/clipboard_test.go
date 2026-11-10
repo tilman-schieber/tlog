@@ -92,3 +92,28 @@ func TestCopiedFilesComeAsTheirAddresses(t *testing.T) {
 		t.Fatalf("got %+v, %v", c, err)
 	}
 }
+
+func TestWriteUsesTheDesktopsTool(t *testing.T) {
+	for _, c := range []struct {
+		goos, wayland, x11, want string
+	}{
+		{"darwin", "", "", "pbcopy"},
+		{"linux", "wayland-1", ":0", "wl-copy"},
+		{"linux", "", ":0", "xclip -selection clipboard"},
+	} {
+		var got, gotText string
+		env := func(k string) string {
+			return map[string]string{"WAYLAND_DISPLAY": c.wayland, "DISPLAY": c.x11}[k]
+		}
+		err := write(c.goos, env, "hello", func(text, name string, args ...string) error {
+			got, gotText = strings.Join(append([]string{name}, args...), " "), text
+			return nil
+		})
+		if err != nil || got != c.want || gotText != "hello" {
+			t.Errorf("%s: ran %q with %q, %v; want %q", c.goos, got, gotText, err, c.want)
+		}
+	}
+	if err := write("linux", func(string) string { return "" }, "x", nil); err == nil {
+		t.Error("with no desktop there is nowhere to copy to, and that should be said")
+	}
+}

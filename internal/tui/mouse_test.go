@@ -350,3 +350,75 @@ func TestBoldSurvivesTheColoursInsideAHeading(t *testing.T) {
 		t.Fatalf("a terminal without styling gets its text back, got %q", got)
 	}
 }
+
+// copied records what was put on the clipboard, instead of putting it there.
+func copied(m *Model) *[]string {
+	var got []string
+	m.svc.CopyTo = func(text string) error { got = append(got, text); return nil }
+	return &got
+}
+
+func TestYCopiesTheBlocksOwnText(t *testing.T) {
+	m := treeModel(t, "- see [the docs](https://go.dev/doc)\n  and a second line\n  - a child\n")
+	got := copied(m)
+	send(t, m, k(tea.KeyEsc))
+	send(t, m, runes("y"))
+	want := "see [the docs](https://go.dev/doc)\nand a second line"
+	if len(*got) != 1 || (*got)[0] != want {
+		t.Fatalf("copied %q, want %q", *got, want)
+	}
+	if !strings.Contains(m.status, "copied") {
+		t.Fatalf("nothing said it was copied: %q", m.status)
+	}
+}
+
+func TestShiftYCopiesWhereALinkPoints(t *testing.T) {
+	m := treeModel(t, "- see [the docs](https://go.dev/doc)\n\n- met [[Ada Lovelace]]\n\n- [plan](../assets/plan.pdf)\n")
+	if err := os.MkdirAll(filepath.Join(m.svc.Store.Root, "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pdf := filepath.Join(m.svc.Store.Root, "assets", "plan.pdf")
+	if err := os.WriteFile(pdf, []byte("%PDF"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := copied(m)
+	send(t, m, k(tea.KeyEsc))
+	for range 3 {
+		send(t, m, runes("Y"))
+		send(t, m, runes("j"))
+	}
+	want := []string{"https://go.dev/doc", "[[Ada Lovelace]]", pdf}
+	if strings.Join(*got, "|") != strings.Join(want, "|") {
+		t.Fatalf("copied %q, want %q", *got, want)
+	}
+}
+
+func TestShiftYAsksWhichLinkWhenThereAreSeveral(t *testing.T) {
+	m := treeModel(t, "- [one](https://one.example) and [two](https://two.example)\n")
+	got := copied(m)
+	send(t, m, k(tea.KeyEsc))
+	send(t, m, runes("Y"))
+	if m.mode != modeLinks || len(*got) != 0 {
+		t.Fatalf("expected a choice, mode %v, copied %q", m.mode, *got)
+	}
+	send(t, m, k(tea.KeyDown))
+	send(t, m, k(tea.KeyEnter))
+	if len(*got) != 1 || (*got)[0] != "https://two.example" {
+		t.Fatalf("copied %q", *got)
+	}
+	if m.mode != modeMove {
+		t.Fatalf("copying should leave you moving, as before; mode %v", m.mode)
+	}
+}
+
+func TestRightClickCopiesALink(t *testing.T) {
+	m := treeModel(t, "- see [the docs](https://go.dev/doc)\n\n- below\n")
+	got := copied(m)
+	launched := opened(m)
+	send(t, m, k(tea.KeyDown))
+	m.View()
+	m.Update(mouseAt(8, 1, tea.MouseActionPress, tea.MouseButtonRight))
+	if len(*got) != 1 || (*got)[0] != "https://go.dev/doc" || len(*launched) != 0 {
+		t.Fatalf("copied %q, opened %q", *got, *launched)
+	}
+}

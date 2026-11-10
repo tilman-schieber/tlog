@@ -43,6 +43,10 @@ type Service struct {
 	// a fixed picture or text here.
 	Clipboard func() (clipboard.Content, error)
 
+	// CopyTo writes text to the system clipboard. Nil means the real one;
+	// tests put a recorder here.
+	CopyTo func(text string) error
+
 	hist history // what Undo takes back; see undo.go
 }
 
