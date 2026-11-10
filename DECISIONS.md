@@ -545,10 +545,21 @@ push sits on top. Failure reads "committed, but not pushed" and the commit
 stands. A push that failed in the background is surfaced in both adapters,
 because a failure nobody sees is the same as no backup at all.
 
-**It never forces and never merges**, and it is bounded at twenty seconds. A
-rejected push means the remote moved; resolving that is a decision, and the same
-rule applies as to a lost write — refuse and report rather than merge behind
-someone's back. Auto-pull is not built for exactly that reason.
+**It never forces**, and it is bounded at twenty seconds. A rejected push
+means the remote moved — and with notes written on two machines it moves all
+the time. Refusing every such push made autopush fail on every commit once the
+other machine had written anything (November 2026: 329 commits from one
+machine, every push from the other rejected). So a rejected push pulls: this
+copy's unpushed commits are rebased onto what arrived, with uncommitted work
+set aside and put back, and the push is tried once more. The outliner pulls
+the same way when it opens, when pushing is on; `tlog pull` does it by hand.
+
+**A clash is still never merged.** When both machines changed the same lines,
+the rebase is undone, both copies stay exactly as they were, and the error
+names the files. Which version of a note is right is a decision — the same
+rule as for a lost write. A rebase of commits that touch different files or
+different lines makes no such decision, which is why it is automatic and a
+merge commit is not built.
 
 ## Scope
 

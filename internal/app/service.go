@@ -173,6 +173,10 @@ func (s *Service) Commit() error { return s.Git.Flush() }
 // acts, and only one of them is easy to take back.
 func (s *Service) Push() error { return s.Git.Push() }
 
+// Pull brings in notes pushed from another machine, replaying this copy's
+// unpushed commits on top. A clash is refused, never merged; see store.Git.Pull.
+func (s *Service) Pull() error { return s.Git.Pull() }
+
 // SetAutoPush turns pushing-on-commit on or off for this notes directory.
 func (s *Service) SetAutoPush(on bool) error { return s.Git.SetAutoPush(on) }
 

@@ -363,7 +363,32 @@ func TestAFailedPushStillLeavesTheCommit(t *testing.T) {
 	}
 }
 
-func TestPushIsNeverForcedWhenTheRemoteMoved(t *testing.T) {
+// otherMachine is a second clone of the remote, which pushes a file of its own.
+func otherMachine(t *testing.T, remote, rel, body string) {
+	t.Helper()
+	c := filepath.Join(t.TempDir(), "c")
+	if err := run(filepath.Dir(c), "clone", "-q", remote, c); err != nil {
+		t.Fatal(err)
+	}
+	_ = run(c, "config", "user.name", "other")
+	_ = run(c, "config", "user.email", "other@localhost")
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(c, rel)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(c, rel), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_ = run(c, "add", "-A")
+	if err := run(c, "commit", "-q", "-m", "from elsewhere"); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(c, "push", "-q"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func pushedOnce(t *testing.T) (*Store, *Git, string) {
+	t.Helper()
 	s := newStore(t)
 	g := NewGit(s.Root)
 	if !g.Enabled() {
@@ -374,39 +399,76 @@ func TestPushIsNeverForcedWhenTheRemoteMoved(t *testing.T) {
 	if err := g.Push(); err != nil {
 		t.Fatal(err)
 	}
+	return s, g, remote
+}
 
-	// Another machine pushes something this copy has never seen.
-	other := t.TempDir()
-	if err := run(other, "clone", "-q", remote, other+"/c"); err != nil {
-		t.Fatal(err)
-	}
-	c := other + "/c"
-	_ = run(c, "config", "user.name", "other")
-	_ = run(c, "config", "user.email", "other@localhost")
-	if err := os.WriteFile(filepath.Join(c, "elsewhere.md"), []byte("- theirs\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	_ = run(c, "add", "-A")
-	if err := run(c, "commit", "-q", "-m", "from elsewhere"); err != nil {
-		t.Fatal(err)
-	}
-	if err := run(c, "push", "-q"); err != nil {
-		t.Fatal(err)
-	}
+// Two machines writing the same notes is the normal case, not an accident: a
+// push over a moved remote brings the other machine's work in first.
+func TestPushOverAMovedRemoteBringsTheOtherMachineIn(t *testing.T) {
+	s, g, remote := pushedOnce(t)
+	otherMachine(t, remote, "pages/elsewhere.md", "- theirs\n")
 
 	commitSomething(t, s, g, "journals/2026-09-19.md", "- ours again\n")
+	if err := g.Push(); err != nil {
+		t.Fatalf("different files should not stop a push: %v", err)
+	}
+	out, _ := output(remote, "log", "--oneline")
+	if !strings.Contains(out, "from elsewhere") || !strings.Contains(out, "2026-09-19") {
+		t.Fatalf("the remote should have both machines' commits:\n%s", out)
+	}
+	if b, err := os.ReadFile(filepath.Join(s.Root, "pages/elsewhere.md")); err != nil || string(b) != "- theirs\n" {
+		t.Fatalf("the other machine's page did not arrive here: %q %v", b, err)
+	}
+	if g.LastPushError() != nil {
+		t.Fatalf("a push that went through should leave no error: %v", g.LastPushError())
+	}
+}
+
+// When both changed the same lines, which one is right is a decision: nothing
+// is merged, nothing is forced, and both copies are exactly as they were.
+func TestAClashIsNeverMergedOrForced(t *testing.T) {
+	s, g, remote := pushedOnce(t)
+	otherMachine(t, remote, "journals/2026-09-17.md", "- theirs\n")
+
+	commitSomething(t, s, g, "journals/2026-09-17.md", "- ours, changed\n")
+	before, _ := output(s.Root, "rev-parse", "HEAD")
 	err := g.Push()
 	if err == nil {
-		t.Fatal("pushing over a moved remote should be refused, not forced")
+		t.Fatal("a clash should refuse the push")
 	}
-	if !strings.Contains(err.Error(), "rejected") || !strings.Contains(err.Error(), "pull --rebase") {
-		t.Fatalf("the message should say what happened and what to do: %v", err)
+	if !strings.Contains(err.Error(), "journals/2026-09-17.md") || !strings.Contains(err.Error(), "pull --rebase") {
+		t.Fatalf("the message should name the file and say what to do: %v", err)
 	}
-
-	// And the other machine's work is still there.
+	if after, _ := output(s.Root, "rev-parse", "HEAD"); after != before {
+		t.Fatal("this copy's history was changed by a refused pull")
+	}
+	if g.rebasing() {
+		t.Fatal("a half-done rebase was left behind")
+	}
+	if b, _ := os.ReadFile(filepath.Join(s.Root, "journals/2026-09-17.md")); string(b) != "- ours, changed\n" {
+		t.Fatalf("this copy's note changed: %q", b)
+	}
 	out, _ := output(remote, "log", "--oneline")
 	if !strings.Contains(out, "from elsewhere") {
 		t.Fatalf("the other machine's commit was destroyed:\n%s", out)
+	}
+}
+
+// A pull while something is written but not yet committed keeps it.
+func TestPullKeepsWhatIsNotCommittedYet(t *testing.T) {
+	s, g, remote := pushedOnce(t)
+	otherMachine(t, remote, "pages/elsewhere.md", "- theirs\n")
+	if err := s.Write("journals/2026-09-17.md", []byte("- ours, still typing\n"), ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Pull(); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(s.Root, "journals/2026-09-17.md")); string(b) != "- ours, still typing\n" {
+		t.Fatalf("uncommitted work was lost: %q", b)
+	}
+	if _, err := os.Stat(filepath.Join(s.Root, "pages/elsewhere.md")); err != nil {
+		t.Fatal("the other machine's page did not arrive")
 	}
 }
 

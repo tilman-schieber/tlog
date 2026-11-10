@@ -545,3 +545,50 @@ func TestTheUsageNamesEveryCommand(t *testing.T) {
 		t.Fatalf("block help: %q", out)
 	}
 }
+
+// Two machines share one remote: pull brings in what the other pushed.
+func TestPullBringsInAnotherMachinesNotes(t *testing.T) {
+	dir := t.TempDir()
+	if code, _, errs := runCLI(t, dir, "pull"); code != 1 || !strings.Contains(errs, "no remote") {
+		t.Fatalf("pull without a remote: code=%d stderr=%q", code, errs)
+	}
+	if code, _, errs := runCLI(t, dir, "add", "a note"); code != 0 {
+		t.Fatalf("%d %s", code, errs)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+	bare := t.TempDir()
+	if out, err := gitOutput(bare, "init", "-q", "--bare"); err != nil {
+		t.Fatal(out, err)
+	}
+	if out, err := gitOutput(dir, "remote", "add", "origin", bare); err != nil {
+		t.Fatal(out, err)
+	}
+	if code, _, errs := runCLI(t, dir, "push"); code != 0 {
+		t.Fatalf("push: %d %s", code, errs)
+	}
+
+	other := filepath.Join(t.TempDir(), "other")
+	if out, err := gitOutput(filepath.Dir(other), "clone", "-q", bare, other); err != nil {
+		t.Fatal(out, err)
+	}
+	if err := os.MkdirAll(filepath.Join(other, "pages"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(other, "pages", "Elsewhere.md"), []byte("- written on the laptop\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"add", "-A"}, {"-c", "user.name=o", "-c", "user.email=o@x", "commit", "-q", "-m", "other"}, {"push", "-q"}} {
+		if out, err := gitOutput(other, args...); err != nil {
+			t.Fatal(args, out, err)
+		}
+	}
+
+	if code, out, errs := runCLI(t, dir, "pull"); code != 0 || !strings.Contains(out, "up to date") {
+		t.Fatalf("pull: code=%d out=%q err=%q", code, out, errs)
+	}
+	if code, out, _ := runCLI(t, dir, "view", "Elsewhere"); code != 0 || !strings.Contains(out, "written on the laptop") {
+		t.Fatalf("the other machine's page is not here: code=%d out=%q", code, out)
+	}
+}

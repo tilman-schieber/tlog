@@ -94,7 +94,8 @@ undo is itself committed.
 
 | command | what it does |
 |---|---|
-| `tlog push` | commit what is outstanding and push; needs a remote |
+| `tlog push` | commit what is outstanding and push; needs a remote. When another machine pushed first, its notes are pulled in and the push retried |
+| `tlog pull` | bring in what another machine pushed; this copy's unpushed commits go on top, a clash is refused and nothing is merged |
 | `tlog push -auto on\|off` | push on every commit, or not — kept in the notes repository |
 | `tlog config git.remote <url>` | where pushing goes |
 | `tlog config <key> <value>` | change a setting; a bad value is exit 2 and changes nothing |

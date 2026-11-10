@@ -43,6 +43,10 @@ type Git struct {
 	autopush   bool
 	autocommit bool
 	lastErr    error
+
+	// op keeps committing, pulling and pushing from running over each other:
+	// the debounced commit fires on a timer, and a pull rewrites the branch.
+	op sync.Mutex
 }
 
 // NewGit prepares the notes directory for versioning, initialising a
@@ -151,35 +155,126 @@ func (g *Git) LastPushError() error {
 	return g.lastErr
 }
 
-// Push sends the current branch to its remote. It never forces and never
-// merges: a rejected push means the remote moved, and resolving that is a
-// decision, not something to do behind someone's back.
+// Push sends the current branch to its remote. It never forces. When the
+// remote has moved — another machine pushed — it pulls first, replaying this
+// copy's commits on top of what arrived, and tries once more; that only
+// succeeds when the two touched different things. When they changed the same
+// lines nothing is merged and the push is refused, with both copies intact.
 func (g *Git) Push() error {
+	g.op.Lock()
+	defer g.op.Unlock()
+	return g.push()
+}
+
+func (g *Git) push() error {
 	if !g.Enabled() {
 		return fmt.Errorf("no git repository in the notes directory")
 	}
 	if !g.HasRemote() {
 		return fmt.Errorf("no remote configured; add one with `git -C %s remote add origin <url>`", g.root)
 	}
-
-	branch, err := output(g.root, "rev-parse", "--abbrev-ref", "HEAD")
+	branch, err := g.branch()
 	if err != nil {
 		return err
 	}
-	branch = strings.TrimSpace(branch)
 
 	err = runTimeout(g.root, PushTimeout, "push", "--set-upstream", "origin", branch)
-	g.mu.Lock()
-	g.lastErr = err
-	g.mu.Unlock()
+	if err != nil && rejected(err) {
+		if err = g.pull(); err == nil {
+			err = runTimeout(g.root, PushTimeout, "push", "--set-upstream", "origin", branch)
+		}
+	}
+	g.setErr(err)
+	if err != nil && rejected(err) {
+		return fmt.Errorf("push rejected: the remote has commits this copy does not. "+
+			"Run `git -C %s pull --rebase` and look at what comes back", g.root)
+	}
+	return err
+}
+
+func rejected(err error) bool {
+	return strings.Contains(err.Error(), "rejected") || strings.Contains(err.Error(), "non-fast-forward")
+}
+
+// Pull brings in what the remote has and this copy does not: another machine's
+// notes. This copy's own commits that were never pushed are replayed on top of
+// them, and anything not yet committed is set aside and put back. When both
+// changed the same lines nothing is merged — the rebase is undone, everything
+// is as it was, and the error names the files — because which version of a
+// note is right is a decision, not something to make behind someone's back.
+func (g *Git) Pull() error {
+	if !g.Enabled() {
+		return fmt.Errorf("no git repository in the notes directory")
+	}
+	if !g.HasRemote() {
+		return fmt.Errorf("no remote configured; add one with `git -C %s remote add origin <url>`", g.root)
+	}
+	g.op.Lock()
+	defer g.op.Unlock()
+	err := g.pull()
 	if err != nil {
-		if strings.Contains(err.Error(), "rejected") || strings.Contains(err.Error(), "non-fast-forward") {
-			return fmt.Errorf("push rejected: the remote has commits this copy does not. "+
-				"Run `git -C %s pull --rebase` and look at what comes back", g.root)
+		g.setErr(err)
+	}
+	return err
+}
+
+func (g *Git) pull() error {
+	if g.rebasing() {
+		return fmt.Errorf("a rebase is already in progress in %s; finish it with git first", g.root)
+	}
+	branch, err := g.branch()
+	if err != nil {
+		return err
+	}
+	if err := runTimeout(g.root, PushTimeout, "fetch", "-q", "origin"); err != nil {
+		return err
+	}
+	theirs := "refs/remotes/origin/" + branch
+	if run(g.root, "rev-parse", "-q", "--verify", theirs) != nil {
+		return nil // the remote has no such branch yet: nothing to bring in
+	}
+	if run(g.root, "merge-base", "--is-ancestor", theirs, "HEAD") == nil {
+		return nil // nothing new
+	}
+	if err := run(g.root, "-c", "core.editor=true", "rebase", "-q", "--autostash", theirs); err != nil {
+		files, _ := output(g.root, "-c", "core.quotePath=false", "diff", "--name-only", "--diff-filter=U")
+		_ = run(g.root, "rebase", "--abort")
+		if files = strings.TrimSpace(files); files != "" {
+			return fmt.Errorf("this copy and the remote both changed %s; nothing was merged. "+
+				"Run `git -C %s pull --rebase` and choose", strings.ReplaceAll(files, "\n", ", "), g.root)
 		}
 		return err
 	}
 	return nil
+}
+
+// rebasing reports whether a rebase was left half done, by hand or by a crash.
+func (g *Git) rebasing() bool {
+	for _, d := range []string{"rebase-merge", "rebase-apply"} {
+		p, err := output(g.root, "rev-parse", "--git-path", d)
+		if err != nil {
+			continue
+		}
+		p = strings.TrimSpace(p)
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(g.root, p)
+		}
+		if _, err := os.Stat(p); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *Git) branch() (string, error) {
+	b, err := output(g.root, "rev-parse", "--abbrev-ref", "HEAD")
+	return strings.TrimSpace(b), err
+}
+
+func (g *Git) setErr(err error) {
+	g.mu.Lock()
+	g.lastErr = err
+	g.mu.Unlock()
 }
 
 // ensureIdentity sets a repository-local committer only when the user has none
@@ -268,6 +363,8 @@ func (g *Git) Flush() error {
 	}
 	sort.Strings(files)
 
+	g.op.Lock()
+	defer g.op.Unlock()
 	if err := run(g.root, "add", "-A"); err != nil {
 		return err
 	}
@@ -280,7 +377,7 @@ func (g *Git) Flush() error {
 	// The commit is what protects the notes; the push is a convenience on top.
 	// A failed push must never look like a failed save.
 	if g.AutoPush() {
-		if err := g.Push(); err != nil {
+		if err := g.push(); err != nil {
 			return fmt.Errorf("committed, but not pushed: %w", err)
 		}
 	}

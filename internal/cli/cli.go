@@ -36,6 +36,7 @@ usage:
   tlog alias <page> <name>    give a page another name
   tlog config                 the settings; <key> reads one, <key> <value> sets it
   tlog push [-auto on|off]    push the notes now, or set pushing on every commit
+  tlog pull                   bring in notes pushed from another machine
   tlog sync                   where the notes stand with their remote
   tlog import [-from dir]     import a Logseq graph into the notes directory
   tlog version                print the version
@@ -111,7 +112,7 @@ func Main(args []string, stdout, stderr io.Writer) int {
 	}
 
 	commands := map[string]func([]string, io.Writer, io.Writer, *app.Service) int{
-		"todo": cmdTodo, "add": cmdAdd, "import": cmdImport, "push": cmdPush,
+		"todo": cmdTodo, "add": cmdAdd, "import": cmdImport, "push": cmdPush, "pull": cmdPull,
 		"due": cmdDue, "attach": cmdAttach, "config": cmdConfig, "files": cmdFiles,
 		"search": cmdSearch, "view": cmdView, "index": cmdIndex, "block": cmdBlock,
 		"alias": cmdAlias, "commands": cmdCommands, "date": cmdDate, "people": cmdPeople,
@@ -628,6 +629,24 @@ func cmdPush(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 		return fail(stderr, err)
 	}
 	fmt.Fprintln(stdout, "pushed")
+	return exitOK
+}
+
+// cmdPull brings in what another machine pushed. Pushing does this by itself
+// when the remote has moved; this is for reading the latest before writing.
+func cmdPull(args []string, stdout, stderr io.Writer, svc *app.Service) int {
+	fs := flags("pull", stderr)
+	if err := parseFlags(fs, args); err != nil {
+		return exitUsage
+	}
+	if !svc.Sync().Remote {
+		fmt.Fprintln(stderr, "tlog: no remote; set one with `tlog config git.remote <url>`")
+		return exitError
+	}
+	if err := svc.Pull(); err != nil {
+		return fail(stderr, err)
+	}
+	fmt.Fprintln(stdout, "up to date with", svc.Git.Remote())
 	return exitOK
 }
 

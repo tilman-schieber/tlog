@@ -184,7 +184,23 @@ func Run(svc *app.Service, rel string) error {
 	return err
 }
 
-func (m *Model) Init() tea.Cmd { return watchCmd(m.changes) }
+func (m *Model) Init() tea.Cmd {
+	if m.svc.Sync().AutoPush {
+		return tea.Batch(watchCmd(m.changes), pullCmd(m.svc))
+	}
+	return watchCmd(m.changes)
+}
+
+// pulledMsg is the end of the pull made on opening, when these notes are
+// pushed somewhere: another machine may have written since.
+type pulledMsg struct{ err error }
+
+// pullCmd pulls in the background, so a slow network never delays the first
+// keystroke. What arrives reaches the screen the way any edit made elsewhere
+// does, through the watch.
+func pullCmd(svc *app.Service) tea.Cmd {
+	return func() tea.Msg { return pulledMsg{svc.Pull()} }
+}
 
 // load reads a file for editing together with what the rest of the notes say
 // about it. Both come from the core in one graph build.
@@ -457,6 +473,11 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case pictureClosedMsg:
 		m.pictureClosed(msg)
+		return m, nil
+	case pulledMsg:
+		if msg.err != nil {
+			m.status = "not pulled: " + msg.err.Error()
+		}
 		return m, nil
 	case changedMsg:
 		m.changed(msg)
