@@ -1,6 +1,10 @@
 package tui
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/charmbracelet/x/ansi"
+)
 
 // editor is a minimal multi-line text buffer for one block. Blocks are the
 // editing unit, so this is deliberately not a general text editor: it knows
@@ -239,8 +243,9 @@ func (e *editor) lineEnd(i int) int {
 	return i
 }
 
-// setCaret puts the caret at a line and column, clamped to what is there, for
-// a mouse click.
+// setCaret puts the caret at a line and a screen column of it, clamped to
+// what is there. A click and a move by screen line both know columns rather
+// than characters, and a wide character takes two.
 func (e *editor) setCaret(line, col int) {
 	i := 0
 	for ; line > 0 && i < len(e.runes); i++ {
@@ -249,8 +254,24 @@ func (e *editor) setCaret(line, col int) {
 		}
 	}
 	end := e.lineEnd(i)
-	e.cur = i + max(0, min(col, end-i))
+	c := 0
+	for i < end && c < col {
+		c += ansi.StringWidth(string(e.runes[i]))
+		i++
+	}
+	e.cur = i
 	e.goalCol = 0
+}
+
+// lineText is the text of one line of the block.
+func (e *editor) lineText(n int) string {
+	i := 0
+	for ; n > 0 && i < len(e.runes); i++ {
+		if e.runes[i] == '\n' {
+			n--
+		}
+	}
+	return string(e.runes[i:e.lineEnd(i)])
 }
 
 func (e *editor) atStart() bool { return e.cur == 0 }

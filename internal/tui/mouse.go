@@ -124,11 +124,17 @@ func (m *Model) click(line, x int) {
 	}
 	m.syncEditor()
 	if m.ed != nil {
-		// Columns count from where the text starts, after the bullet. On a
+		// Columns count from where the text starts, after the bullet. A long
+		// line is wrapped over several screen lines, so the screen line is
+		// mapped back to the line of text and the column it starts at. On a
 		// block that was drawn with its links collapsed this is close rather
 		// than exact, which is as good as a click on text that is about to
 		// change shape can be.
-		m.ed.setCaret(line-m.lineFirst[line], x-bulletCol-2)
+		logical, col0 := line-m.lineFirst[line], 0
+		if line < len(m.lineInfo) && m.lineInfo[line].logical >= 0 {
+			logical, col0 = m.lineInfo[line].logical, m.lineInfo[line].col0
+		}
+		m.ed.setCaret(logical, col0+x-bulletCol-2)
 	}
 }
 

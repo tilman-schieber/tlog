@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	tapp "github.com/tilman-schieber/tlog/internal/app"
 	"github.com/tilman-schieber/tlog/internal/dates"
@@ -133,47 +134,57 @@ func (m *Model) footer() string {
 func (m *Model) bodyLines() ([]string, int) {
 	var out []string
 	cursorLine := 0
-	m.lineRow, m.lineHits, m.lineFirst = m.lineRow[:0], m.lineHits[:0], m.lineFirst[:0]
+	m.lineRow, m.lineHits, m.lineFirst, m.lineInfo = m.lineRow[:0], m.lineHits[:0], m.lineFirst[:0], m.lineInfo[:0]
 
 	for i, r := range m.rows {
 		editing := m.ed != nil && m.edBlock == r.block
 		start := len(out)
-		lines, hits := m.renderRowHits(r, i == m.cur, editing)
+		lines, hits, info := m.renderRowHits(r, i == m.cur, editing)
 		out = append(out, lines...)
 		for j := range lines {
 			m.lineRow = append(m.lineRow, i)
 			m.lineHits = append(m.lineHits, hits[j])
 			m.lineFirst = append(m.lineFirst, start)
+			m.lineInfo = append(m.lineInfo, info[j])
 		}
 		if i == m.cur {
 			cursorLine = start
 			if editing {
-				line, _ := m.ed.cursorPos()
-				cursorLine = start + line
+				cursorLine = start + m.edCursorVis
 			}
 		}
 	}
 	if len(out) == 0 {
 		out = append(out, styleMuted.Render("  (empty — press enter to write something)"))
 		m.lineRow, m.lineHits, m.lineFirst = append(m.lineRow, -1), append(m.lineHits, nil), append(m.lineFirst, 0)
+		m.lineInfo = append(m.lineInfo, lineInfo{logical: -1})
 	}
 	return out, cursorLine
 }
 
 func (m *Model) renderRow(r row, selected, editing bool) []string {
-	lines, _ := m.renderRowHits(r, selected, editing)
+	lines, _, _ := m.renderRowHits(r, selected, editing)
 	return lines
 }
 
-// renderRowHits draws a row and says, line by line, where its links landed.
-func (m *Model) renderRowHits(r row, selected, editing bool) ([]string, [][]linkHit) {
+// renderRowHits draws a row and says, screen line by screen line, where its
+// links landed and which line of the text each one shows.
+func (m *Model) renderRowHits(r row, selected, editing bool) ([]string, [][]linkHit, []lineInfo) {
+	none := func(n int) []lineInfo {
+		info := make([]lineInfo, n)
+		for i := range info {
+			info[i].logical = -1
+		}
+		return info
+	}
 	if r.kind != rowBlock {
 		// A heading starts with a blank line; each screen line is its own
 		// entry, or the mouse would be a line out below it.
 		lines := strings.Split(m.renderSectionRow(r, selected), "\n")
-		return lines, make([][]linkHit, len(lines))
+		return lines, make([][]linkHit, len(lines)), none(len(lines))
 	}
 	indent := strings.Repeat("  ", r.depth)
+	cont := indent + "  "
 	bullet := "•"
 	quoted := r.block.Quote()
 	if quoted {
@@ -196,21 +207,54 @@ func (m *Model) renderRowHits(r row, selected, editing bool) ([]string, [][]link
 	// `tlog view -json` carries too: highlighted, or laid out as a table when they are ```csv.
 	if !editing && !selected && strings.Contains(text, "```") {
 		if out, hits := m.renderFenced(r, text, indent, bullet); out != nil {
-			return out, hits
+			return out, hits, none(len(out))
 		}
 	}
 
-	lines := strings.Split(text, "\n")
+	// What follows the first line rather than being part of it: the block's
+	// name, and its deadline with how it stands. They wrap with that line.
+	trailer := ""
+	if !editing {
+		if r.block.Anchor != "" {
+			trailer += " " + styleMuted.Render("^"+r.block.Anchor)
+		}
+		if due, ok := tapp.Deadline(r.block); ok {
+			style := styleMuted
+			if r.block.Task() != markdown.TaskDone {
+				switch dates.Status(due, time.Now()) {
+				case dates.Overdue:
+					style = styleError
+				case dates.Today:
+					style = styleTodo
+				}
+			}
+			trailer += " " + style.Render("⏰ "+dates.Short(due))
+		}
+	}
+
+	// The room a line of text has: the window, less the indent and bullet.
+	// Before the first window size arrives there is no window to wrap to.
+	room := 0
+	if m.width > 0 {
+		room = max(8, m.width-lipgloss.Width(cont))
+	}
+	cline, ccell := -1, 0
+	if editing {
+		var cc int
+		cline, cc = m.ed.cursorPos()
+		ccell = cellsTo([]rune(m.ed.lineText(cline)), cc)
+		m.layout = edLayout{text: text, width: m.width}
+		m.edCursorVis = 0
+	}
 
 	var out []string
 	var hits [][]linkHit
+	var info []lineInfo
 	inFence := false
-	for i, l := range lines {
-		var prefix string
+	for i, l := range strings.Split(text, "\n") {
+		prefix := cont
 		if i == 0 {
 			prefix = indent + styleBullet.Render(bullet) + " "
-		} else {
-			prefix = indent + "  "
 		}
 		body := l
 		if strings.HasPrefix(strings.TrimSpace(l), "```") {
@@ -236,44 +280,59 @@ func (m *Model) renderRowHits(r row, selected, editing bool) ([]string, [][]link
 			body = m.renderEditLine(l, i)
 			lineHits = nil
 		}
-		shift := lipgloss.Width(prefix)
-		for j := range lineHits {
-			lineHits[j].from += shift
-			lineHits[j].to += shift
+		if i == 0 {
+			body += trailer
 		}
-		out = append(out, prefix+body)
-		hits = append(hits, lineHits)
+
+		segs := wrapRanges(stripANSI(body), room)
+		for k, sg := range segs {
+			p := prefix
+			if k > 0 {
+				p = cont
+			}
+			shift := lipgloss.Width(p)
+			var hs []linkHit
+			for _, h := range lineHits {
+				if h.to <= sg[0] || h.from >= sg[1] {
+					continue
+				}
+				h.from = max(h.from, sg[0]) - sg[0] + shift
+				h.to = min(h.to, sg[1]) - sg[0] + shift
+				hs = append(hs, h)
+			}
+			if editing {
+				last := k == len(segs)-1
+				m.layout.segs = append(m.layout.segs, edSeg{logical: i, start: sg[0], end: sg[1], last: last})
+				if i == cline && ccell >= sg[0] && (ccell < sg[1] || last) {
+					m.edCursorVis = len(out)
+				}
+			}
+			out = append(out, p+ansi.Cut(body, sg[0], sg[1]))
+			hits = append(hits, hs)
+			info = append(info, lineInfo{logical: i, col0: sg[0]})
+		}
 	}
 
-	if r.block.Anchor != "" && !editing {
-		out[0] += " " + styleMuted.Render("^"+r.block.Anchor)
-	}
 	for _, p := range r.block.Props {
 		if tapp.IsDeadlineKey(p.Key) {
 			continue // shown beside the text instead, with how it stands
 		}
-		out = append(out, indent+"  "+styleProp.Render(p.Key+":: "+p.Value))
-	}
-	if due, ok := tapp.Deadline(r.block); ok && !editing {
-		style := styleMuted
-		if r.block.Task() != markdown.TaskDone {
-			switch dates.Status(due, time.Now()) {
-			case dates.Overdue:
-				style = styleError
-			case dates.Today:
-				style = styleTodo
-			}
+		prop := styleProp.Render(p.Key + ":: " + p.Value)
+		for _, sg := range wrapRanges(stripANSI(prop), room) {
+			out = append(out, cont+ansi.Cut(prop, sg[0], sg[1]))
 		}
-		out[0] += " " + style.Render("⏰ "+dates.Short(due))
 	}
 
 	if editing && m.comp != nil && m.comp.active {
-		out = append(out, m.completionLines(indent+"  ")...)
+		out = append(out, m.completionLines(cont)...)
 	}
 	for len(hits) < len(out) {
 		hits = append(hits, nil) // properties and menus carry no links
 	}
-	return out, hits
+	for len(info) < len(out) {
+		info = append(info, lineInfo{logical: -1})
+	}
+	return out, hits, info
 }
 
 // renderFenced draws a block containing fenced regions, replacing each fence
@@ -594,12 +653,19 @@ func (c *refCursor) skip(r row, line string) {
 }
 
 func highlightInline(s string, cursor *refCursor) string {
+	return colourInline(s, cursor, false)
+}
+
+// colourInline is highlightInline, or with raw set, the same colours without
+// changing a character — for the block under the caret, where what is drawn
+// has to be exactly what is typed, or the caret lands in the wrong place.
+func colourInline(s string, cursor *refCursor, raw bool) string {
 	s = viewLinkRe.ReplaceAllStringFunc(s, func(match string) string {
 		if !viewAnchorRe.MatchString(match) {
 			// [[Max #person]] says once what Max is; drawn every time, it would
 			// set him apart from every person who was introduced elsewhere.
 			// The link is drawn as [[Max]], and hovering shows all of it.
-			if l := markdown.ParseLinkTarget(match[2 : len(match)-2]); len(l.Tags) > 0 {
+			if l := markdown.ParseLinkTarget(match[2 : len(match)-2]); len(l.Tags) > 0 && !raw {
 				return styleLink.Render("[[" + l.Page + "]]")
 			}
 			return styleLink.Render(match)
@@ -626,7 +692,7 @@ func highlightInline(s string, cursor *refCursor) string {
 // highlightRaw colours a line without resolving anything, for the places that
 // must show what is actually in the file: the block under the caret, and the
 // section rows below the outline, which belong to other pages.
-func highlightRaw(s string) string { return highlightInline(s, &refCursor{}) }
+func highlightRaw(s string) string { return colourInline(s, &refCursor{}, true) }
 
 // oneLineRef flattens a referenced block for use inside a line of prose.
 func oneLineRef(s string) string {

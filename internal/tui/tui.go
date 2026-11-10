@@ -135,8 +135,15 @@ type Model struct {
 	lineRow   []int
 	lineFirst []int
 	lineHits  [][]linkHit
-	bodyTop   int
-	pickTop   int
+	// lineInfo maps a screen line back to the text it shows, since a long
+	// line is wrapped over several; layout is how the block being edited was
+	// wrapped, for moving by screen line, and edCursorVis the screen line of
+	// that block the caret is on.
+	lineInfo    []lineInfo
+	layout      edLayout
+	edCursorVis int
+	bodyTop     int
+	pickTop     int
 	// hover is the link under the mouse pointer, whose address the footer
 	// shows: links are drawn as their label, and this is how to see where
 	// one goes before clicking.
@@ -802,12 +809,14 @@ func (m *Model) typingKey(msg tea.KeyMsg, k string) (tea.Model, tea.Cmd) {
 		m.ed.end()
 		return m, nil
 	case "up":
-		if !m.ed.up() {
+		// A long line is wrapped on screen, so ↑ goes to the screen line
+		// above, which may still be the same line of text.
+		if !m.moveVisual(-1) && !m.ed.up() {
 			m.moveCursor(-1)
 		}
 		return m, nil
 	case "down":
-		if !m.ed.down() {
+		if !m.moveVisual(1) && !m.ed.down() {
 			m.moveCursor(1)
 		}
 		return m, nil
