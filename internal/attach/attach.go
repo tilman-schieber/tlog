@@ -173,6 +173,12 @@ func Link(e Entry) string {
 	return fmt.Sprintf("%s[%s](%s)", prefix, labelEscaper.Replace(e.Name), Target(e))
 }
 
+// LinkAs is the link to a file under a label of its own: a pasted note is
+// called by its title, not by the file name made from it.
+func LinkAs(e Entry, label string) string {
+	return fmt.Sprintf("[%s](%s)", labelEscaper.Replace(label), Target(e))
+}
+
 // Target is the address part of the link: ../assets/name, percent-encoded.
 func Target(e Entry) string {
 	u := url.URL{Path: "../" + Dir + "/" + e.Name}

@@ -592,3 +592,18 @@ func TestPullBringsInAnotherMachinesNotes(t *testing.T) {
 		t.Fatalf("the other machine's page is not here: code=%d out=%q", code, out)
 	}
 }
+
+func TestAttachNoteFromStdin(t *testing.T) {
+	dir := t.TempDir()
+	seed(t, dir)
+	old := stdin
+	stdin = strings.NewReader("Dear all,\nthe meeting moves to Friday.\n")
+	defer func() { stdin = old }()
+	code, out, errs := runCLI(t, dir, "attach", "-note", "-title", "Meeting moved", "-link-only", "-")
+	if code != 0 || !strings.HasPrefix(out, "[Meeting moved](../assets/") {
+		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
+	}
+	if code, _, errs := runCLI(t, dir, "attach", "-note", "a-file.md"); code != 2 {
+		t.Fatalf("a file with -note should be a usage error: %d %q", code, errs)
+	}
+}

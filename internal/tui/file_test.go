@@ -198,3 +198,19 @@ func readNote(t *testing.T, m *Model) string {
 	}
 	return string(data)
 }
+
+func TestSlashNoteLinksTheClipboardsTextAsAFile(t *testing.T) {
+	m := newModel(t)
+	m.svc.Clipboard = func() (clipboard.Content, error) {
+		return clipboard.Content{Text: "Protokoll der Sitzung\n\nAnwesend: alle\n"}, nil
+	}
+	typeText(t, m, "Sitzung /note")
+	if m.comp == nil || len(m.comp.cmds) == 0 || m.comp.cmds[0].Name != "note" {
+		t.Fatal("/note was not offered")
+	}
+	send(t, m, k(tea.KeyEnter))
+	send(t, m, k(tea.KeyEsc))
+	if got := onDisk(t, m); !strings.Contains(got, "Sitzung [Protokoll der Sitzung](../assets/") {
+		t.Fatalf("got %q", got)
+	}
+}

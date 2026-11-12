@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/tilman-schieber/tlog/internal/clipboard"
 )
 
 func attachSvc(t *testing.T) *Service {
@@ -212,5 +214,63 @@ func TestMigrateShelfBringsLinkedFilesIntoTheNotes(t *testing.T) {
 	}
 	if again.Links != 0 || len(again.Copied) != 0 {
 		t.Fatalf("second run: %+v", again)
+	}
+}
+
+// Text kept as a note is a file of its own, called by its title, linked by it.
+func TestAttachNoteKeepsTextAsALinkedFile(t *testing.T) {
+	s := newSvc(t)
+	now := time.Date(2026, 11, 12, 9, 0, 0, 0, time.Local)
+	text := "# Rückmeldung zum Protokoll\n\nHallo Tilman,\ndanke für das Protokoll.\n"
+	a, err := s.AttachNote(text, "", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Name != "2026-11-12-rückmeldung-zum-protokoll.md" {
+		t.Fatalf("named %q", a.Name)
+	}
+	if !strings.HasPrefix(a.Link, "[Rückmeldung zum Protokoll](../assets/2026-11-12-") || !strings.HasSuffix(a.Link, ".md)") {
+		t.Fatalf("linked as %q", a.Link)
+	}
+	got, err := os.ReadFile(a.Path)
+	if err != nil || string(got) != strings.TrimSpace(text)+"\n" {
+		t.Fatalf("kept %q, %v", got, err)
+	}
+
+	// The same title twice is two notes; nothing is overwritten.
+	b, err := s.AttachNote("# Rückmeldung zum Protokoll\n\nanother one", "", now)
+	if err != nil || b.Name == a.Name {
+		t.Fatalf("second note %q, %v", b.Name, err)
+	}
+	if got, _ := os.ReadFile(a.Path); !strings.Contains(string(got), "Hallo Tilman") {
+		t.Fatal("the first note was overwritten")
+	}
+
+	if _, err := s.AttachNote("  \n ", "", now); err == nil {
+		t.Fatal("empty text should be refused")
+	}
+	if c, _ := s.AttachNote("whatever", "Minutes, 12 Nov", now); !strings.HasPrefix(c.Link, "[Minutes, 12 Nov](") {
+		t.Fatalf("a given title should win: %q", c.Link)
+	}
+}
+
+func TestSlashNotePastesTheClipboardAsANote(t *testing.T) {
+	s := newSvc(t)
+	s.Clipboard = func() (clipboard.Content, error) {
+		return clipboard.Content{Text: "Minutes of the board\n\n- item one\n- item two\n"}, nil
+	}
+	rel, _ := s.AddToday("from the board ")
+	text := "from the board /note"
+	if _, err := s.RunCommand(addrOf(t, s, rel, 0), "note", "", text, 15, len(text)); err != nil {
+		t.Fatal(err)
+	}
+	got := body(t, s, rel)
+	if !strings.Contains(got, "from the board [Minutes of the board](../assets/") || strings.Contains(got, "/note") {
+		t.Fatalf("the block is %q", got)
+	}
+
+	s.Clipboard = func() (clipboard.Content, error) { return clipboard.Content{Image: []byte{1}}, nil }
+	if _, err := s.RunCommand(addrOf(t, s, rel, 0), "note", "", "x /note", 2, 7); err == nil {
+		t.Fatal("a picture on the clipboard is not text to keep")
 	}
 }

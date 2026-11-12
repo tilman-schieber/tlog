@@ -50,6 +50,7 @@ var commands = []Command{
 	{Name: "table", Title: "Table", Hint: "Insert a table as csv", aliases: []string{"tabelle", "csv"}},
 	{Name: "page", Title: "Page", Hint: "Link to a page", aliases: []string{"link", "seite"}},
 	{Name: "tag", Title: "Tag", Hint: "Insert a tag"},
+	{Name: "note", Title: "Paste as note", Hint: "The clipboard's text as a linked .md file", aliases: []string{"pn", "paste-note", "notiz"}},
 	{Name: "file", Title: "Attachment", Hint: "Link a file from the notes' assets", Arg: "attachment", aliases: []string{"anhang", "att", "attach"}},
 	{Name: "prop", Title: "Property", Hint: "Set a property: /prop status open", Arg: "text", aliases: []string{"property", "eigenschaft"}},
 	{Name: "alias", Title: "Alias", Hint: "Another name for this page: /alias Ada", Arg: "text", aliases: []string{"aka", "zweitname"}},
@@ -181,6 +182,20 @@ func (s *Service) RunCommand(a Addr, name, arg, text string, from, to int) (*Com
 			return nil, fmt.Errorf("no attachment matches %q — `tlog attach` or a drop puts one there", arg)
 		}
 		insert = found[0].Link
+	}
+	if cmd.Name == "note" {
+		c, err := s.ReadClipboard()
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(c.Text) == "" {
+			return nil, refuse("the clipboard holds no text to keep as a note")
+		}
+		a, err := s.AttachNote(c.Text, "", time.Now())
+		if err != nil {
+			return nil, err
+		}
+		insert = a.Link
 	}
 	switch cmd.Name {
 	case "date":

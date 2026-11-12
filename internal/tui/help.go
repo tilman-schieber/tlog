@@ -97,6 +97,7 @@ func (m *Model) helpParts() []helpPart {
 		key("g  click", "open it: a website in the browser, a file in whatever opens it"),
 		key("drop a file", "drag it onto the terminal: it is copied into the notes' assets/ and linked where you are"),
 		key("/file", "link something already attached"),
+		key("/note", "keep the text on the clipboard — an email, minutes, an answer — as a .md file of its own, linked here by its first line; following the link shows it"),
 
 		heading("The mouse"),
 		key("click", "a block to write there, a link to open it, ▸ ▾ to fold, ☐ to tick"),

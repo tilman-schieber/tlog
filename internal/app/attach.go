@@ -100,6 +100,95 @@ func (s *Service) AttachTo(rel string, paths ...string) ([]AttachView, error) {
 	return added, nil
 }
 
+// MaxNote is the largest text kept as a note. Anything longer than this
+// pasted by accident is a log or a dump, not something to read.
+const MaxNote = 5 << 20
+
+// AttachNote keeps text — an email, an answer, minutes from elsewhere — as a
+// markdown file of its own in assets/, and returns it with a link labelled by
+// its title. A block stays one line that says what the text is, and following
+// the link shows the whole of it. The title is the one given, or else the
+// text's first line; the file is named for the day and the title, and nothing
+// is ever overwritten.
+func (s *Service) AttachNote(text, title string, now time.Time) (AttachView, error) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return AttachView{}, refuse("there is no text to keep")
+	}
+	if len(text) > MaxNote {
+		return AttachView{}, refuse("the text is larger than %d MB", MaxNote>>20)
+	}
+	if title = strings.TrimSpace(title); title == "" {
+		title = noteTitle(text)
+	}
+	stem := attach.Sanitize(title, true)
+	if stem == "" {
+		stem = "note"
+	}
+	tmp, err := os.MkdirTemp("", "tlog-note-")
+	if err != nil {
+		return AttachView{}, err
+	}
+	defer os.RemoveAll(tmp)
+	src := filepath.Join(tmp, now.Format("2006-01-02")+"-"+stem+".md")
+	if err := os.WriteFile(src, []byte(text+"\n"), 0o600); err != nil {
+		return AttachView{}, err
+	}
+	e, err := s.assets().Add(src)
+	if err != nil {
+		return AttachView{}, err
+	}
+	s.Git.Touch(e.Rel)
+	a := attachView(e)
+	a.Link = attach.LinkAs(e, title)
+	return a, nil
+}
+
+// noteTitle is what a text calls itself: its first line with any heading,
+// list or quote marker taken off, cut to a few words.
+func noteTitle(text string) string {
+	for _, l := range strings.Split(text, "\n") {
+		l = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(l), "#>-*• "))
+		if l == "" {
+			continue
+		}
+		words := strings.Fields(l)
+		if len(words) > 6 {
+			words = words[:6]
+		}
+		t := strings.Join(words, " ")
+		if r := []rune(t); len(r) > 50 {
+			t = strings.TrimSpace(string(r[:50]))
+		}
+		return strings.TrimRight(t, ".,:;!?")
+	}
+	return "note"
+}
+
+// AttachClipboardNote is AttachNote with the text on the clipboard, linked at
+// the end of rel; with rel empty it only attaches.
+func (s *Service) AttachClipboardNote(rel, title string, now time.Time) (AttachView, error) {
+	c, err := s.ReadClipboard()
+	if err != nil {
+		return AttachView{}, err
+	}
+	if strings.TrimSpace(c.Text) == "" {
+		return AttachView{}, refuse("the clipboard holds no text")
+	}
+	return s.AttachNoteTo(rel, c.Text, title, now)
+}
+
+// AttachNoteTo is AttachNote, linked as a block at the end of rel; with rel
+// empty it only attaches.
+func (s *Service) AttachNoteTo(rel, text, title string, now time.Time) (AttachView, error) {
+	a, err := s.AttachNote(text, title, now)
+	if err != nil || rel == "" {
+		return a, err
+	}
+	_, err = s.Add(rel, a.Link)
+	return a, err
+}
+
 // MaxImage is the largest picture taken from the clipboard. A screenshot of a
 // large display is a few megabytes; this leaves room to spare while bounding
 // what a stray paste can put into the notes.

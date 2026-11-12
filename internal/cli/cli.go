@@ -31,6 +31,7 @@ usage:
   tlog attach [-p page] FILE  copy files into the notes' assets/ and link them here
   tlog attach -link-only FILE copy a file into assets/ and print its link, no note
   tlog attach -clipboard      the screenshot on the clipboard, into assets/ and linked here
+  tlog attach -note [-]       the clipboard's text (or stdin's) as a linked .md note
   tlog attach -migrate        bring files linked on the old ~/.att shelf into assets/
   tlog files [query] [-links] what is attached, newest first
   tlog alias <page> <name>    give a page another name
@@ -360,11 +361,60 @@ func cmdConfig(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 	return exitOK
 }
 
+// attachNote is `tlog attach -note`: text kept as a markdown file of its own
+// and linked, from the clipboard, or from stdin with "-".
+func attachNote(args []string, stdout, stderr io.Writer, svc *app.Service, page, title string, only, asJSON bool) int {
+	if len(args) > 1 || (len(args) == 1 && args[0] != "-") {
+		fmt.Fprintln(stderr, "tlog attach -note: reads the clipboard, or stdin with -; it takes no files")
+		return exitUsage
+	}
+	rel := ""
+	if !only {
+		rel = svc.TodayRel()
+		if page != "" {
+			r, _, err := svc.ResolvePage(page)
+			if err != nil {
+				return fail(stderr, err)
+			}
+			rel = r
+		}
+	}
+	var a app.AttachView
+	var err error
+	if len(args) == 1 {
+		text, rerr := textFrom(args)
+		if rerr != nil {
+			return fail(stderr, rerr)
+		}
+		a, err = svc.AttachNoteTo(rel, text, title, time.Now())
+	} else {
+		a, err = svc.AttachClipboardNote(rel, title, time.Now())
+	}
+	settle(stderr, svc)
+	if err != nil {
+		return fail(stderr, err)
+	}
+	if asJSON {
+		if eerr := emit(stdout, []app.AttachView{a}); eerr != nil {
+			return fail(stderr, eerr)
+		}
+		return exitOK
+	}
+	if only {
+		fmt.Fprintln(stdout, a.Link)
+	} else {
+		fmt.Fprintf(stdout, "%s  %s\n", a.Name, a.Size)
+	}
+	return exitOK
+}
+
 func cmdAttach(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 	fs := flags("attach", stderr)
 	page := fs.String("p", "", "attach to this page instead of today's journal")
 	only := fs.Bool("link-only", false, "copy the file into assets/ and print the link, writing no note")
 	clip := fs.Bool("clipboard", false, "attach the picture on the clipboard — a screenshot — instead of a file")
+	note := fs.Bool("note", false, "keep text as a linked .md file: the clipboard's, or stdin's with -")
+	title := fs.String("title", "", "with -note: the note's title (default its first line)")
 	asJSON := fs.Bool("json", false, "print what was attached as JSON")
 	migrate := fs.Bool("migrate", false, "copy every file notes link on the old att shelf into assets/ and relink it")
 	from := fs.String("from", "", "with -migrate: the old shelf (default ~/.att/store)")
@@ -381,6 +431,13 @@ func cmdAttach(args []string, stdout, stderr io.Writer, svc *app.Service) int {
 	}
 	if *from != "" || *dry {
 		fmt.Fprintln(stderr, "tlog attach: -from and -dry-run only go with -migrate")
+		return exitUsage
+	}
+	if *note {
+		return attachNote(fs.Args(), stdout, stderr, svc, *page, *title, *only, *asJSON)
+	}
+	if *title != "" {
+		fmt.Fprintln(stderr, "tlog attach: -title only goes with -note")
 		return exitUsage
 	}
 	if *clip && fs.NArg() > 0 {
