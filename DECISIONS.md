@@ -414,6 +414,12 @@ plus date link" would scream about it. Implicit is wrong here. The property is
 spelled `Deadline` to match what the corpus already had; reading accepts any
 casing and `due` as well.
 
+**A deadline makes a task**, as in Logseq, however it was set: `/deadline`,
+a `Deadline::` typed by hand, or a script setting the property. The checkbox
+is added on the way to disk, with the ISO rewrite; reading still never writes,
+so a dated block that arrived without one from another editor is listed as
+open and finished by one tick.
+
 **Dates are typed, and the quick pick only shortens the typing.** `/dl fr` is
 eight keystrokes and no calendar beats that, so the calendar still only confirms.
 What changed is that the menu offers the days before anything is typed and

@@ -111,7 +111,14 @@ func (s *Service) SetText(a Addr, text string) (*Result, error) {
 func (s *Service) ToggleTask(a Addr) (*Result, error) {
 	return s.mutate(a, func(_ *markdown.Document, b *markdown.Block) error {
 		if !b.ToggleTask() {
+			// A block with a deadline is a task already, only one written
+			// without its checkbox: ticking it means done, not "make it a
+			// task" — that happens on the way to disk anyway.
+			_, dated := Deadline(b)
 			b.MakeTask()
+			if dated {
+				b.ToggleTask()
+			}
 		}
 		return nil
 	})

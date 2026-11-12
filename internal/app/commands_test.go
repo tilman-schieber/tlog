@@ -346,3 +346,32 @@ func TestDeadlineMakesATaskAndDoesNotUnTickADoneOne(t *testing.T) {
 		t.Fatalf("moving the date reopened a finished task: %q", got)
 	}
 }
+
+// A deadline makes a task however it got there: typed as a property, or set
+// from a script, the block is written with its checkbox.
+func TestADeadlineSetAnyWayMakesATask(t *testing.T) {
+	s := newSvc(t)
+	rel, _ := s.AddToday("hand in the grades")
+	if _, err := s.SetProperty(addrOf(t, s, rel, 0), "Deadline", "2026-12-01"); err != nil {
+		t.Fatal(err)
+	}
+	if got := body(t, s, rel); !strings.Contains(got, "- [ ] hand in the grades") {
+		t.Fatalf("a block with a deadline was written without a checkbox: %q", got)
+	}
+}
+
+// One that reached the file without a checkbox, from another editor, is ticked
+// off by a single tick: it was a task all along.
+func TestTickingADatedBlockWithoutACheckboxFinishesIt(t *testing.T) {
+	s := newSvc(t)
+	rel := "pages/Grades.md"
+	if err := s.Store.Write(rel, []byte("- hand in the grades\n  Deadline:: 2026-12-01\n"), ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ToggleTask(addrOf(t, s, rel, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if got := body(t, s, rel); !strings.Contains(got, "- [x] hand in the grades") {
+		t.Fatalf("one tick should finish it: %q", got)
+	}
+}

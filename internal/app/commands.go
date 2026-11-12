@@ -334,6 +334,10 @@ func Deadline(b *markdown.Block) (time.Time, bool) {
 // converted on the way to disk, and a relative one is resolved against the
 // moment of writing, which is when it was meant. What is not a date is left as
 // it was typed.
+//
+// A block with a deadline is a task, the way Logseq has it, so one that came
+// without a checkbox — a Deadline:: typed by hand, or set from a script — gets
+// one here, as /deadline would have given it.
 func normalizeDates(d *markdown.Document, now time.Time) {
 	d.Walk(func(b *markdown.Block) bool {
 		for i := range b.Props {
@@ -343,6 +347,9 @@ func normalizeDates(d *markdown.Document, now time.Time) {
 			if iso, ok := dates.NormalizeStored(b.Props[i].Value, now); ok {
 				b.Props[i].Value = iso
 			}
+		}
+		if _, ok := Deadline(b); ok {
+			b.MakeTask()
 		}
 		return true
 	})
