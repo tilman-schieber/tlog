@@ -40,7 +40,7 @@ func TestFollowingALinkToATextFileShowsIt(t *testing.T) {
 		t.Fatalf("a text file was handed to the desktop: %v", *got)
 	}
 	frame := stripANSI(m.View())
-	for _, want := range []string{"Regeln.md", "# Bewertungsregeln", "Eine Note unter 4 ist ungenügend."} {
+	for _, want := range []string{"Regeln.md", "Bewertungsregeln", "Eine Note unter 4 ist ungenügend."} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("%q is not on screen:\n%s", want, frame)
 		}

@@ -31,52 +31,13 @@ func (m *Model) showFile(f *app.TextFile) {
 // window so nothing runs off the edge.
 func fileLines(f *app.TextFile, width int) []string {
 	w := max(20, width-1)
-	var raw []string
 	if f.Lang == "markdown" {
-		raw = markdownLines(f.Text)
-	} else {
-		raw = strings.Split(strings.TrimRight(highlightCode(f.Lang, f.Text), "\n"), "\n")
+		return markdownLines(f.Text, w)
 	}
+	raw := strings.Split(strings.TrimRight(highlightCode(f.Lang, f.Text), "\n"), "\n")
 	var out []string
 	for _, l := range raw {
 		out = append(out, strings.Split(ansi.Wrap(l, w, ""), "\n")...)
-	}
-	return out
-}
-
-// markdownLines colours a markdown document the little a reader needs:
-// headings stand out, and code fences are highlighted the way they are in a
-// note. Everything else is shown as written.
-func markdownLines(text string) []string {
-	var out []string
-	var fence, lang string
-	var code []string
-	for _, l := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
-		t := strings.TrimSpace(l)
-		if fence != "" {
-			if strings.HasPrefix(t, fence) {
-				if len(code) > 0 {
-					out = append(out, strings.Split(highlightCode(lang, strings.Join(code, "\n")), "\n")...)
-				}
-				out = append(out, styleFence.Render(l))
-				fence, code = "", nil
-				continue
-			}
-			code = append(code, l)
-			continue
-		}
-		switch {
-		case strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~"):
-			fence, lang = t[:3], strings.TrimSpace(t[3:])
-			out = append(out, styleFence.Render(l))
-		case strings.HasPrefix(t, "#"):
-			out = append(out, styleTitle.Render(l))
-		default:
-			out = append(out, l)
-		}
-	}
-	if len(code) > 0 { // a fence never closed: still show what is in it
-		out = append(out, strings.Split(highlightCode(lang, strings.Join(code, "\n")), "\n")...)
 	}
 	return out
 }
