@@ -1492,6 +1492,30 @@ func TestAgendaTicksOffWithoutLeaving(t *testing.T) {
 	}
 }
 
+func TestAgendaListsUndatedTodosAfterTheDeadlines(t *testing.T) {
+	m := newModel(t)
+	rel, _ := m.svc.AddToPage("Timetable", "[ ] call the caterer\n\n- book the room\n\n- not a task")
+	d, _ := m.svc.Load(rel)
+	room := d.Doc.Flatten()[1]
+	a := tapp.Addr{Rel: rel, Offset: room.Start, Hash: d.Hash}
+	if _, err := m.svc.RunCommand(a, "deadline", "tomorrow", "book the room", 13, 13); err != nil {
+		t.Fatal(err)
+	}
+	command(t, m, "agenda")
+	var texts []string
+	for _, it := range m.agenda.items {
+		texts = append(texts, it.Text)
+	}
+	if strings.Join(texts, "|") != "book the room|call the caterer" {
+		t.Fatalf("got %q", texts)
+	}
+	out := stripANSI(m.agendaView())
+	if i, j := strings.Index(out, "No date"), strings.Index(out, "call the caterer"); i < 0 || j < i ||
+		strings.Index(out, "book the room") > i {
+		t.Fatalf("agenda reads %q", out)
+	}
+}
+
 func TestMessagesAreKeptRatherThanReplaced(t *testing.T) {
 	m := newModel(t)
 	typeText(t, m, "top")

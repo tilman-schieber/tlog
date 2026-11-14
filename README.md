@@ -90,7 +90,7 @@ around with single letters; `enter` picks it back up.
 | `x` | toggle the task checkbox |
 | `dd` | delete the block and everything in it |
 | `z` / `h` `l` | fold · unfold |
-| `a` | agenda: everything with a deadline |
+| `a` | agenda: open tasks, deadlines first, then those without a date |
 | `u` / `U` | undo, redo — a change on another page takes you there |
 | `?` / `q` | help · quit |
 
@@ -272,9 +272,10 @@ tlog due          # everything open and dated, soonest first
 tlog due -all     # including what is done
 ```
 
-**Agenda** is that same list, from the same call: `a` in the outliner while
-moving. Enter or a click goes to the block, and space ticks it off without
-leaving — `a` in the outliner also shows what is already done.
+**Agenda** is `tlog todo`'s list, from the same call: `a` in the outliner while
+moving shows every open task, what has a deadline first and soonest first, then
+the rest under "No date". Enter or a click goes to the block, and space ticks it
+off without leaving — `a` in the agenda also shows the dated ones already done.
 
 ## Settings
 

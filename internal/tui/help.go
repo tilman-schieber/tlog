@@ -60,7 +60,7 @@ func (m *Model) helpParts() []helpPart {
 		key("x", "tick the task off, or make the block one"),
 		key("dd", "delete the block and everything under it — git keeps the old version"),
 		key("z  h l", "fold and unfold"),
-		key("a", "the agenda: everything with a deadline"),
+		key("a", "the agenda: open tasks, deadlines first, then those without a date"),
 		key("y  Y", "copy the block's text, copy a link in it — the address, a file's full path, or [[the page]]"),
 		key("u  U", "undo, redo — a change on another page takes you there"),
 		key("q", "quit"),
