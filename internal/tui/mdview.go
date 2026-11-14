@@ -3,12 +3,15 @@ package tui
 import (
 	"html"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/tilman-schieber/tlog/internal/markdown"
 )
 
 // An attached markdown document is drawn the way glow draws one: headings
@@ -19,6 +22,65 @@ import (
 // written for GitHub reads right, and anything it does not recognise is shown
 // as the text it is, never dropped. Colours are the same sixteen-colour roles
 // as everywhere else.
+//
+// Every drawn line carries the links on it and the columns they landed in, as
+// the outline's lines do, so a click can follow one; nothing is searched for
+// in the rendered text afterwards.
+
+// mdLine is one line as drawn, with its links and, on a heading's first line,
+// the anchor a #link to it uses.
+type mdLine struct {
+	s    string
+	hits []linkHit
+	slug string
+}
+
+func plainLines(ss ...string) []mdLine {
+	out := make([]mdLine, len(ss))
+	for i, s := range ss {
+		out[i] = mdLine{s: s}
+	}
+	return out
+}
+
+// indented puts first before the first line and cont before the others,
+// moving their links along. An empty line stays empty.
+func indented(ls []mdLine, first, cont string) []mdLine {
+	for i := range ls {
+		p := cont
+		if i == 0 {
+			p = first
+		}
+		if ls[i].s == "" && i > 0 {
+			continue
+		}
+		ls[i] = shifted(ls[i], p)
+	}
+	return ls
+}
+
+func shifted(l mdLine, prefix string) mdLine {
+	w := ansi.StringWidth(prefix)
+	hits := make([]linkHit, len(l.hits))
+	for j, h := range l.hits {
+		h.from += w
+		h.to += w
+		hits[j] = h
+	}
+	return mdLine{s: prefix + l.s, hits: hits, slug: l.slug}
+}
+
+// clipHits drops what of a line's links lies at or past column w.
+func clipHits(hits []linkHit, w int) []linkHit {
+	var out []linkHit
+	for _, h := range hits {
+		if h.from < w {
+			h.to = min(h.to, w)
+			out = append(out, h)
+		}
+	}
+	return out
+}
 
 var (
 	mdH1     = lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true).Reverse(true)
@@ -49,22 +111,46 @@ var (
 
 // markdownLines draws a markdown document for a window width columns wide.
 // Every line it returns fits.
-func markdownLines(text string, width int) []string {
+func markdownLines(text string, width int) []mdLine {
 	text = strings.ReplaceAll(strings.TrimRight(text, "\n"), "\t", "    ")
 	lines := strings.Split(text, "\n")
-	var out []string
+	var out []mdLine
 	if fm, rest, ok := mdFrontMatter(lines); ok {
 		out = append(out, mdCodeBlock("yaml", fm, width-2)...)
-		out = append(out, "")
+		out = append(out, mdLine{})
 		lines = rest
 	}
 	out = append(out, mdBlocks(lines, width-2, false)...)
+	seen := map[string]int{}
 	for i, l := range out {
-		if l != "" {
-			out[i] = "  " + l
+		if l.s != "" {
+			out[i] = shifted(l, "  ")
+		}
+		if l.slug != "" { // a second heading of the same name is #name-1, as on GitHub
+			if n := seen[l.slug]; n > 0 {
+				out[i].slug = l.slug + "-" + strconv.Itoa(n)
+			}
+			seen[l.slug]++
 		}
 	}
 	return out
+}
+
+// mdSlug is the anchor GitHub gives a heading: lower case, spaces as hyphens,
+// punctuation dropped.
+func mdSlug(segs []mdSeg) string {
+	var b strings.Builder
+	for _, sg := range segs {
+		for _, r := range strings.ToLower(sg.text) {
+			switch {
+			case unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_':
+				b.WriteRune(r)
+			case r == ' ':
+				b.WriteByte('-')
+			}
+		}
+	}
+	return b.String()
 }
 
 // mdFrontMatter splits off a YAML header, which glow hides; here it is shown
@@ -84,15 +170,15 @@ func mdFrontMatter(lines []string) (fm string, rest []string, ok bool) {
 // mdBlocks draws a run of block-level markdown. It calls itself for what a
 // list item or a quote contains, with the width that is left; tight drops the
 // blank line between blocks, as in a list whose items have none.
-func mdBlocks(lines []string, width int, tight bool) []string {
+func mdBlocks(lines []string, width int, tight bool) []mdLine {
 	width = max(8, width)
-	var out []string
-	add := func(block []string) {
+	var out []mdLine
+	add := func(block []mdLine) {
 		if len(block) == 0 {
 			return
 		}
 		if len(out) > 0 && !tight {
-			out = append(out, "")
+			out = append(out, mdLine{})
 		}
 		out = append(out, block...)
 	}
@@ -136,7 +222,7 @@ func mdBlocks(lines []string, width int, tight bool) []string {
 			i++
 
 		case mdRuleRe.MatchString(l):
-			add([]string{styleMuted.Render(strings.Repeat("─", width))})
+			add(plainLines(styleMuted.Render(strings.Repeat("─", width))))
 			i++
 
 		case mdQuoteRe.MatchString(l):
@@ -234,28 +320,32 @@ func mdTrimIndent(l string, n int) string {
 	return l[i:]
 }
 
-func mdHeading(level int, text string, width int) []string {
+func mdHeading(level int, text string, width int) []mdLine {
 	segs := mdInline(text, 0)
+	var lines []mdLine
 	if level == 1 {
-		lines := mdWrap(segs, width-2)
+		lines = mdWrap(segs, width-2)
 		for i, l := range lines {
-			lines[i] = throughout(mdH1, " "+l+" ")
+			l = shifted(l, " ")
+			l.s = throughout(mdH1, l.s+" ")
+			lines[i] = l
 		}
-		return lines
+	} else {
+		// Below the title a heading is bold, as it is in a note: the outline
+		// and the file viewer draw one thing one way.
+		lines = mdWrap(segs, width)
+		for i := range lines {
+			lines[i].s = boldThroughout(lines[i].s)
+		}
 	}
-	// Below the title a heading is bold, as it is in a note: the outline and
-	// the file viewer draw one thing one way.
-	lines := mdWrap(segs, width)
-	for i, l := range lines {
-		lines[i] = boldThroughout(l)
-	}
+	lines[0].slug = mdSlug(segs)
 	return lines
 }
 
 // mdParagraph reflows lines into the width, keeping the breaks markdown calls
 // hard: two spaces or a backslash at the end of a line.
-func mdParagraph(lines []string, width int) []string {
-	var out []string
+func mdParagraph(lines []string, width int) []mdLine {
+	var out []mdLine
 	var cur []string
 	flush := func() {
 		if len(cur) > 0 {
@@ -278,34 +368,34 @@ func mdParagraph(lines []string, width int) []string {
 	return out
 }
 
-func mdCodeBlock(lang, code string, width int) []string {
-	var out []string
+func mdCodeBlock(lang, code string, width int) []mdLine {
+	var out []mdLine
 	if lang != "" {
-		out = append(out, styleMuted.Render(lang))
+		out = append(out, mdLine{s: styleMuted.Render(lang)})
 	}
 	bar := styleMuted.Render("▏") + " "
 	for _, l := range strings.Split(highlightCode(lang, code), "\n") {
 		for _, piece := range strings.Split(ansi.Hardwrap(l, max(4, width-2), true), "\n") {
-			out = append(out, bar+piece)
+			out = append(out, mdLine{s: bar + piece})
 		}
 	}
 	return out
 }
 
-func mdQuote(inner []string, width int) []string {
+func mdQuote(inner []string, width int) []mdLine {
 	bar := styleMuted
-	var title []string
+	var title []mdLine
 	if len(inner) > 0 {
 		if m := mdAlertRe.FindStringSubmatch(strings.TrimSpace(inner[0])); m != nil {
 			bar = mdAlerts[m[1]]
 			name := m[1][:1] + strings.ToLower(m[1][1:])
-			title = []string{bar.Bold(true).Render(name)}
+			title = plainLines(bar.Bold(true).Render(name))
 			inner = inner[1:]
 		}
 	}
 	body := append(title, mdBlocks(inner, width-2, false)...)
 	for i, l := range body {
-		body[i] = bar.Render("│") + " " + l
+		body[i] = shifted(l, bar.Render("│")+" ")
 	}
 	return body
 }
@@ -313,7 +403,7 @@ func mdQuote(inner []string, width int) []string {
 // mdList draws the list starting at lines[0] and says how many lines it took.
 // Each item's content is drawn as blocks of its own, so nested lists, code and
 // quotes inside an item come out right.
-func mdList(lines []string, width int) (int, []string) {
+func mdList(lines []string, width int) (int, []mdLine) {
 	first := mdListRe.FindStringSubmatch(lines[0])
 	ordered := len(first[2]) > 1 || unicode.IsDigit(rune(first[2][0]))
 	kind := first[2][len(first[2])-1]
@@ -382,7 +472,7 @@ func mdList(lines []string, width int) (int, []string) {
 			markerWidth = max(markerWidth, len(it.marker)+1)
 		}
 	}
-	var out []string
+	var out []mdLine
 	for _, it := range items {
 		body := it.body
 		box := ""
@@ -416,21 +506,12 @@ func mdList(lines []string, width int) (int, []string) {
 		}
 		drawn := mdBlocks(body, width-w, tight)
 		if len(drawn) == 0 {
-			drawn = []string{""}
+			drawn = []mdLine{{}}
 		}
 		if it.blank && len(out) > 0 {
-			out = append(out, "")
+			out = append(out, mdLine{})
 		}
-		for j, l := range drawn {
-			switch {
-			case j == 0:
-				out = append(out, first+l)
-			case l == "":
-				out = append(out, "")
-			default:
-				out = append(out, strings.Repeat(" ", w)+l)
-			}
-		}
+		out = append(out, indented(drawn, first, strings.Repeat(" ", w))...)
 	}
 	return i, out
 }
@@ -484,25 +565,22 @@ func mdTableAlign(sep string) []byte {
 
 // mdTable lays rows out in aligned columns, narrowing the widest column until
 // the table fits; a cell that still does not fit is cut with an ellipsis.
-func mdTable(rows [][]string, align []byte, width int) []string {
+func mdTable(rows [][]string, align []byte, width int) []mdLine {
 	cols := len(rows[0])
-	drawn := make([][]string, len(rows))
+	drawn := make([][]mdLine, len(rows))
 	widths := make([]int, cols)
 	for r, row := range rows {
-		drawn[r] = make([]string, cols)
+		drawn[r] = make([]mdLine, cols)
 		for c := range cols {
-			cell := ""
+			var cell mdLine
 			if c < len(row) {
-				lines := mdWrap(mdInline(row[c], 0), 1<<20)
-				if len(lines) > 0 {
-					cell = lines[0]
-				}
+				cell = mdWrap(mdInline(row[c], 0), 1<<20)[0]
 			}
 			if r == 0 {
-				cell = boldThroughout(cell)
+				cell.s = boldThroughout(cell.s)
 			}
 			drawn[r][c] = cell
-			widths[c] = max(widths[c], lipgloss.Width(cell))
+			widths[c] = max(widths[c], lipgloss.Width(cell.s))
 		}
 	}
 	sepW := 3 * (cols - 1)
@@ -520,42 +598,55 @@ func mdTable(rows [][]string, align []byte, width int) []string {
 		}
 		widths[widest]--
 	}
-	line := func(cells []string) string {
-		var parts []string
+	line := func(cells []mdLine) mdLine {
+		var b strings.Builder
+		var hits []linkHit
+		col := 0
 		for c, cell := range cells {
-			w := widths[c]
-			if lipgloss.Width(cell) > w {
-				cell = ansi.Truncate(cell, w, "…")
+			if c > 0 {
+				b.WriteString(styleMuted.Render(" │ "))
+				col += 3
 			}
-			gap := w - lipgloss.Width(cell)
+			w := widths[c]
+			text, cellHits := cell.s, cell.hits
+			if lipgloss.Width(text) > w {
+				text = ansi.Truncate(text, w, "…")
+				cellHits = clipHits(cellHits, w)
+			}
+			gap := w - lipgloss.Width(text)
 			a := byte('l')
 			if c < len(align) {
 				a = align[c]
 			}
+			left := 0
 			switch a {
 			case 'r':
-				cell = strings.Repeat(" ", gap) + cell
+				left = gap
 			case 'c':
-				cell = strings.Repeat(" ", gap/2) + cell + strings.Repeat(" ", gap-gap/2)
-			default:
-				cell += strings.Repeat(" ", gap)
+				left = gap / 2
 			}
-			parts = append(parts, cell)
+			b.WriteString(strings.Repeat(" ", left) + text + strings.Repeat(" ", gap-left))
+			for _, h := range cellHits {
+				h.from += col + left
+				h.to += col + left
+				hits = append(hits, h)
+			}
+			col += w
 		}
-		return strings.Join(parts, styleMuted.Render(" │ "))
+		return mdLine{s: b.String(), hits: hits}
 	}
-	out := []string{line(drawn[0])}
+	out := []mdLine{line(drawn[0])}
 	var rule []string
 	for _, w := range widths {
 		rule = append(rule, strings.Repeat("─", w))
 	}
-	out = append(out, styleMuted.Render(strings.Join(rule, "─┼─")))
+	out = append(out, mdLine{s: styleMuted.Render(strings.Join(rule, "─┼─"))})
 	for _, r := range drawn[1:] {
 		out = append(out, line(r))
 	}
 	for i, l := range out { // a table wider than the window even at its narrowest
-		if lipgloss.Width(l) > width {
-			out[i] = ansi.Truncate(l, width, "…")
+		if lipgloss.Width(l.s) > width {
+			out[i] = mdLine{s: ansi.Truncate(l.s, width, "…"), hits: clipHits(l.hits, width-1)}
 		}
 	}
 	return out
@@ -578,6 +669,7 @@ const (
 type mdSeg struct {
 	text  string
 	flags mdFlag
+	to    *linkHit // what the run links to, its columns unset; nil for text
 }
 
 var mdStyles = map[mdFlag]lipgloss.Style{}
@@ -621,7 +713,7 @@ func mdInline(s string, flags mdFlag) []mdSeg {
 	var lit strings.Builder
 	flushLit := func() {
 		if lit.Len() > 0 {
-			out = append(out, mdSeg{html.UnescapeString(lit.String()), flags})
+			out = append(out, mdSeg{text: html.UnescapeString(lit.String()), flags: flags})
 			lit.Reset()
 		}
 	}
@@ -646,7 +738,7 @@ func mdInline(s string, flags mdFlag) []mdSeg {
 				if len(code) > 1 && code[0] == ' ' && code[len(code)-1] == ' ' && strings.TrimSpace(code) != "" {
 					code = code[1 : len(code)-1]
 				}
-				emit(mdSeg{code, flags | fCode})
+				emit(mdSeg{text: code, flags: flags | fCode})
 				i += n + end + n
 				continue
 			}
@@ -656,7 +748,8 @@ func mdInline(s string, flags mdFlag) []mdSeg {
 
 		case strings.HasPrefix(rest, "[["):
 			if end := strings.Index(rest, "]]"); end > 2 {
-				emit(mdSeg{rest[:end+2], flags | fLink})
+				page := markdown.ParseLinkTarget(rest[2:end])
+				emit(mdSeg{text: rest[:end+2], flags: flags | fLink, to: &linkHit{page: page}})
 				i += end + 2
 				continue
 			}
@@ -668,16 +761,22 @@ func mdInline(s string, flags mdFlag) []mdSeg {
 				start = 1
 			}
 			if label, url, n, ok := inlineLink(rest[start:]); ok {
+				to := &linkHit{url: url}
 				var segs []mdSeg
 				if image {
-					segs = append(segs, mdSeg{"▣ ", flags | fLink})
+					segs = append(segs, mdSeg{text: "▣ ", flags: flags | fLink})
 				}
 				if label == "" {
 					label = url
 				}
 				segs = append(segs, mdInline(label, flags|fLink)...)
 				if url != "" && url != label && !strings.HasPrefix(url, "#") {
-					segs = append(segs, mdSeg{" ", flags}, mdSeg{url, flags | fFaint})
+					segs = append(segs, mdSeg{text: " ", flags: flags}, mdSeg{text: url, flags: flags | fFaint})
+				}
+				for k := range segs {
+					if url != "" && segs[k].text != " " {
+						segs[k].to = to
+					}
 				}
 				emit(segs...)
 				i += start + n
@@ -686,7 +785,7 @@ func mdInline(s string, flags mdFlag) []mdSeg {
 
 		case c == '<':
 			if m := mdAutoRe.FindStringSubmatch(rest); m != nil {
-				emit(mdSeg{strings.TrimPrefix(m[1], "mailto:"), flags | fLink})
+				emit(mdSeg{text: strings.TrimPrefix(m[1], "mailto:"), flags: flags | fLink, to: &linkHit{url: m[1]}})
 				i += len(m[0])
 				continue
 			}
@@ -694,7 +793,7 @@ func mdInline(s string, flags mdFlag) []mdSeg {
 		case c == 'h' && (i == 0 || !isWordByte(s[i-1])):
 			if m := mdBareURLRe.FindString(rest); m != "" {
 				m = strings.TrimRight(m, ".,;:!?)'\"")
-				emit(mdSeg{m, flags | fLink})
+				emit(mdSeg{text: m, flags: flags | fLink, to: &linkHit{url: m}})
 				i += len(m)
 				continue
 			}
@@ -909,8 +1008,10 @@ func inlineLink(s string) (label, url string, n int, ok bool) {
 }
 
 // mdWrap breaks styled runs into lines at most width columns wide, at
-// spaces where it can and inside a word only when the word alone is wider.
-func mdWrap(segs []mdSeg, width int) []string {
+// spaces where it can and inside a word only when the word alone is wider. It
+// notes the columns every link lands in; the words of one link, and the space
+// between them, make one stretch to click.
+func mdWrap(segs []mdSeg, width int) []mdLine {
 	width = max(1, width)
 	type word []mdSeg
 	var words []word
@@ -925,7 +1026,7 @@ func mdWrap(segs []mdSeg, width int) []string {
 				cur = nil
 			}
 			if p != "" {
-				cur = append(cur, mdSeg{p, sg.flags})
+				cur = append(cur, mdSeg{text: p, flags: sg.flags, to: sg.to})
 			}
 		}
 	}
@@ -933,44 +1034,52 @@ func mdWrap(segs []mdSeg, width int) []string {
 		words = append(words, cur)
 	}
 
-	wordWidth := func(w word) int {
-		n := 0
-		for _, s := range w {
-			n += ansi.StringWidth(s.text)
-		}
-		return n
-	}
-	render := func(w word) string {
-		var b strings.Builder
-		for _, s := range w {
-			if s.flags == 0 {
-				b.WriteString(s.text)
-			} else {
-				b.WriteString(mdSegStyle(s.flags).Render(s.text))
-			}
-		}
-		return b.String()
-	}
-
-	var lines []string
+	var lines []mdLine
 	var line strings.Builder
+	var hits []linkHit
 	lw := 0
-	for _, w := range words {
-		ww := wordWidth(w)
-		if lw > 0 && lw+1+ww > width {
-			lines = append(lines, line.String())
-			line.Reset()
-			lw = 0
+	newline := func() {
+		lines = append(lines, mdLine{s: line.String(), hits: hits})
+		line.Reset()
+		hits = nil
+		lw = 0
+	}
+	hit := func(to *linkHit, from, w int) {
+		if to == nil || w == 0 {
+			return
 		}
-		if ww > width { // longer than a line: cut it
-			full := render(w)
-			for _, piece := range strings.Split(ansi.Hardwrap(full, width, false), "\n") {
+		if n := len(hits); n > 0 && hits[n-1].target() == to.target() && from-hits[n-1].to <= 1 {
+			hits[n-1].to = from + w
+			return
+		}
+		h := *to
+		h.from, h.to = from, from+w
+		hits = append(hits, h)
+	}
+	for _, w := range words {
+		ww := 0
+		for _, sg := range w {
+			ww += ansi.StringWidth(sg.text)
+		}
+		if lw > 0 && lw+1+ww > width {
+			newline()
+		}
+		if ww > width { // longer than a line: cut it, each piece linking where the word did
+			var full strings.Builder
+			var to *linkHit
+			for _, sg := range w {
+				full.WriteString(mdRender(sg))
+				if to == nil {
+					to = sg.to
+				}
+			}
+			for _, piece := range strings.Split(ansi.Hardwrap(full.String(), width, false), "\n") {
 				if lw > 0 {
-					lines = append(lines, line.String())
-					line.Reset()
+					newline()
 				}
 				line.WriteString(piece)
 				lw = ansi.StringWidth(piece)
+				hit(to, 0, lw)
 			}
 			continue
 		}
@@ -978,11 +1087,22 @@ func mdWrap(segs []mdSeg, width int) []string {
 			line.WriteByte(' ')
 			lw++
 		}
-		line.WriteString(render(w))
-		lw += ww
+		for _, sg := range w {
+			sw := ansi.StringWidth(sg.text)
+			hit(sg.to, lw, sw)
+			line.WriteString(mdRender(sg))
+			lw += sw
+		}
 	}
 	if lw > 0 || len(lines) == 0 {
-		lines = append(lines, line.String())
+		newline()
 	}
 	return lines
+}
+
+func mdRender(sg mdSeg) string {
+	if sg.flags == 0 {
+		return sg.text
+	}
+	return mdSegStyle(sg.flags).Render(sg.text)
 }

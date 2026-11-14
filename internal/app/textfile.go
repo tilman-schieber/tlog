@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +18,9 @@ import (
 // TextFile is a linked file that is plain text, read for showing.
 type TextFile struct {
 	Path string `json:"path"` // absolute
+	// Rel is Path from the notes directory, ../ and all when the file lies
+	// outside it: what links inside the file are relative to.
+	Rel  string `json:"rel"`
 	Name string `json:"name"`
 	Lang string `json:"lang"` // from the extension: "markdown", "go", …; empty if unknown
 	Text string `json:"text"`
@@ -38,7 +42,13 @@ func (s *Service) LinkedText(fromRel, target string) (*TextFile, error) {
 	if !filepath.IsAbs(resolved) {
 		return nil, nil // an address, not a file
 	}
-	return readText(resolved), nil
+	f := readText(resolved)
+	if f != nil {
+		if rel, err := filepath.Rel(s.Store.Root, resolved); err == nil {
+			f.Rel = filepath.ToSlash(rel)
+		}
+	}
+	return f, nil
 }
 
 // readText is the file at p when it is plain text, otherwise nil. Plain text
@@ -68,4 +78,21 @@ func langFor(p string) string {
 		return ""
 	}
 	return ext
+}
+
+// Reread reads a shown file again after something else changed it: an editor
+// it was handed to. A change inside the notes directory is committed with the
+// rest, so an attached document edited by hand travels like a note does. It is
+// an error for the file to have gone, or to have stopped being text.
+func (s *Service) Reread(f *TextFile) (*TextFile, bool, error) {
+	again := readText(f.Path)
+	if again == nil {
+		return f, false, fmt.Errorf("%s can no longer be shown here", f.Name)
+	}
+	again.Rel = f.Rel
+	changed := again.Text != f.Text
+	if changed && f.Rel != "" && !strings.HasPrefix(f.Rel, "../") && f.Rel != ".." {
+		s.Git.Touch(f.Rel)
+	}
+	return again, changed, nil
 }

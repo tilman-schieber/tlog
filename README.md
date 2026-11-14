@@ -103,7 +103,12 @@ commands in the palette: `p`, then a few letters of the name.
 `![alt](url)` and bare addresses — are drawn as their label, images as `▣ alt`;
 hover one to see the address in the footer, click it to open it (`xdg-open`, or
 `open` on a Mac). A link to a plain-text file — an attached `.md`, a script, a
-CSV — is shown inside tlog, read-only; `o` there still hands it to the desktop.
+CSV — is shown inside tlog, read-only; `e` there edits it in `$VISUAL` or
+`$EDITOR` and shows it again when the editor quits; `o` hands it to the desktop.
+A markdown file is drawn the way glow draws one, and its links work the same
+way: hover for the address, click to follow — another text file opens in its
+place (`esc` comes back), a `#heading` scrolls to it, a `[[page]]` goes to the
+outline.
 A link to a picture is drawn full screen in a terminal that can show one: kitty
 and ghostty (kitty graphics), foot, Konsole and other sixel terminals, iTerm2
 and WezTerm. tlog asks the terminal what it can do when the environment does not

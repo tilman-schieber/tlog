@@ -11,7 +11,7 @@ import (
 func drawMD(text string, width int) []string {
 	var out []string
 	for _, l := range markdownLines(text, width) {
-		out = append(out, strings.TrimRight(stripANSI(l), " "))
+		out = append(out, strings.TrimRight(stripANSI(l.s), " "))
 	}
 	return out
 }
@@ -90,8 +90,8 @@ func TestMarkdownFitsAnyWidth(t *testing.T) {
 		"```\n" + strings.Repeat("code ", 30) + "\n```\n"
 	for _, w := range []int{20, 40, 79} {
 		for _, l := range markdownLines(doc, w) {
-			if n := ansi.StringWidth(l); n > w {
-				t.Fatalf("width %d: a line of %d: %q", w, n, stripANSI(l))
+			if n := ansi.StringWidth(l.s); n > w {
+				t.Fatalf("width %d: a line of %d: %q", w, n, stripANSI(l.s))
 			}
 		}
 	}

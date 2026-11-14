@@ -411,6 +411,13 @@ and colours each level; in a note a heading is one line among many, and a page
 of coloured headings is noise. The block being edited is still drawn raw, so
 the caret stays where the characters are.
 
+The file viewer's links are clickable the way the outline's are: every drawn
+line carries its links' columns from the renderer, rather than the rendered
+text being searched afterwards. A relative link is relative to the file it is
+in, so `TextFile` carries `Rel` and the core resolves it; from then on the TUI
+works from the absolute path. Following one text file from another stacks
+them, so `esc` retraces the way back before it leaves for the outline.
+
 ## Commands, tasks and deadlines
 
 **Slash commands, named after Logseq's.** One extensible surface rather than a

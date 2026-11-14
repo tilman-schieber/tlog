@@ -25,6 +25,9 @@ func (m *Model) mouse(msg tea.MouseMsg) {
 	case modePalette, modeSearch, modeLinks, modeBacklinks:
 		m.pickerMouse(msg)
 		return
+	case modeFile:
+		m.fileMouse(msg)
+		return
 	default:
 		// The agenda, the log, settings: lists that move with the arrows.
 		switch msg.Button {

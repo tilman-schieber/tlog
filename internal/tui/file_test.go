@@ -84,6 +84,11 @@ func TestATextFileIsWrappedAndScrolls(t *testing.T) {
 	if !strings.Contains(stripANSI(m.View()), "100%") {
 		t.Fatalf("G did not reach the end:\n%s", stripANSI(m.View()))
 	}
+	got := opened(m)
+	send(t, m, runes("o")) // any other text file can still go to the desktop
+	if len(*got) != 1 || !strings.HasSuffix((*got)[0], "log.txt") {
+		t.Fatalf("o opened %v", *got)
+	}
 }
 
 func runes(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
@@ -211,6 +216,121 @@ func TestSlashNoteLinksTheClipboardsTextAsAFile(t *testing.T) {
 	send(t, m, k(tea.KeyEnter))
 	send(t, m, k(tea.KeyEsc))
 	if got := onDisk(t, m); !strings.Contains(got, "Sitzung [Protokoll der Sitzung](../assets/") {
+		t.Fatalf("got %q", got)
+	}
+}
+
+// clickText clicks the first screen cell of text in the current frame.
+func clickText(t *testing.T, m *Model, text string) {
+	t.Helper()
+	for y, l := range strings.Split(stripANSI(m.View()), "\n") {
+		if x := strings.Index(l, text); x >= 0 {
+			m.Update(clickAt(len([]rune(l[:x])), y))
+			return
+		}
+	}
+	t.Fatalf("%q is not on screen:\n%s", text, stripANSI(m.View()))
+}
+
+func TestTheLinksInAMarkdownFileCanBeClicked(t *testing.T) {
+	m := treeModel(t, "- [guide](../assets/guide.md)\n")
+	attachFile(t, m, "guide.md", "# Guide\n\nSee [the rules](rules.md#grades), [[Alpha]],\n"+
+		"[below](#the-end) and [the site](https://example.org).\n\n"+strings.Repeat("filler\n\n", 40)+"## The End\n\nbye\n\n"+strings.Repeat("more\n\n", 20))
+	attachFile(t, m, "rules.md", "# Rules\n\n"+strings.Repeat("x\n\n", 40)+"## Grades\n\nA to F\n\n"+strings.Repeat("y\n\n", 20))
+	got := opened(m)
+	send(t, m, k(tea.KeyEsc), runes("g"))
+	m.width, m.height = 80, 20
+	if m.mode != modeFile {
+		t.Fatalf("mode %v", m.mode)
+	}
+
+	// Hovering says where a link goes.
+	for y, l := range strings.Split(stripANSI(m.View()), "\n") {
+		if x := strings.Index(l, "the site"); x >= 0 {
+			m.Update(mouseAt(len([]rune(l[:x])), y, tea.MouseActionMotion, tea.MouseButtonNone))
+		}
+	}
+	if !strings.Contains(stripANSI(m.View()), "https://example.org  click to open") {
+		t.Fatalf("no hover:\n%s", stripANSI(m.View()))
+	}
+
+	clickText(t, m, "the site")
+	if len(*got) != 1 || (*got)[0] != "https://example.org" {
+		t.Fatalf("opened %v", *got)
+	}
+
+	clickText(t, m, "below") // a #heading in the same file
+	if frame := stripANSI(m.View()); !strings.Contains(strings.Split(frame, "\n")[1], "The End") {
+		t.Fatalf("did not scroll to the heading:\n%s", frame)
+	}
+
+	send(t, m, runes("g"))
+	clickText(t, m, "the rules") // another file, relative to this one, at a heading
+	if m.mode != modeFile || m.file.file.Name != "rules.md" {
+		t.Fatalf("showing %v", m.file)
+	}
+	if frame := stripANSI(m.View()); !strings.Contains(strings.Split(frame, "\n")[1], "Grades") ||
+		!strings.Contains(frame, "esc back to guide.md") {
+		t.Fatalf("not at the heading:\n%s", frame)
+	}
+	send(t, m, k(tea.KeyEsc))
+	if m.mode != modeFile || m.file.file.Name != "guide.md" {
+		t.Fatalf("esc did not come back to the guide: %v", m.mode)
+	}
+
+	clickText(t, m, "[[Alpha]]") // a page leaves for the outline
+	if m.mode != modeOutline || m.doc.Rel != "pages/Alpha.md" {
+		t.Fatalf("mode %v, at %q, error %q", m.mode, m.doc.Rel, m.errMsg)
+	}
+}
+
+func TestLinksKeepTheirColumnsThroughListsQuotesAndTables(t *testing.T) {
+	doc := "- item [a](x.md)\n\n> quoted [b](y.md)\n\n| k | v |\n|---|---|\n| 1 | [c](z.md) |\n"
+	for _, l := range markdownLines(doc, 60) {
+		plain := []rune(stripANSI(l.s))
+		for _, h := range l.hits {
+			label := string(plain[h.from:min(h.to, len(plain))])
+			if !strings.HasPrefix(label, string(rune('a'+strings.Index("xyz", h.url[:1])))) {
+				t.Fatalf("the link to %s lands on %q in %q", h.url, label, string(plain))
+			}
+		}
+	}
+}
+
+func TestEHandsTheFileToTheEditorAndShowsWhatItWrote(t *testing.T) {
+	m := treeModel(t, "- [r](../assets/r.md)\n")
+	attachFile(t, m, "r.md", "# Before\n")
+	send(t, m, k(tea.KeyEsc), runes("g"))
+	m.width, m.height = 80, 20
+	if _, cmd := m.Update(runes("e")); cmd == nil {
+		t.Fatal("e did not start the editor")
+	}
+
+	// What the editor did, then its quitting.
+	attachFile(t, m, "r.md", "# After\n\nedited **here**\n")
+	m.Update(fileEditedMsg{})
+	frame := stripANSI(m.View())
+	if m.mode != modeFile || !strings.Contains(frame, "After") || !strings.Contains(frame, "edited here") {
+		t.Fatalf("not re-read:\n%s", frame)
+	}
+	if m.status != "saved r.md" {
+		t.Fatalf("status %q", m.status)
+	}
+}
+
+func TestTheEditorIsTheOneTheEnvironmentNames(t *testing.T) {
+	t.Setenv("VISUAL", "")
+	t.Setenv("EDITOR", "omarchy-launch-editor --inline")
+	if got := editorCommand("/n/a.md").Args; strings.Join(got, " ") != "omarchy-launch-editor --inline /n/a.md" {
+		t.Fatalf("got %q", got)
+	}
+	t.Setenv("VISUAL", "code --wait")
+	if got := editorCommand("/n/a.md").Args; strings.Join(got, " ") != "code --wait /n/a.md" {
+		t.Fatalf("got %q", got)
+	}
+	t.Setenv("VISUAL", "")
+	t.Setenv("EDITOR", "")
+	if got := editorCommand("/n/a.md").Args; strings.Join(got, " ") != "vi /n/a.md" {
 		t.Fatalf("got %q", got)
 	}
 }

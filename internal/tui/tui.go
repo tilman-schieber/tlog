@@ -474,6 +474,9 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pictureClosedMsg:
 		m.pictureClosed(msg)
 		return m, nil
+	case fileEditedMsg:
+		m.fileEdited(msg)
+		return m, nil
 	case pulledMsg:
 		if msg.err != nil {
 			m.status = "not pulled: " + msg.err.Error()
