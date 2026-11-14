@@ -22,8 +22,6 @@ import (
 
 var (
 	mdH1     = lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true).Reverse(true)
-	mdH2     = lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true)
-	mdH3     = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
 	mdCode   = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
 	mdBullet = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
 
@@ -84,7 +82,7 @@ func mdFrontMatter(lines []string) (fm string, rest []string, ok bool) {
 }
 
 // mdBlocks draws a run of block-level markdown. It calls itself for what a
-// mdList item or a quote contains, with the width that is left; tight drops the
+// list item or a quote contains, with the width that is left; tight drops the
 // blank line between blocks, as in a list whose items have none.
 func mdBlocks(lines []string, width int, tight bool) []string {
 	width = max(8, width)
@@ -217,7 +215,7 @@ func mdBlocks(lines []string, width int, tight bool) []string {
 }
 
 // mdStartsBlock reports whether a line begins something other than more of the
-// mdParagraph above it.
+// paragraph above it.
 func mdStartsBlock(l string) bool {
 	return mdHeadingRe.MatchString(l) || mdRuleRe.MatchString(l) || mdFenceRe.MatchString(l) ||
 		mdQuoteRe.MatchString(l) || mdListRe.MatchString(l) || strings.HasPrefix(strings.TrimSpace(l), "<!--")
@@ -238,36 +236,18 @@ func mdTrimIndent(l string, n int) string {
 
 func mdHeading(level int, text string, width int) []string {
 	segs := mdInline(text, 0)
-	switch level {
-	case 1:
-		var out []string
-		for _, l := range mdWrap(segs, width-2) {
-			out = append(out, mdH1.Render(" "+stripANSI(l)+" "))
-		}
-		return out
-	case 2, 3:
-		st := mdH2
-		if level == 3 {
-			st = mdH3
-		}
-		prefix := strings.Repeat("#", level) + " "
-		lines := mdWrap(segs, width-len(prefix))
+	if level == 1 {
+		lines := mdWrap(segs, width-2)
 		for i, l := range lines {
-			p := prefix
-			if i > 0 {
-				p = strings.Repeat(" ", len(prefix))
-			}
-			lines[i] = st.Render(p + stripANSI(l))
+			lines[i] = throughout(mdH1, " "+l+" ")
 		}
 		return lines
 	}
-	lines := mdWrap(segs, width-level-1)
+	// Below the title a heading is bold, as it is in a note: the outline and
+	// the file viewer draw one thing one way.
+	lines := mdWrap(segs, width)
 	for i, l := range lines {
-		p := strings.Repeat("#", level) + " "
-		if i > 0 {
-			p = strings.Repeat(" ", level+1)
-		}
-		lines[i] = styleTitle.Render(p + stripANSI(l))
+		lines[i] = boldThroughout(l)
 	}
 	return lines
 }
@@ -582,7 +562,7 @@ func mdTable(rows [][]string, align []byte, width int) []string {
 }
 
 // Inline markdown is parsed into runs of text that share a style, so that a
-// mdParagraph can be wrapped by words and still keep each word's style.
+// paragraph can be wrapped by words and still keep each word's style.
 
 type mdFlag uint8
 
@@ -757,6 +737,78 @@ func mdInline(s string, flags mdFlag) []mdSeg {
 
 func isWordByte(b byte) bool {
 	return b == '_' || b >= '0' && b <= '9' || b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= 0x80
+}
+
+// mdEmphasis draws the inline styling of a line in a note — **bold**,
+// *italic*, `code`, ~~struck~~ — with the delimiters hidden, and hands every
+// other run of text to plain. It is the outliner's half of mdInline: the same
+// delimiter rules and styles, with links left to the caller, which draws them
+// itself so it knows where they landed. [[links]] are passed through whole,
+// and nothing inside inline code is coloured as a tag or a link.
+func mdEmphasis(s string, plain func(string) string) string {
+	var b, lit strings.Builder
+	flush := func() {
+		if lit.Len() > 0 {
+			b.WriteString(plain(lit.String()))
+			lit.Reset()
+		}
+	}
+	for i := 0; i < len(s); {
+		c := s[i]
+		rest := s[i:]
+		switch {
+		case c == '\\' && i+1 < len(s):
+			lit.WriteString(rest[:2])
+			i += 2
+			continue
+		case strings.HasPrefix(rest, "[["):
+			if end := strings.Index(rest, "]]"); end > 2 {
+				lit.WriteString(rest[:end+2])
+				i += end + 2
+				continue
+			}
+		case c == '`':
+			n := len(rest) - len(strings.TrimLeft(rest, "`"))
+			if end := closingTicks(rest[n:], rest[:n]); end >= 0 {
+				flush()
+				b.WriteString(mdSegStyle(fCode).Render(rest[n : n+end]))
+				i += n + end + n
+				continue
+			}
+			lit.WriteString(rest[:n])
+			i += n
+			continue
+		case c == '*' || c == '_' || (c == '~' && strings.HasPrefix(rest, "~~")):
+			n := len(rest) - len(strings.TrimLeft(rest, string(c)))
+			run := rest[:min(n, 3)]
+			if c == '~' {
+				run = "~~"
+			}
+			if inner, ok := emphasis(s, i, run); ok {
+				f := fBold | fItalic
+				switch {
+				case c == '~':
+					f = fStrike
+				case len(run) == 1:
+					f = fItalic
+				case len(run) == 2:
+					f = fBold
+				}
+				flush()
+				b.WriteString(throughout(mdSegStyle(f), mdEmphasis(inner, plain)))
+				i += 2*len(run) + len(inner)
+				continue
+			}
+			lit.WriteString(rest[:n])
+			i += n
+			continue
+		}
+		_, size := utf8.DecodeRuneInString(rest)
+		lit.WriteString(rest[:size])
+		i += size
+	}
+	flush()
+	return b.String()
 }
 
 // closingTicks finds a run of exactly the opening backticks in s.

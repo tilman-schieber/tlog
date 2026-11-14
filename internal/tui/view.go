@@ -23,7 +23,7 @@ var (
 	viewTagRe    = regexp.MustCompile(`(^|\s)(#[A-Za-z][A-Za-z0-9_/\-]*)`)
 	viewCheckRe  = regexp.MustCompile(`^\[( |x|X)\] `)
 	// A heading: hashes, a space, the text.
-	viewHeadingRe = regexp.MustCompile(`^\s*#{1,6}\s+(.*)$`)
+	viewHeadingRe = regexp.MustCompile(`^\s*(#{1,6})\s+(.*)$`)
 )
 
 func (m *Model) View() string {
@@ -503,10 +503,16 @@ func (m *Model) highlight(s string, r row) (string, []linkHit) {
 		body, hits := inlineWithLinks(rest, cursor, 2)
 		return styleDone.Render("☑ " + stripANSI(body)), hits
 	}
-	// A markdown heading is drawn bold, without its hashes. Nothing about the file changes; the hashes are there while
-	// writing.
+	// A markdown heading is drawn without its hashes: a title (#) as a
+	// coloured bar, every other level bold — the same as in an attached
+	// markdown file. Nothing about the file changes; the hashes are there
+	// while writing.
 	if h := viewHeadingRe.FindStringSubmatch(s); h != nil {
-		body, hits := inlineWithLinks(h[1], cursor, 0)
+		if len(h[1]) == 1 {
+			body, hits := inlineWithLinks(h[2], cursor, 1)
+			return throughout(mdH1, " "+body+" "), hits
+		}
+		body, hits := inlineWithLinks(h[2], cursor, 0)
 		return boldThroughout(body), hits
 	}
 	return inlineWithLinks(s, cursor, 0)
@@ -516,6 +522,18 @@ func (m *Model) highlight(s string, r row) (string, []linkHit) {
 // every reset inside it would end the bold, so bold is put back after each.
 // When the terminal takes no styling at all the text comes back as it was.
 func boldThroughout(s string) string { return rebold(styleTitle.Render(s)) }
+
+// throughout draws s in st although parts of it are already styled: every
+// reset inside it would end st, so st is put back after each.
+func throughout(st lipgloss.Style, s string) string {
+	probe := st.Render("x")
+	on := probe[:strings.Index(probe, "x")]
+	if on == "" {
+		return s
+	}
+	const off = "\x1b[0m"
+	return on + strings.ReplaceAll(s, off, off+on) + off
+}
 
 func rebold(out string) string {
 	const on, off = "\x1b[1m", "\x1b[0m"
@@ -666,6 +684,15 @@ func highlightInline(s string, cursor *refCursor) string {
 // changing a character — for the block under the caret, where what is drawn
 // has to be exactly what is typed, or the caret lands in the wrong place.
 func colourInline(s string, cursor *refCursor, raw bool) string {
+	if !raw {
+		return mdEmphasis(s, func(t string) string { return colourRefs(t, cursor, false) })
+	}
+	return colourRefs(s, cursor, true)
+}
+
+// colourRefs colours the tlog-specific syntax: [[links]], block references and
+// #tags.
+func colourRefs(s string, cursor *refCursor, raw bool) string {
 	s = viewLinkRe.ReplaceAllStringFunc(s, func(match string) string {
 		if !viewAnchorRe.MatchString(match) {
 			// [[Max #person]] says once what Max is; drawn every time, it would

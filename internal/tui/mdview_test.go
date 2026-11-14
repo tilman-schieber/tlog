@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -48,7 +49,7 @@ func TestMarkdownIsDrawnNotShownAsSource(t *testing.T) {
 		"   Title",
 		"  Some bold, italic, code and a link https://x.org/a.",
 		"  snake_case_name stays.",
-		"  ## Section",
+		"  Section",
 		"  • one",
 		"  ☐ open",
 		"  ☑ done",
@@ -100,5 +101,19 @@ func TestMarkdownKeepsWhatItDoesNotUnderstand(t *testing.T) {
 	got := strings.Join(drawMD("a * b and **unclosed and [x] (y) and <b>html</b>\n", 80), "\n")
 	if !strings.Contains(got, "a * b and **unclosed and [x] (y) and <b>html</b>") {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestTheOutlineStylesInlineMarkdownLikeTheFileViewer(t *testing.T) {
+	m := treeModel(t, "- some **bold** and `#notatag` with #tag and [[a_b_c]]\n- # Title\n- below\n")
+	send(t, m, k(tea.KeyDown), k(tea.KeyDown))
+	frame := stripANSI(m.View())
+	for _, want := range []string{"• some bold and #notatag with #tag and [[a_b_c]]", "•  Title "} {
+		if !strings.Contains(frame, want) {
+			t.Fatalf("%q not drawn:\n%s", want, frame)
+		}
+	}
+	if got := colourInline("`#x` **[[P]]**", &refCursor{}, false); stripANSI(got) != "#x [[P]]" {
+		t.Fatalf("got %q", stripANSI(got))
 	}
 }

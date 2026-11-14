@@ -403,6 +403,14 @@ recognise is drawn as the characters it is, never dropped, for the same reason
 the highlighter never drops one. It lives in the TUI because it only decides how
 a file looks; `LinkedText` still hands every caller the text as written.
 
+The outline draws the same markdown the same way: inline emphasis, inline code
+and strikethrough go through `mdEmphasis`, which shares its delimiter rules and
+styles with the file viewer, and headings look alike in both — a `#` title as a
+coloured bar, every lower level bold without its hashes. Glow keeps the hashes
+and colours each level; in a note a heading is one line among many, and a page
+of coloured headings is noise. The block being edited is still drawn raw, so
+the caret stays where the characters are.
+
 ## Commands, tasks and deadlines
 
 **Slash commands, named after Logseq's.** One extensible surface rather than a

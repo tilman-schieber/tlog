@@ -318,7 +318,7 @@ func TestTheBoxTicksWhileMovingToo(t *testing.T) {
 // --- headings ----------------------------------------------------------------
 
 func TestAHeadingIsDrawnWithoutItsHashesUnlessBeingWritten(t *testing.T) {
-	m := treeModel(t, "- # Plans for [[Alpha]]\n\n- below\n")
+	m := treeModel(t, "- ## Plans for [[Alpha]]\n\n- below\n")
 	send(t, m, k(tea.KeyDown))
 	frame := stripANSI(m.View())
 	if strings.Contains(frame, "# Plans") || !strings.Contains(frame, "• Plans for [[Alpha]]") {
