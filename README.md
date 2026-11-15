@@ -295,8 +295,8 @@ off without leaving — `a` in the agenda also shows the dated ones already done
 
 ## Settings
 
-`~/.config/tlog/config.toml`, written the first time something changes. `,` in
-the outliner opens the settings, and `tlog config` prints them
+`~/.config/tlog/config.toml`, written the first time something changes. In the
+outliner, `p` and then `settings` opens them, and `tlog config` prints them
 with where each one came from.
 
 ```sh
