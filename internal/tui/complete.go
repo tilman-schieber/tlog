@@ -28,14 +28,20 @@ type completion struct {
 	// a durable name, which is a write to another file, so it is kept here
 	// rather than reduced to a string like the other candidates.
 	refs []tapp.BlockRef
-	// dates is the quick pick for a date, as the argument of /date and
+	// dates is the quick pick for a date, as the argument of
 	// /deadline. Accepting one writes its ISO form, whatever was typed to
 	// find it.
 	dates []tapp.DateChoice
 	// mentions is the @ menu: people, days and pages, each written as a link.
 	mentions []tapp.Mention
-	arg      string
-	start    int // rune offset where the "/" sits
+	// tags is the # menu: the topics already in use. A tag is finished as
+	// typed, so the menu only offers; see completionKey.
+	tags []string
+	// heads are the headings of the full slash menu, by the row each stands
+	// above. They are drawn, never selected.
+	heads map[int]string
+	arg   string
+	start int // rune offset where the "/" sits
 	// closing is appended when a candidate is accepted: page names finish the
 	// link, tags do not, because you may want to add another.
 	closing string
@@ -55,7 +61,7 @@ func (m *Model) updateCompletion() {
 	}
 	prefix, ok := linkPrefix(m.ed.textBefore())
 	if !ok {
-		m.comp = nil
+		m.tagCompletion()
 		return
 	}
 	l := m.snapshot()
@@ -119,6 +125,61 @@ func (m *Model) refCompletion() bool {
 	}
 	m.comp = &completion{active: true, prefix: prefix, items: items, refs: refs, sel: sel}
 	return true
+}
+
+// tagCompletion opens the # menu when a # starts a word: the topics already in
+// use that the typing could mean. A tag nothing answers to, or one typed out
+// in full, needs no menu — it is a tag as it stands.
+func (m *Model) tagCompletion() {
+	prefix, ok := tagPrefix(m.ed.textBefore())
+	l := m.snapshot()
+	if !ok || l == nil {
+		m.comp = nil
+		return
+	}
+	var tags []string
+	for _, t := range l.Tags(prefix, completionLimit) {
+		if !strings.EqualFold(t, prefix) {
+			tags = append(tags, t)
+		}
+	}
+	if len(tags) == 0 {
+		m.comp = nil
+		return
+	}
+	items := make([]string, len(tags))
+	for i, t := range tags {
+		items[i] = "#" + t
+	}
+	items[0] += styleMuted.Render("  tab")
+	sel, moved := 0, false
+	if m.comp != nil && m.comp.tags != nil && m.comp.moved && m.comp.sel < len(tags) {
+		sel, moved = m.comp.sel, true
+	}
+	m.comp = &completion{active: true, prefix: prefix, items: items, tags: tags, sel: sel, moved: moved}
+}
+
+// tagPrefix is what has been typed after a # that starts a word. A space ends
+// it, so "# a heading" and a finished tag never hold the menu open.
+func tagPrefix(before string) (string, bool) {
+	r := []rune(before)
+	i := len(r) - 1
+	for ; i >= 0 && r[i] != '#'; i-- {
+		if r[i] == ' ' || r[i] == '\t' || r[i] == '\n' || r[i] == '[' || r[i] == ']' {
+			return "", false
+		}
+	}
+	if i < 0 || (i > 0 && !strings.ContainsRune(" \t\n(", r[i-1])) {
+		return "", false
+	}
+	return string(r[i+1:]), true
+}
+
+func (m *Model) acceptTag() {
+	if m.comp.sel < len(m.comp.tags) {
+		m.ed.replaceBefore(len([]rune(m.comp.prefix)), m.comp.tags[m.comp.sel])
+	}
+	m.comp = nil
 }
 
 // mentionCompletion opens the @ menu when an @ starts a word: the pages you
@@ -254,11 +315,11 @@ func (m *Model) currentCompletion() string {
 // of a word. It reports whether it took over.
 func (m *Model) slashCompletion() bool {
 	before := m.ed.textBefore()
-	start, name, arg, ok := slashAt(before)
+	start, name, arg, followed, ok := slashAt(before)
 	if !ok {
 		return false
 	}
-	cmds := tapp.MatchCommands(name)
+	cmds := tapp.MatchTyped(name, followed)
 	if len(cmds) == 0 {
 		m.comp = nil
 		return false // let it be ordinary text: not every slash is a command
@@ -267,7 +328,9 @@ func (m *Model) slashCompletion() bool {
 	for _, c := range cmds {
 		label := c.Title + "  " + c.Hint
 		if c.TakesDate() {
-			if d, ok := tapp.PreviewDate(arg); ok {
+			if tapp.ClearsDeadline(arg) {
+				label = c.Title + "  → none: take the deadline off"
+			} else if d, ok := tapp.PreviewDate(arg); ok {
 				label = c.Title + "  → " + dates.Short(d) + "  " + dates.Describe(d, time.Now())
 			}
 		}
@@ -276,8 +339,8 @@ func (m *Model) slashCompletion() bool {
 
 	// A date command shows the days themselves, the same quick pick as @:
 	// /deadline alone offers today, tomorrow, Friday…, and "/deadline in 3"
-	// narrows it.
-	if len(cmds) == 1 && cmds[0].TakesDate() {
+	// narrows it. "none" is not a day, so it is left to the command.
+	if len(cmds) == 1 && cmds[0].TakesDate() && !tapp.ClearsDeadline(arg) {
 		if choices := tapp.DateChoices(arg, completionLimit); len(choices) > 0 {
 			sel := 0
 			if m.comp != nil && m.comp.dates != nil && m.comp.sel < len(choices) {
@@ -315,14 +378,25 @@ func (m *Model) slashCompletion() bool {
 	if m.comp != nil && m.comp.cmds != nil && m.comp.sel < len(items) {
 		sel = m.comp.sel
 	}
-	m.comp = &completion{active: true, items: items, cmds: cmds, arg: arg, start: start, sel: sel}
+	// The whole menu is shown in its groups; a narrowed one is ranked by how
+	// well each name matches, which no longer follows them.
+	var heads map[int]string
+	if name == "" && !followed {
+		heads = map[int]string{}
+		for i, c := range cmds {
+			if i == 0 || cmds[i-1].Group != c.Group {
+				heads[i] = c.Group
+			}
+		}
+	}
+	m.comp = &completion{active: true, items: items, cmds: cmds, heads: heads, arg: arg, start: start, sel: sel}
 	return true
 }
 
 // slashAt finds a command being typed to the left of the caret: a "/" at the
 // start of a word, the command name, and anything after the first space as its
 // argument.
-func slashAt(before string) (start int, name, arg string, ok bool) {
+func slashAt(before string) (start int, name, arg string, followed, ok bool) {
 	r := []rune(before)
 	i := len(r) - 1
 	for ; i >= 0; i-- {
@@ -330,26 +404,26 @@ func slashAt(before string) (start int, name, arg string, ok bool) {
 			break
 		}
 		if r[i] == '\n' {
-			return 0, "", "", false
+			return 0, "", "", false, false
 		}
 	}
 	if i < 0 {
-		return 0, "", "", false
+		return 0, "", "", false, false
 	}
 	// A slash only starts a command at the start of a word, so a URL or a path
 	// never opens the menu.
 	if i > 0 && r[i-1] != ' ' && r[i-1] != '\t' {
-		return 0, "", "", false
+		return 0, "", "", false, false
 	}
 	rest := string(r[i+1:])
 	if strings.ContainsAny(rest, "/\\") {
-		return 0, "", "", false
+		return 0, "", "", false, false
 	}
-	name, arg, _ = strings.Cut(rest, " ")
-	if name == "" && arg == "" && rest != "" {
-		return 0, "", "", false
+	name, arg, followed = strings.Cut(rest, " ")
+	if name == "" && followed {
+		return 0, "", "", false, false
 	}
-	return i, name, arg, true
+	return i, name, arg, followed, true
 }
 
 // linkPrefix finds the text typed after the most recent unclosed [[.
@@ -393,7 +467,15 @@ func (m *Model) completionKey(k string) (bool, tea.Cmd) {
 		}
 		return true, nil
 	case "tab", "enter":
+		// A tag is complete as typed, so enter is still enter — a new block —
+		// unless a tag was picked with the arrows. Tab always takes one.
+		if m.comp.tags != nil && k == "enter" && !m.comp.moved {
+			m.comp = nil
+			return false, nil
+		}
 		switch {
+		case m.comp.tags != nil:
+			m.acceptTag()
 		case m.comp.cmds != nil:
 			m.runCommand()
 		case m.comp.mentions != nil:
@@ -452,6 +534,15 @@ func (m *Model) runCommand() {
 		}
 	} else {
 		cmd = m.comp.cmds[m.comp.sel]
+		// A command that needs something after it is finished rather than
+		// run when chosen from the menu: "/dea" becomes "/deadline " and the
+		// days appear, where running it would only say no date was given.
+		typed := len([]rune(m.ed.textBefore())) - m.comp.start
+		if cmd.Arg != "" && !strings.Contains(string([]rune(m.ed.textBefore())[m.comp.start:]), " ") {
+			m.ed.replaceBefore(typed, "/"+cmd.Name+" ")
+			m.updateCompletion()
+			return
+		}
 	}
 
 	text := m.ed.String()

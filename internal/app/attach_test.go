@@ -260,17 +260,17 @@ func TestSlashNotePastesTheClipboardAsANote(t *testing.T) {
 		return clipboard.Content{Text: "Minutes of the board\n\n- item one\n- item two\n"}, nil
 	}
 	rel, _ := s.AddToday("from the board ")
-	text := "from the board /note"
-	if _, err := s.RunCommand(addrOf(t, s, rel, 0), "note", "", text, 15, len(text)); err != nil {
+	text := "from the board /paste"
+	if _, err := s.RunCommand(addrOf(t, s, rel, 0), "paste", "", text, 15, len(text)); err != nil {
 		t.Fatal(err)
 	}
 	got := body(t, s, rel)
-	if !strings.Contains(got, "from the board [Minutes of the board](../assets/") || strings.Contains(got, "/note") {
+	if !strings.Contains(got, "from the board [Minutes of the board](../assets/") || strings.Contains(got, "/paste") {
 		t.Fatalf("the block is %q", got)
 	}
 
 	s.Clipboard = func() (clipboard.Content, error) { return clipboard.Content{Image: []byte{1}}, nil }
-	if _, err := s.RunCommand(addrOf(t, s, rel, 0), "note", "", "x /note", 2, 7); err == nil {
+	if _, err := s.RunCommand(addrOf(t, s, rel, 0), "paste", "", "x /paste", 2, 8); err == nil {
 		t.Fatal("a picture on the clipboard is not text to keep")
 	}
 }

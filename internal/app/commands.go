@@ -9,8 +9,15 @@ import (
 	"github.com/tilman-schieber/tlog/internal/markdown"
 )
 
-// Slash commands, named after Logseq's where they mean the same thing, so that
-// muscle memory carries over and there is one place to add the next one.
+// Slash commands. A slash does something to the block it is typed in, or to
+// the page that block is on; it never merely types something. Pointing at a
+// page, a day, a topic or a block is what @, [[, # and (( are for, each with a
+// menu of its own, so there is no /page, /date or /tag saying the same thing a
+// second way.
+//
+// The commands come in groups, which the menu shows as headings: what changes
+// the block, what puts a structure into it, what brings something in from
+// outside, and what is said about the page.
 //
 // A command is typed into a block and then disappears: what stays in the file
 // is its effect. `/todo` leaves a checkbox, `/deadline fr` leaves a property,
@@ -22,7 +29,8 @@ type Command struct {
 	Name    string `json:"name"`
 	Title   string `json:"title"`
 	Hint    string `json:"hint"`
-	Arg     string `json:"arg,omitempty"` // "date" when it takes one
+	Group   string `json:"group"`         // the heading it is listed under
+	Arg     string `json:"arg,omitempty"` // "date", "attachment" or "text" when it takes one
 	aliases []string
 }
 
@@ -40,20 +48,30 @@ func (c Command) TakesText() bool { return c.Arg == "text" }
 // that is what is already in these notes; reading is case-insensitive.
 const DeadlineProp = "Deadline"
 
+// The groups, in the order the menu shows them.
+const (
+	GroupBlock  = "Block"
+	GroupInsert = "Insert"
+	GroupAttach = "Attach"
+	GroupPage   = "Page"
+)
+
 var commands = []Command{
-	{Name: "todo", Title: "TODO", Hint: "Task, open", aliases: []string{"task", "aufgabe"}},
-	{Name: "done", Title: "DONE", Hint: "Task, done", aliases: []string{"erledigt"}},
-	{Name: "deadline", Title: "Deadline", Hint: "Due on …", Arg: "date", aliases: []string{"due", "faellig", "fällig", "dl"}},
-	{Name: "date", Title: "Date", Hint: "Insert a date, as a link", Arg: "date", aliases: []string{"datum"}},
-	{Name: "quote", Title: "Quote", Hint: "Make the block a quotation", aliases: []string{"zitat"}},
-	{Name: "code", Title: "Code", Hint: "Insert a code block"},
-	{Name: "table", Title: "Table", Hint: "Insert a table as csv", aliases: []string{"tabelle", "csv"}},
-	{Name: "page", Title: "Page", Hint: "Link to a page", aliases: []string{"link", "seite"}},
-	{Name: "tag", Title: "Tag", Hint: "Insert a tag"},
-	{Name: "note", Title: "Paste as note", Hint: "The clipboard's text as a linked .md file", aliases: []string{"pn", "paste-note", "notiz"}},
-	{Name: "file", Title: "Attachment", Hint: "Link a file from the notes' assets", Arg: "attachment", aliases: []string{"anhang", "att", "attach"}},
-	{Name: "prop", Title: "Property", Hint: "Set a property: /prop status open", Arg: "text", aliases: []string{"property", "eigenschaft"}},
-	{Name: "alias", Title: "Alias", Hint: "Another name for this page: /alias Ada", Arg: "text", aliases: []string{"aka", "zweitname"}},
+	{Name: "todo", Title: "TODO", Hint: "Task, open", Group: GroupBlock, aliases: []string{"task", "aufgabe"}},
+	{Name: "done", Title: "DONE", Hint: "Task, done", Group: GroupBlock, aliases: []string{"erledigt"}},
+	{Name: "plain", Title: "Plain", Hint: "Not a task any more: the checkbox and the deadline go", Group: GroupBlock, aliases: []string{"untodo", "notask", "normal"}},
+	{Name: "deadline", Title: "Deadline", Hint: "Due on … — /deadline none takes it off", Group: GroupBlock, Arg: "date", aliases: []string{"due", "faellig", "fällig", "dl"}},
+	{Name: "quote", Title: "Quote", Hint: "Make the block a quotation", Group: GroupBlock, aliases: []string{"zitat"}},
+	{Name: "prop", Title: "Property", Hint: "Set a property: /prop status open", Group: GroupBlock, Arg: "text", aliases: []string{"property", "eigenschaft"}},
+
+	{Name: "code", Title: "Code", Hint: "A code block", Group: GroupInsert},
+	{Name: "table", Title: "Table", Hint: "A table, as csv", Group: GroupInsert, aliases: []string{"tabelle", "csv"}},
+
+	{Name: "file", Title: "File", Hint: "Link a file from the notes' assets", Group: GroupAttach, Arg: "attachment", aliases: []string{"anhang", "att", "attach"}},
+	{Name: "paste", Title: "Paste as file", Hint: "The clipboard's text as a linked .md file", Group: GroupAttach, aliases: []string{"note", "notiz"}},
+
+	{Name: "alias", Title: "Alias", Hint: "Another name for this page: /alias Ada", Group: GroupPage, Arg: "text", aliases: []string{"aka", "zweitname"}},
+	{Name: "tagpage", Title: "Tag the page", Hint: "Say what this page is: /tagpage person", Group: GroupPage, Arg: "text", aliases: []string{"pagetag", "kind"}},
 }
 
 // Commands returns the whole menu, in the order it is shown.
@@ -80,6 +98,31 @@ func MatchCommands(prefix string) []Command {
 		}
 	}
 	return append(append(exact, prefixed...), loose...)
+}
+
+// MatchTyped is the menu for a command as it stands in the text: the name
+// typed after the slash and whether anything — a space, an argument — follows
+// it. A name still being typed is matched loosely, as MatchCommands does. Once
+// something follows, the name is finished, so it has to be a command's name or
+// alias exactly: "/d fri" is not /done, and "/to do this" is not /todo.
+func MatchTyped(name string, followed bool) []Command {
+	if !followed {
+		return MatchCommands(name)
+	}
+	if c, ok := FindCommand(name); ok {
+		return []Command{c}
+	}
+	return nil
+}
+
+// ClearsDeadline reports whether a /deadline argument asks for the deadline to
+// be taken off rather than set.
+func ClearsDeadline(arg string) bool {
+	switch strings.ToLower(strings.TrimSpace(arg)) {
+	case "none", "off", "no", "-", "kein", "keine", "weg":
+		return true
+	}
+	return false
 }
 
 func matchesAlias(c Command, p string) bool {
@@ -139,10 +182,21 @@ func (s *Service) RunCommand(a Addr, name, arg, text string, from, to int) (*Com
 	}
 	before, after := string(runes[:from]), string(runes[to:])
 
+	// A command that takes no argument has nothing to do with what was typed
+	// after it, so that stays in the block: "/todo call Ada" is a task that
+	// says "call Ada". Eating it would lose what was just written.
+	kept := ""
+	if cmd.Arg == "" {
+		if _, rest, ok := strings.Cut(string(runes[from:to]), " "); ok {
+			kept = strings.TrimSpace(rest)
+		}
+	}
+
 	// A date command is refused rather than guessed at: silently setting the
 	// wrong deadline is worse than saying the word was not understood.
 	var due time.Time
-	if cmd.TakesDate() {
+	clear := cmd.Name == "deadline" && ClearsDeadline(arg)
+	if cmd.TakesDate() && !clear {
 		d, ok := dates.Parse(arg, time.Now())
 		if !ok {
 			return nil, refuse("%q is not a date I understand", arg)
@@ -172,6 +226,16 @@ func (s *Service) RunCommand(a Addr, name, arg, text string, from, to int) (*Com
 		}
 	}
 
+	// What a page is goes in its frontmatter too, as tags:.
+	var pageTag string
+	if cmd.Name == "tagpage" {
+		t, err := cleanTag(arg)
+		if err != nil {
+			return nil, fmt.Errorf("which tag? try /tagpage person")
+		}
+		pageTag = t
+	}
+
 	insert := ""
 	if cmd.TakesAttachment() {
 		found, err := s.Attachments(arg, 1)
@@ -183,7 +247,7 @@ func (s *Service) RunCommand(a Addr, name, arg, text string, from, to int) (*Com
 		}
 		insert = found[0].Link
 	}
-	if cmd.Name == "note" {
+	if cmd.Name == "paste" {
 		c, err := s.ReadClipboard()
 		if err != nil {
 			return nil, err
@@ -198,16 +262,10 @@ func (s *Service) RunCommand(a Addr, name, arg, text string, from, to int) (*Com
 		insert = a.Link
 	}
 	switch cmd.Name {
-	case "date":
-		insert = "[[" + dates.Format(due) + "]]"
 	case "code":
-		insert = "\n```\n\n```"
+		insert, kept = "\n```\n"+kept+"\n```", ""
 	case "table":
-		insert = "\n```csv\n\n```"
-	case "page":
-		insert = "[[]]"
-	case "tag":
-		insert = "#"
+		insert, kept = "\n```csv\n"+kept+"\n```", ""
 	}
 
 	// A command that leaves nothing behind takes the space before it too, so
@@ -219,13 +277,20 @@ func (s *Service) RunCommand(a Addr, name, arg, text string, from, to int) (*Com
 			before += " "
 		}
 	}
-	newText := before + insert + after
-	caret := from + len([]rune(insert))
+	if kept != "" {
+		if before+insert != "" && !strings.HasSuffix(before+insert, " ") {
+			kept = " " + kept
+		}
+		if after != "" && !strings.HasPrefix(after, " ") && !strings.HasPrefix(after, "\n") {
+			kept += " "
+		}
+	}
+	newText := before + insert + kept + after
+	// The caret stays where the typing was: after what was kept.
+	caret := len([]rune(before + insert + kept))
 	switch cmd.Name {
-	case "page":
-		caret = from + 2 // between the brackets, where completion takes over
 	case "code", "table":
-		caret = from + len([]rune(insert)) - 4 // on the empty line inside the fence
+		caret = len([]rune(before+insert)) - 4 // at the end of the line inside the fence
 	}
 
 	res, err := s.mutate(a, func(d *markdown.Document, b *markdown.Block) error {
@@ -246,7 +311,20 @@ func (s *Service) RunCommand(a Addr, name, arg, text string, from, to int) (*Com
 			if b.Task() == markdown.TaskOpen {
 				b.ToggleTask()
 			}
+		case "plain":
+			// The deadline goes with the checkbox: a dated block is a task,
+			// and would have its checkbox back the next time it was written.
+			if b.Task() != markdown.NotATask {
+				body := b.TaskBody()
+				caret -= len([]rune(b.Text)) - len([]rune(body))
+				b.Text = body
+			}
+			clearDeadline(b)
 		case "deadline":
+			if clear {
+				clearDeadline(b)
+				break
+			}
 			// A deadline makes it a task. A date on a block that can never be
 			// ticked off is a date that never leaves the agenda, and "what is
 			// due" only means anything if something can become not-due.
@@ -268,6 +346,8 @@ func (s *Service) RunCommand(a Addr, name, arg, text string, from, to int) (*Com
 			}
 		case "alias":
 			addAlias(d, alias)
+		case "tagpage":
+			addPageTag(d, pageTag)
 		}
 		return nil
 	})
@@ -310,12 +390,21 @@ func (s *Service) ApplyCommand(a Addr, name, arg string) (*CommandResult, error)
 // setDeadline writes the date, replacing whatever spelling of the property was
 // already there so a block never ends up with two.
 func setDeadline(b *markdown.Block, due time.Time, prop string) {
+	clearDeadline(b)
+	b.SetProp(prop, dates.Format(due))
+}
+
+// clearDeadline takes the deadline off, in every spelling it may have.
+func clearDeadline(b *markdown.Block) {
+	var keys []string
 	for _, p := range b.Props {
 		if isDeadlineKey(p.Key) {
-			b.DelProp(p.Key)
+			keys = append(keys, p.Key)
 		}
 	}
-	b.SetProp(prop, dates.Format(due))
+	for _, k := range keys {
+		b.DelProp(k)
+	}
 }
 
 // IsDeadlineKey accepts every spelling, whatever the setting says to write, so
@@ -382,7 +471,7 @@ type DateChoice struct {
 
 // DateChoices is the quick pick for a date being typed: the usual days when
 // nothing is typed yet, narrowing as it is. The outliner's @ menu, the slash
-// menus for /date and /deadline, and `tlog date` all draw this one list.
+// menu for /deadline, and `tlog date` all draw this one list.
 func DateChoices(input string, limit int) []DateChoice {
 	now := time.Now()
 	var out []DateChoice

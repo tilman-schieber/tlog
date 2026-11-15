@@ -24,7 +24,7 @@ other than `$TLOG_DIR` / `~/notes`.
 | `tlog untag <tag> <page>…` | takes it out; refused (3) when the frontmatter does not carry it | a line per page |
 | `tlog mentions <query>` | the `@` menu: every page ranked by use, with its tags, then days, then a "new page" when a name nothing answers to was typed | `kind`, `name`, `insert`, `detail` |
 | `tlog date [shorthand]` | what typed dates mean: `fri`, `in 3 days`, `12.11`, `eow`; nothing typed gives the usual days | `phrase`, `iso`, `short`, `label`, `state` |
-| `tlog commands` | the slash commands `block … cmd` can run | `name`, `title`, `hint`, `arg` |
+| `tlog commands` | the slash commands `block … cmd` can run | `name`, `title`, `hint`, `group`, `arg` |
 | `tlog files [query] [-links]` | what is attached (the notes' `assets/`), newest first | name, size, date; `-links` the markdown links; `-json` adds `rel` |
 | `tlog config [key]` | every setting, or one | key, value, hint; `-json` the list |
 | `tlog sync` | remote, auto-push, last push error | one line; `-json` `remote`, `autoPush`, `lastError` |
@@ -67,7 +67,7 @@ multi-line block. With no text at all, `add` reads standard input too.
 | `deadline <d>` | due on a day; makes it a task | writes the configured property, replacing other spellings |
 | `quote` | make it a quotation (`> `) | |
 | `prop <key> [value]` | set a `Key:: value` property; no value removes it | |
-| `cmd <name> [arg]` | any slash command by name: `todo`, `done`, `deadline`, `date`, `quote`, `code`, `table`, `page`, `tag`, `file`, `prop`, `alias` | what a command would insert goes at the end of the text |
+| `cmd <name> [arg]` | any slash command by name: `todo`, `done`, `plain` (checkbox and deadline off), `deadline` (`none` removes it), `quote`, `prop`, `code`, `table`, `file`, `paste`, `alias`, `tagpage` | what a command would insert goes at the end of the text |
 | `ref` | give the block a durable `^anchor` and print `[[Page#^anchor]]` | the only read-shaped op that writes; `-json` also gives the new `addr` |
 | `delete` | remove it and everything under it | |
 

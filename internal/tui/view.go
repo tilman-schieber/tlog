@@ -463,6 +463,9 @@ func (m *Model) completionLines(indent string) []string {
 	}
 	var out []string
 	for i, it := range m.comp.items {
+		if h, ok := m.comp.heads[i]; ok {
+			out = append(out, indent+"  "+styleTitle.Render(h))
+		}
 		line := indent + "  " + it
 		if i == m.comp.sel {
 			line = indent + "› " + styleSelected.Render(it)

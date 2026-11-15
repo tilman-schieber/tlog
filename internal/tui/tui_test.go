@@ -845,7 +845,7 @@ func TestSlashFileOffersTheAttachments(t *testing.T) {
 
 func TestSlashFileWithNoMatchSaysSo(t *testing.T) {
 	m := newModel(t)
-	typeText(t, m, "/file")
+	typeText(t, m, "/file ")
 	// Nothing attached, so the command is offered but has nothing to insert.
 	m.comp = &completion{active: true, cmds: []tapp.Command{{Name: "file", Arg: "attachment"}}, sel: 0, start: 0}
 	m.runCommand()
@@ -2009,5 +2009,108 @@ func TestUndoRefusesToOverwriteAnEditMadeElsewhere(t *testing.T) {
 	}
 	if !strings.Contains(m.errMsg, "changed elsewhere") {
 		t.Fatalf("got %q", m.errMsg)
+	}
+}
+
+// Typing on after /todo and pressing enter makes a task of what was typed; it
+// used to cut the words out with the command.
+func TestSlashTodoKeepsWhatIsTypedAfterIt(t *testing.T) {
+	m := newModel(t)
+	typeText(t, m, "/todo Bericht schreiben")
+	send(t, m, k(tea.KeyEnter))
+	send(t, m, k(tea.KeyEsc))
+	if got := onDisk(t, m); !strings.Contains(got, "- [ ] Bericht schreiben") {
+		t.Fatalf("the text after /todo was lost: %q", got)
+	}
+}
+
+func TestTheFullSlashMenuIsGrouped(t *testing.T) {
+	m := newModel(t)
+	typeText(t, m, "/")
+	if m.comp == nil || len(m.comp.heads) != 4 || m.comp.heads[0] != tapp.GroupBlock {
+		t.Fatalf("no headings on the whole menu: %+v", m.comp)
+	}
+	view := strings.Join(m.completionLines(""), "\n")
+	for _, h := range []string{"Block", "Insert", "Attach", "Page"} {
+		if !strings.Contains(view, h) {
+			t.Fatalf("heading %q not drawn:\n%s", h, view)
+		}
+	}
+	typeText(t, m, "to")
+	if m.comp == nil || m.comp.heads != nil {
+		t.Fatal("a narrowed menu is ranked, not grouped")
+	}
+}
+
+// "/d fri" used to run /done, the first command starting with d.
+func TestALooseCommandNameWithAnArgumentIsText(t *testing.T) {
+	m := newModel(t)
+	typeText(t, m, "/d fri")
+	if m.comp != nil && m.comp.cmds != nil {
+		t.Fatalf("a half-typed name with an argument held the menu: %+v", m.comp.cmds)
+	}
+	send(t, m, k(tea.KeyEsc))
+	if got := onDisk(t, m); !strings.Contains(got, "- /d fri") {
+		t.Fatalf("got %q", got)
+	}
+}
+
+// Choosing a command that needs an argument finishes its name; the days are
+// then there to pick from.
+func TestChoosingDeadlineFromTheMenuOffersTheDays(t *testing.T) {
+	m := newModel(t)
+	typeText(t, m, "send the slides /d")
+	send(t, m, k(tea.KeyDown), k(tea.KeyEnter)) // /done first, then /deadline
+	if got := m.ed.String(); got != "send the slides /deadline " {
+		t.Fatalf("the name was not finished: %q", got)
+	}
+	if m.comp == nil || m.comp.dates == nil {
+		t.Fatalf("no days offered: %+v", m.comp)
+	}
+	send(t, m, k(tea.KeyEnter))
+	send(t, m, k(tea.KeyEsc))
+	if got := onDisk(t, m); !strings.Contains(got, "Deadline:: ") || strings.Contains(got, "/dea") {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestDeadlineNoneIsNotADay(t *testing.T) {
+	m := newModel(t)
+	typeText(t, m, "send the slides /deadline fri")
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, " /deadline none")
+	if m.comp == nil || m.comp.dates != nil {
+		t.Fatalf("none was read as a day: %+v", m.comp)
+	}
+	send(t, m, k(tea.KeyEnter))
+	send(t, m, k(tea.KeyEsc))
+	if got := onDisk(t, m); strings.Contains(got, "Deadline") || !strings.Contains(got, "- [ ] send the slides") {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestHashOffersTheTagsInUse(t *testing.T) {
+	m := newModel(t)
+	typeText(t, m, "grading #moodle")
+	send(t, m, k(tea.KeyEnter))
+	if m.comp != nil {
+		t.Fatal("a tag typed out in full needs no menu")
+	}
+	typeText(t, m, "quiz #mo")
+	if m.comp == nil || len(m.comp.tags) == 0 || m.comp.tags[0] != "moodle" {
+		t.Fatalf("#mo did not offer moodle: %+v", m.comp)
+	}
+	send(t, m, k(tea.KeyTab))
+	if got := m.ed.String(); got != "quiz #moodle" {
+		t.Fatalf("tab took %q", got)
+	}
+
+	// Enter is still enter: a tag is a tag as typed, and the line ends.
+	send(t, m, k(tea.KeyEnter))
+	typeText(t, m, "new #mo")
+	send(t, m, k(tea.KeyEnter))
+	send(t, m, k(tea.KeyEsc))
+	if got := onDisk(t, m); !strings.Contains(got, "- new #mo\n") {
+		t.Fatalf("enter completed the tag instead of ending the block: %q", got)
 	}
 }

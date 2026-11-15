@@ -112,14 +112,20 @@ func TestSlashCommandsFromAScript(t *testing.T) {
 	if body := next("deadline", "2026-11-12"); !strings.Contains(body, "Deadline:: 2026-11-12") {
 		t.Fatalf("deadline: %q", body)
 	}
+	if body := next("cmd", "deadline", "none"); strings.Contains(body, "Deadline") {
+		t.Fatalf("cmd deadline none: %q", body)
+	}
+	if body := next("cmd", "plain"); strings.Contains(body, "[x]") || strings.Contains(body, "[ ]") {
+		t.Fatalf("cmd plain: %q", body)
+	}
 	if body := next("quote"); !strings.Contains(body, "> ") {
 		t.Fatalf("quote: %q", body)
 	}
 	if body := next("cmd", "prop", "status", "open"); !strings.Contains(body, "status:: open") {
 		t.Fatalf("cmd prop: %q", body)
 	}
-	if body := next("cmd", "date", "2026-12-24"); !strings.Contains(body, "[[2026-12-24]]") {
-		t.Fatalf("cmd date: %q", body)
+	if body := next("cmd", "tagpage", "lecture"); !strings.Contains(body, "tags: lecture") {
+		t.Fatalf("cmd tagpage: %q", body)
 	}
 
 	// A date nobody can read is refused with its own code, and nothing is

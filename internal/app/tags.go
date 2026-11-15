@@ -56,14 +56,23 @@ func (s *Service) Tag(rel, tag string) error {
 	if err != nil {
 		return err
 	}
-	key, tags := pageTags(d.Doc)
+	if !addPageTag(d.Doc, tag) {
+		return nil
+	}
+	return s.Save(d)
+}
+
+// addPageTag puts a tag in a document's frontmatter, reporting false when it
+// was there already.
+func addPageTag(d *markdown.Document, tag string) bool {
+	key, tags := pageTags(d)
 	for _, t := range tags {
 		if strings.EqualFold(t, tag) {
-			return nil
+			return false
 		}
 	}
-	d.Doc.SetFrontmatter(key, strings.Join(append(tags, tag), ", "))
-	return s.Save(d)
+	d.SetFrontmatter(key, strings.Join(append(tags, tag), ", "))
+	return true
 }
 
 // Untag takes a tag out of a page's frontmatter, and the tags: line with it

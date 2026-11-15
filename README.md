@@ -218,27 +218,39 @@ inlining a subtree into the middle of a sentence would be nonsense.
 
 ## Tasks and deadlines
 
-`/` in a block opens a command menu, named after Logseq's so the muscle memory
-carries over. The command is typed and then disappears: what stays in the file
-is its effect, never a slash.
+Three signs, each with a menu, each for one thing: **`@` finds** a page or a
+day, **`#` files** the block under a topic, and **`/` changes the block**. So
+there is no `/page`, `/date` or `/tag`: pointing at something is `@`, `[[`, `#`
+or `((`.
 
-| | |
-|---|---|
-| `/todo` `/done` | a checkbox, open or ticked |
-| `/deadline fr` | a checkbox and `Deadline:: 2026-09-25` on the block |
-| `/date morgen` | `[[2026-09-25]]` inline, a link to that day's journal |
-| `/quote` `/code` `/table` | a quotation, a code fence, a `csv` table |
-| `/file report` | a link to an attachment, chosen from `assets/` |
-| `/page` `/tag` | a `[[link]]` or a `#tag`, where completion takes over |
-| `/prop status offen` | `status:: offen` on the block; no value removes it |
-| `/alias Ada` | another name this page answers to |
+`/` in a block opens the command menu, in four groups. The command is typed and
+then disappears: what stays in the file is its effect, never a slash. Whatever
+is typed after a command that takes no argument stays in the block — `/todo
+call Ada` is a task that says "call Ada".
+
+| | | |
+|---|---|---|
+| Block | `/todo` `/done` | a checkbox, open or ticked |
+| | `/deadline fr` | a checkbox and `Deadline:: 2026-09-25` on the block; `/deadline none` takes it off |
+| | `/plain` | not a task any more: the checkbox and the deadline go |
+| | `/quote` | a quotation |
+| | `/prop status offen` | `status:: offen` on the block; no value removes it |
+| Insert | `/code` `/table` | a code fence, a `csv` table |
+| Attach | `/file report` | a link to an attachment, chosen from `assets/` |
+| | `/paste` | the clipboard's text as a `.md` file of its own, linked here |
+| Page | `/alias Ada` | another name this page answers to |
+| | `/tagpage person` | `tags: person` in the page's frontmatter |
+
+A name still being typed matches loosely (`/dea`); once an argument follows, it
+has to be a command's name or alias exactly, so `/d fri` is text and not
+`/done`.
 
 **Dates have one form and many ways in.** Whatever you type, what is written
-is ISO — `2026-11-07`. `/date`, `/deadline` and **`@`** anywhere in a block open
+is ISO — `2026-11-07`. `/deadline` and **`@`** anywhere in a block open
 the same quick pick: the usual days with nothing typed (today, tomorrow, the
 rest of the working week, next week, end of month), narrowing as you type.
 Enter takes the highlighted one; `@` writes it as `[[2026-11-07]]`, a link to
-that day's journal, like `/date`.
+that day's journal.
 
 ```
 @fr  /deadline fr      friday — and mo tu we th sa su

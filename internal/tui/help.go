@@ -74,30 +74,39 @@ func (m *Model) helpParts() []helpPart {
 		key("ctrl+r", "reload after the file was changed elsewhere"),
 		key("F1  ctrl+q", "this page, quit"),
 
-		heading("Mentioning"),
-		para("Mention someone or something and it is linked. Everything that mentions a page is listed " +
-			"under it, so going to a person shows every note about them."),
-		key("@", "the pages you write about most recently, with their tags, then days. "+
+		heading("Pointing at things"),
+		para("Three signs, each with a menu, each for one thing: @ finds, # files under a topic, " +
+			"/ changes the block. Whatever @ and [[ find is written as an ordinary [[link]], and " +
+			"everything that links to a page is listed under it, so going to a person shows every note about them."),
+		key("@", "find a page or a day: the pages you write about most, with their tags, then days. "+
 			"@jr finds Julia Rausenberger, @fri Friday. A name nothing answers to makes a new page"),
-		key("[[", "link any page; the ]] closes itself, and the match is fuzzy"),
-		key("[[Ada #person]]", "link Ada and say she is a person — the tag shows beside her in the @ menu"),
-		key("#moodle", "a topic: the block is listed on the moodle page; several at the end of a line read like hashtags"),
+		key("[[", "the same pages, for when you think in brackets; the ]] closes itself, and the match is fuzzy"),
+		key("#moodle", "a topic: the block is listed on the moodle page. The menu offers the topics in use — "+
+			"tab takes one, and a new one is simply typed"),
 		key("((", "point at one block anywhere, found by a word in it; it is shown as that block's text"),
 
-		heading("Tasks and dates"),
-		para("Dates are typed the way you would say them — fri, morgen, in 3 days, next week, " +
-			"7 nov, 24.12. — and always written down as 2026-11-07, so they sort and mean the same in a year."),
-		key("/todo", "make the block a task; x or ctrl+d ticks it off"),
-		key("/deadline fri", "give it a deadline; the menu offers the usual days before you type"),
-		key("@fri", "a date in the text, picked from the same list, as a link to that day's journal"),
-		key("a", "everything due, soonest first; tlog todo and tlog due print it in a shell"),
+		heading("Changing the block: /"),
+		para("A slash does something to the block you are in, and then it is gone: what stays is its " +
+			"effect. Type on after it and the words stay — /todo call Ada is a task that says call Ada. " +
+			"Dates are typed the way you would say them — fri, morgen, in 3 days, next week, 7 nov, 24.12. — " +
+			"and always written down as 2026-11-07."),
+		key("/todo  /done", "make it a task, open or ticked; x or ctrl+d ticks it off later"),
+		key("/deadline fri", "a task due on a day; the menu offers the usual days. /deadline none takes the date off"),
+		key("/plain", "not a task any more: the checkbox and the deadline go"),
+		key("/quote", "make it a quotation"),
+		key("/prop status open", "a property on the block; no value removes it"),
+		key("/code  /table", "insert a code block, or a table written as csv"),
+		key("/file", "link something already in the notes' assets/"),
+		key("/paste", "keep the text on the clipboard — an email, minutes, an answer — as a .md file of its own, linked here by its first line; following the link shows it"),
+		key("/alias Ada", "another name this page answers to"),
+		key("/tagpage person", "say what this page is; [[Ada #person]] says it of Ada from anywhere, and the tag shows beside her in the @ menu"),
+		key("a", "when moving: everything due, soonest first; tlog todo and tlog due print it in a shell"),
 
 		heading("Links and files"),
 		para("A [label](address) is drawn as its label alone; point at it with the mouse to see the address."),
 		key("g  click", "open it: a website in the browser, a file in whatever opens it"),
 		key("drop a file", "drag it onto the terminal: it is copied into the notes' assets/ and linked where you are"),
-		key("/file", "link something already attached"),
-		key("/note", "keep the text on the clipboard — an email, minutes, an answer — as a .md file of its own, linked here by its first line; following the link shows it"),
+		key("ctrl+v", "a screenshot or copied files are attached the same way; text is pasted as text"),
 
 		heading("The mouse"),
 		key("click", "a block to write there, a link to open it, ▸ ▾ to fold, ☐ to tick"),
@@ -105,10 +114,8 @@ func (m *Model) helpParts() []helpPart {
 		key("wheel", "move through the page"),
 		key("shift+drag", "select text, as in any program that uses the mouse"),
 
-		heading("Commands"),
-		para("Type / in a block for the commands that change it: /todo, /deadline, /date, /quote, " +
-			"/code, /table, /file, /prop, /alias. The rest — agenda, backlinks, settings, messages — " +
-			"are in p by name."),
+		heading("Everything else"),
+		para("Agenda, backlinks, settings and messages are in p by name."),
 	}
 }
 

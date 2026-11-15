@@ -101,17 +101,6 @@ func TestDeadlineIsRefusedRatherThanGuessed(t *testing.T) {
 	}
 }
 
-func TestDateInsertsALinkInline(t *testing.T) {
-	s := newSvc(t)
-	rel, _ := s.AddToday("Protokoll vom /date gestern")
-	run(t, s, rel, 0, "Protokoll vom /date gestern", "date", "gestern", 14, 27)
-
-	got := body(t, s, rel)
-	if !strings.Contains(got, "[[") || strings.Contains(got, "Deadline") {
-		t.Fatalf("a date should be an inline link, not a deadline: %q", got)
-	}
-}
-
 func TestQuoteCodeAndTable(t *testing.T) {
 	s := newSvc(t)
 
@@ -373,5 +362,110 @@ func TestTickingADatedBlockWithoutACheckboxFinishesIt(t *testing.T) {
 	}
 	if got := body(t, s, rel); !strings.Contains(got, "- [x] hand in the grades") {
 		t.Fatalf("one tick should finish it: %q", got)
+	}
+}
+
+// What is typed after a command that takes no argument is the note, not the
+// command's: it stays in the block rather than being cut out with the slash.
+func TestTextAfterACommandWithoutAnArgumentIsKept(t *testing.T) {
+	s := newSvc(t)
+
+	rel, _ := s.AddToPage("A", "x")
+	res := run(t, s, rel, 0, "/todo call Ada", "todo", "call Ada", 0, 14)
+	if got := body(t, s, rel); got != "- [ ] call Ada\n" {
+		t.Fatalf("todo: %q", got)
+	}
+	if want := len("[ ] call Ada"); res.Caret != want {
+		t.Fatalf("caret %d, want it after what was typed (%d)", res.Caret, want)
+	}
+
+	rel, _ = s.AddToPage("B", "x")
+	run(t, s, rel, 0, "slides /done sent them", "done", "sent them", 7, 22)
+	if got := body(t, s, rel); got != "- [x] slides sent them\n" {
+		t.Fatalf("done: %q", got)
+	}
+
+	rel, _ = s.AddToPage("C", "x")
+	run(t, s, rel, 0, "/quote so it goes", "quote", "so it goes", 0, 17)
+	if got := body(t, s, rel); got != "- > so it goes\n" {
+		t.Fatalf("quote: %q", got)
+	}
+
+	rel, _ = s.AddToPage("F", "x")
+	run(t, s, rel, 0, "/code ls -la", "code", "ls -la", 0, 12)
+	if got := body(t, s, rel); !strings.Contains(got, "```\n  ls -la\n  ```") {
+		t.Fatalf("code: %q", got)
+	}
+}
+
+// /plain is the way back from a task, and takes the deadline with the
+// checkbox: a dated block would be made a task again on the next write.
+func TestPlainTakesTheCheckboxAndTheDeadlineOff(t *testing.T) {
+	s := newSvc(t)
+	rel, _ := s.AddToPage("P", "send the slides")
+	run(t, s, rel, 0, "send the slides", "deadline", "2026-12-24", 15, 15)
+	if got := body(t, s, rel); !strings.Contains(got, "- [ ] send the slides") || !strings.Contains(got, "2026-12-24") {
+		t.Fatalf("setup: %q", got)
+	}
+	res := run(t, s, rel, 0, "[ ] send the slides /plain", "plain", "", 20, 26)
+	if got := body(t, s, rel); got != "- send the slides\n" {
+		t.Fatalf("plain: %q", got)
+	}
+	if want := len("send the slides"); res.Caret != want {
+		t.Fatalf("caret %d, want %d", res.Caret, want)
+	}
+}
+
+func TestDeadlineNoneTakesItOffAndLeavesTheTask(t *testing.T) {
+	s := newSvc(t)
+	rel, _ := s.AddToPage("P", "send the slides")
+	run(t, s, rel, 0, "send the slides", "deadline", "2026-12-24", 15, 15)
+	run(t, s, rel, 0, "[ ] send the slides /deadline none", "deadline", "none", 20, 34)
+	if got := body(t, s, rel); got != "- [ ] send the slides\n" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestTagpageSaysWhatThePageIs(t *testing.T) {
+	s := newSvc(t)
+	rel, _ := s.AddToPage("Ada Lovelace", "the first programmer")
+	run(t, s, rel, 0, "the first programmer /tagpage person", "tagpage", "person", 21, 36)
+	run(t, s, rel, 0, "the first programmer", "tagpage", "#person", 20, 20) // twice changes nothing
+	d, _ := s.Load(rel)
+	if _, tags := pageTags(d.Doc); len(tags) != 1 || tags[0] != "person" {
+		t.Fatalf("tags: %v", tags)
+	}
+	if got := body(t, s, rel); !strings.Contains(got, "- the first programmer\n") {
+		t.Fatalf("the command survived: %q", got)
+	}
+	if _, err := s.RunCommand(addrOf(t, s, rel, 0), "tagpage", "", "x", 1, 1); err == nil {
+		t.Fatal("a tag with no name was accepted")
+	}
+}
+
+// Once something follows the name it is finished, so it must be a command
+// exactly; a name still being typed matches loosely.
+func TestATypedCommandWithAnArgumentMustBeExact(t *testing.T) {
+	if got := MatchTyped("d", true); len(got) != 0 {
+		t.Fatalf("/d fri matched %v", got)
+	}
+	if got := MatchTyped("to", true); len(got) != 0 {
+		t.Fatalf("/to do matched %v", got)
+	}
+	if got := MatchTyped("dl", true); len(got) != 1 || got[0].Name != "deadline" {
+		t.Fatalf("an alias did not match: %v", got)
+	}
+	if got := MatchTyped("d", false); len(got) < 2 {
+		t.Fatalf("a name being typed should match loosely: %v", got)
+	}
+	for _, gone := range []string{"page", "tag", "date"} {
+		if _, ok := FindCommand(gone); ok {
+			t.Fatalf("/%s is back: pointing at things is what @, [[ and # are for", gone)
+		}
+	}
+	for _, c := range Commands() {
+		if c.Group == "" {
+			t.Fatalf("/%s is in no group", c.Name)
+		}
 	}
 }

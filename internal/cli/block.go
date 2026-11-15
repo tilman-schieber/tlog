@@ -31,7 +31,8 @@ const blockUsage = `tlog block <addr> [operation]
   up / down                move it among its siblings
   task                     toggle: plain -> open -> done -> open
   open / done              make it an open task, or a done one; never toggles
-  deadline <date>          due on a date, as a task: fri, in 3 days, 2026-11-12
+  deadline <date>          due on a date, as a task: fri, in 3 days, 2026-11-12;
+                           none takes the deadline off
   quote                    make it a quotation
   prop <key> [value]       set a block property; no value removes it
   cmd <name> [arg]         any slash command by name — see: tlog commands
