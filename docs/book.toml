@@ -1,0 +1,27 @@
+[book]
+title = "tlog"
+description = "Notes as an outline, in plain markdown files, in your terminal."
+authors = ["Tilman Schieber"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/tilman-schieber/tlog"
+edit-url-template = "https://github.com/tilman-schieber/tlog/edit/main/docs/{path}"
+# The path the book is served under. GitHub and GitLab project pages both
+# serve a repository at /<name>/; change this if yours is served elsewhere.
+site-url = "/tlog/"
+# The docs look like tlog: one typeface, the terminal's colours, an outline for
+# a sidebar. tlog.css holds the palette; tlog.js colours the screen examples.
+additional-css = ["tlog.css"]
+additional-js = ["tlog.js"]
+# The tutorial numbers its own steps.
+no-section-label = true
+
+[output.html.search]
+limit-results = 20

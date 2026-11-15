@@ -1,0 +1,475 @@
+/* The docs wear what tlog wears.
+ *
+ * tlog has no colours of its own: it maps a handful of roles onto the sixteen
+ * ANSI colours and inherits the terminal's theme (internal/tui/theme.go). A web
+ * page has no terminal to inherit from, so the palette below stands in for one
+ * — Nord, dark and light. Swap these values to re-theme everything; nothing
+ * further down names a colour.
+ */
+
+.coal, .navy, .ayu {
+    --t-bg: #2e3440;
+    --t-fg: #d8dee9;
+    --t-faint: #909aac;   /* faint text: bullets, hints, comments */
+    --t-rule: #4c566a;    /* lines: frames, table and sidebar rules */
+    --t-red: #d6777f;     /* 1  errors, inline code */
+    --t-green: #a3be8c;   /* 2  done, strings */
+    --t-yellow: #ebcb8b;  /* 3  open tasks, matches */
+    --t-blue: #81a1c1;    /* 4  links */
+    --t-magenta: #b48ead; /* 5  tags, titles */
+    --t-cyan: #88c0d0;    /* 6  properties, numbers */
+    --color-scheme: dark;
+    --copy-button-filter: invert(60%);
+    --copy-button-filter-hover: invert(90%);
+}
+
+.light, .rust, html:not(.js) {
+    --t-bg: #eceff4;
+    --t-fg: #2e3440;
+    --t-faint: #66728a;
+    --t-rule: #c3cad8;
+    --t-red: #a8424d;
+    --t-green: #4c7a34;
+    --t-yellow: #8f6400;
+    --t-blue: #3a6798;
+    --t-magenta: #8a5585;
+    --t-cyan: #2a7a8a;
+    --color-scheme: light;
+    --copy-button-filter: invert(45%);
+    --copy-button-filter-hover: invert(15%);
+}
+
+/* mdBook's own variables, pointed at the roles above. */
+.light, .rust, .coal, .navy, .ayu, html:not(.js) {
+    --bg: var(--t-bg);
+    --fg: var(--t-fg);
+
+    --sidebar-bg: var(--t-bg);
+    --sidebar-fg: var(--t-fg);
+    --sidebar-non-existant: var(--t-faint);
+    --sidebar-active: var(--t-fg);
+    --sidebar-spacer: var(--t-rule);
+    --sidebar-header-border-color: var(--t-rule);
+
+    --scrollbar: var(--t-rule);
+    --icons: var(--t-faint);
+    --icons-hover: var(--t-fg);
+    --links: var(--t-blue);
+    --inline-code-color: var(--t-red);
+
+    --theme-popup-bg: var(--t-bg);
+    --theme-popup-border: var(--t-rule);
+    --theme-hover: var(--t-rule);
+
+    --quote-bg: transparent;
+    --quote-border: transparent;
+    --warning-border: var(--t-yellow);
+
+    --table-border-color: var(--t-rule);
+    --table-header-bg: transparent;
+    --table-alternate-bg: transparent;
+
+    --searchbar-border-color: var(--t-rule);
+    --searchbar-bg: var(--t-bg);
+    --searchbar-fg: var(--t-fg);
+    --searchbar-shadow-color: transparent;
+    --searchresults-header-fg: var(--t-faint);
+    --searchresults-border-color: var(--t-rule);
+    --searchresults-li-bg: var(--t-rule);
+    --search-mark-bg: transparent;
+
+    --footnote-highlight: var(--t-yellow);
+    --overlay-bg: color-mix(in srgb, var(--t-bg) 70%, transparent);
+
+    /* The same five colours the file viewer gives these. */
+    --blockquote-note-color: var(--t-blue);
+    --blockquote-tip-color: var(--t-green);
+    --blockquote-important-color: var(--t-magenta);
+    --blockquote-warning-color: var(--t-yellow);
+    --blockquote-caution-color: var(--t-red);
+}
+
+/* ── One typeface, one size ─────────────────────────────────────────────── */
+
+:root {
+    --mono-font: "JetBrainsMono Nerd Font", "JetBrains Mono", ui-monospace,
+        "SF Mono", Menlo, "Cascadia Mono", Consolas, "DejaVu Sans Mono",
+        "Source Code Pro", monospace;
+    --code-font-size: 1em;
+    --content-max-width: 80ch;
+    --sidebar-target-width: 340px;
+}
+
+html {
+    font-family: var(--mono-font);
+    scrollbar-width: thin;
+}
+
+body {
+    font-size: 1.5rem;
+    line-height: 1.6;
+}
+
+::selection {
+    background: var(--t-fg);
+    color: var(--t-bg);
+}
+
+* {
+    border-radius: 0 !important;
+}
+
+/* ── The header line: a bold title, and what kind of thing it is ────────── */
+
+.menu-title {
+    font-size: 1em;
+    font-weight: bold;
+    text-align: start;
+    padding-inline-start: 1ch;
+}
+
+.menu-title::after {
+    content: " docs";
+    font-weight: normal;
+    color: var(--t-faint);
+}
+
+/* Light, and one dark. The other three would only repeat these. */
+.theme-popup li:has(> #mdbook-theme-rust),
+.theme-popup li:has(> #mdbook-theme-coal),
+.theme-popup li:has(> #mdbook-theme-ayu) {
+    display: none;
+}
+
+.theme-popup .theme {
+    font-family: inherit;
+}
+
+/* ── The sidebar is an outline ──────────────────────────────────────────── */
+
+.sidebar {
+    font-size: 1em;
+    border-inline-end: 1px solid var(--t-rule);
+}
+
+.sidebar .sidebar-scrollbox {
+    padding: 1em 2ch 4em;
+}
+
+.chapter li.chapter-item,
+.chapter li.header-item {
+    line-height: 1.6;
+    margin-block: 0;
+}
+
+.section {
+    padding-inline-start: 2ch;
+}
+
+/* A bullet before every row, and ▾ on one with rows under it. */
+.chapter li > .chapter-link-wrapper::before {
+    content: "•";
+    color: var(--t-faint);
+    flex: none;
+    width: 2ch;
+}
+
+.chapter li:has(> ol) > .chapter-link-wrapper::before,
+.chapter li:has(> .on-this-page) > .chapter-link-wrapper::before {
+    content: "▾";
+}
+
+/* The headings of the open page are its children, indented like any others. */
+.on-this-page {
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.on-this-page > ol {
+    padding-inline-start: 2ch;
+}
+
+.chapter li a:hover {
+    color: var(--t-blue);
+}
+
+/* The row you are on is drawn in reverse, as the selection is. */
+.chapter li a.active,
+.chapter li a.active:hover {
+    background: var(--t-fg);
+    color: var(--t-bg);
+}
+
+.chapter a.current-header {
+    font-weight: bold;
+}
+
+/* A part is announced the way a section is: ── Tutorial ─────── */
+.chapter li.part-title {
+    display: flex;
+    align-items: center;
+    gap: 1ch;
+    margin: 1.6em 0 0.2em;
+    color: var(--t-faint);
+    font-weight: normal;
+    white-space: nowrap;
+}
+
+.chapter li.part-title::before,
+.chapter li.part-title::after {
+    content: "";
+    border-top: 1px solid currentColor;
+    width: 2ch;
+}
+
+.chapter li.part-title::after {
+    flex: 1;
+}
+
+/* ── The page ───────────────────────────────────────────────────────────── */
+
+.content {
+    padding-block-end: 4em;
+}
+
+/* The title is a bar in reverse; every heading below it is simply bold. */
+.content h1,
+.content h2,
+.content h3,
+.content h4 {
+    font-size: 1em;
+    font-weight: bold;
+    line-height: 1.6;
+    margin-block: 2.6em 0.8em;
+}
+
+.content h1 {
+    display: table;
+    margin-block: 1.6em;
+    padding: 0 1ch;
+    background: var(--t-magenta);
+    color: var(--t-bg);
+}
+
+.content h3,
+.content h4 {
+    margin-block-start: 1.8em;
+}
+
+.content .header:link,
+.content .header:visited {
+    color: inherit;
+}
+
+/* A link is blue; one that leaves the notes is underlined as well. */
+.content a:hover,
+.content a[href^="http"] {
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+}
+
+.content ul {
+    list-style-type: "• ";
+    padding-inline-start: 2ch;
+}
+
+.content ol {
+    padding-inline-start: 3ch;
+}
+
+.content li::marker {
+    color: var(--t-blue);
+}
+
+.content hr {
+    border: 0;
+    border-top: 1px solid var(--t-rule);
+    margin-block: 2.4em 1.2em;
+}
+
+/* A quotation hangs on a faint bar. */
+blockquote {
+    margin: 1.2em 0;
+    padding: 0 0 0 1ch;
+    border-block: 0;
+    border-inline-start: 1px solid var(--t-faint);
+}
+
+/* ── Code ───────────────────────────────────────────────────────────────── */
+
+.hljs,
+:not(pre) > .hljs {
+    background: none;
+    color: inherit;
+    padding: 0;
+}
+
+:not(pre) > code,
+:not(pre) > .hljs {
+    color: var(--t-red);
+}
+
+/* Inside a heading or a link, code takes the colour of what it sits in. */
+.content h1 code,
+.chapter code {
+    color: inherit;
+}
+
+pre {
+    margin: 1.2em 0;
+    padding: 0;
+    background: none;
+}
+
+/* A block of code: its language in faint above, a thin bar down the left. */
+pre > code,
+pre > code.hljs {
+    padding: 0 0 0 1ch;
+    border-inline-start: 1px solid var(--t-faint);
+    line-height: 1.5;
+}
+
+pre:has(> code[class*="language-"])::before {
+    display: block;
+    color: var(--t-faint);
+}
+
+pre:has(> code.language-sh)::before { content: "sh"; }
+pre:has(> code.language-markdown)::before { content: "markdown"; }
+pre:has(> code.language-yaml)::before { content: "yaml"; }
+pre:has(> code.language-toml)::before { content: "toml"; }
+pre:has(> code.language-csv)::before { content: "csv"; }
+
+/* What tlog shows — a piece of its screen — sits in a frame instead. */
+pre > code.language-text,
+pre > code.language-text.hljs {
+    padding: 0.7em 2ch;
+    border: 1px solid var(--t-rule);
+}
+
+/* The roles the outliner gives things, applied by tlog.js. */
+.hljs .t-bullet,
+.hljs .t-note,
+.hljs .t-anchor,
+.hljs .t-date {
+    color: var(--t-faint);
+}
+
+.hljs .t-link { color: var(--t-blue); }
+.hljs .t-url { color: var(--t-blue); text-decoration: underline; text-underline-offset: 0.2em; }
+.hljs .t-tag { color: var(--t-magenta); }
+.hljs .t-todo { color: var(--t-yellow); }
+.hljs .t-done { color: var(--t-green); opacity: 0.7; }
+
+/* Highlighted code uses the same five roles as a snippet in a note. */
+.hljs span[class^="hljs-"] {
+    color: inherit;
+    font-weight: inherit;
+    font-style: inherit;
+}
+
+.hljs .hljs-keyword,
+.hljs .hljs-selector-tag,
+.hljs .hljs-built_in,
+.hljs .hljs-section {
+    color: var(--t-magenta);
+}
+
+.hljs .hljs-type,
+.hljs .hljs-title,
+.hljs .hljs-attr,
+.hljs .hljs-attribute {
+    color: var(--t-yellow);
+}
+
+.hljs .hljs-string,
+.hljs .hljs-addition {
+    color: var(--t-green);
+}
+
+.hljs .hljs-number,
+.hljs .hljs-literal,
+.hljs .hljs-symbol {
+    color: var(--t-cyan);
+}
+
+.hljs .hljs-comment,
+.hljs .hljs-quote,
+.hljs .hljs-meta {
+    color: var(--t-faint);
+    font-style: italic;
+}
+
+.hljs .hljs-bullet { color: var(--t-blue); }
+.hljs .hljs-link { color: var(--t-blue); }
+.hljs .hljs-code { color: var(--t-red); }
+.hljs .hljs-deletion { color: var(--t-red); }
+.hljs .hljs-strong { font-weight: bold; }
+.hljs .hljs-emphasis { font-style: italic; }
+
+/* ── Tables: a bold head, a rule under it, bars between the columns ─────── */
+
+.content table {
+    margin: 1.2em 0;
+    border-collapse: collapse;
+}
+
+.content table td,
+.content table thead th {
+    padding: 0.1em 1.5ch;
+    border: 0;
+    text-align: start;
+    vertical-align: top;
+}
+
+.content table thead th {
+    border-block-end: 1px solid var(--t-rule);
+}
+
+.content table td + td,
+.content table thead th + th {
+    border-inline-start: 1px solid var(--t-rule);
+}
+
+.content table td:first-child,
+.content table thead th:first-child {
+    padding-inline-start: 0;
+}
+
+/* ── Search ─────────────────────────────────────────────────────────────── */
+
+#mdbook-searchbar {
+    font-family: inherit;
+    font-size: 1em;
+}
+
+/* What matched is yellow and bold, as it is in tlog's own search. */
+ul#mdbook-searchresults span.teaser em,
+.content mark {
+    color: var(--t-yellow);
+    font-weight: bold;
+    font-style: normal;
+}
+
+/* ── The footer line: the keys, in faint, as tlog keeps them ────────────── */
+
+@media (min-width: 900px) and (hover: hover) {
+    body::after {
+        content: "← → turn the page · s search · ? keys";
+        position: fixed;
+        inset: auto 0 0 0;
+        z-index: 200;
+        padding: 0.2em 2ch;
+        background: var(--t-bg);
+        color: var(--t-faint);
+        white-space: nowrap;
+        overflow: hidden;
+    }
+}
+
+@media print {
+    body::after {
+        display: none;
+    }
+}

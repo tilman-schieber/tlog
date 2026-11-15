@@ -24,6 +24,10 @@ is one `git checkout` away from being undone. Add a remote and
 Two ways in, one core: a terminal outliner, and a CLI that scripts and agents
 drive.
 
+**New here?** The [documentation](https://gh.tschieber.de/tlog/) starts with a
+twenty-minute tutorial and explains the ideas one at a time. Its source is in
+`docs/`; `just docs-serve` previews it.
+
 ## Install
 
 ```sh

@@ -55,3 +55,11 @@ icon-install:
     done
     gtk-update-icon-cache -q -t "$base" 2>/dev/null || true
     echo "installed the tlog icon into $base"
+
+# Build the documentation (mdBook) into docs/book/
+docs:
+    mdbook build docs
+
+# Preview the documentation at http://localhost:3000, reloading on save
+docs-serve:
+    mdbook serve docs --open
