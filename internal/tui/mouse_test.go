@@ -136,7 +136,7 @@ func TestClickingInThePaletteGoesThere(t *testing.T) {
 	m.back()
 	send(t, m, k(tea.KeyCtrlP))
 	m.View()
-	m.Update(clickAt(4, 2)) // the first item, under the title and the rule
+	m.Update(clickAt(4, 3)) // the first item, under the title, the rule and its heading
 	if m.doc.Rel != "pages/Alpha.md" {
 		t.Fatalf("on %q", m.doc.Rel)
 	}

@@ -195,11 +195,12 @@ func (m *Model) pickerMouse(msg tea.MouseMsg) {
 	case msg.Button == tea.MouseButtonWheelDown:
 		m.pick.move(1)
 	case msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft:
-		i := m.pickTop + msg.Y - 2 // a title line and a rule above the list
-		if msg.Y < 2 || i >= len(m.pick.filtered) {
-			return
+		rows := m.pick.window(m.pickHeight())
+		at := msg.Y - 2 // a title line and a rule above the list
+		if at < 0 || at >= len(rows) || rows[at].item < 0 {
+			return // above the list, below it, or on a heading
 		}
-		m.pick.sel = i
+		m.pick.sel = rows[at].item
 		m.key(tea.KeyMsg{Type: tea.KeyEnter})
 	}
 }

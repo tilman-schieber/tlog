@@ -30,6 +30,14 @@ var (
 	styleCursor   = lipgloss.NewStyle().Reverse(true)
 	styleFence    = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 
+	// In a list of where to go and what to do, a day and a command each say
+	// what they are: a day is a date, as a property's value is, and a command
+	// is something to do, as an open task is. A command that throws something
+	// away is drawn as an error is.
+	styleDay     = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
+	styleCommand = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
+	styleDanger  = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
+
 	// Code uses the same semantic roles as everything else, so a snippet in a
 	// note still inherits the terminal's theme.
 	codeStyles = map[markdown.TokenKind]lipgloss.Style{

@@ -110,9 +110,21 @@ are moving.
 
 ## The `p` list
 
-`p` (or `ctrl+p`) shows, in order: pages you visited recently, today, the
-commands below, then every journal and page. Typing narrows all of it. A name
-that matches nothing makes a new page.
+`p` (or `ctrl+p`) shows, in order: where you have been recently and today,
+the commands below, then every day and every page — each group under its own
+heading. Typing narrows all of it at once and ranks what is left, so the
+headings go; a name that matches nothing makes a new page.
+
+Each row says what it is:
+
+| Row | Looks like |
+|---|---|
+| a page | plain, with its tags after it: `Ada Lovelace  #person` |
+| a day | coloured, with its weekday: `2026-11-13  Fr`; today is bold |
+| a command | coloured, with `>` in front: `> Settings` |
+| a command that throws something away | the same in the colour of an error: `> Delete block` |
+
+Typing a tag finds the pages that have it: `person` lists the people.
 
 | Command | What it does |
 |---|---|

@@ -739,6 +739,12 @@ func oneLineRef(s string) string {
 	return s
 }
 
+// pickHeight is how many lines a list has to itself, under its title and rule
+// and above its hint.
+func (m *Model) pickHeight() int {
+	return max(1, m.height-4)
+}
+
 func (m *Model) pickerView() string {
 	var b strings.Builder
 	b.WriteString(styleTitle.Render(m.pick.title))
@@ -749,28 +755,16 @@ func (m *Model) pickerView() string {
 	b.WriteString(styleMuted.Render(strings.Repeat("─", max(1, min(m.width, 80)))))
 	b.WriteByte('\n')
 
-	h := m.height - 4
-	if h < 1 {
-		h = 1
-	}
-	top := 0
-	if m.pick.sel >= h {
-		top = m.pick.sel - h + 1
-	}
-	m.pickTop = top
+	h := m.pickHeight()
 	shown := 0
-	for i := top; i < len(m.pick.filtered) && shown < h; i++ {
-		it := m.pick.filtered[i]
-		label := it.label
-		if label == "" {
-			label = styleMuted.Render("(empty block)")
-		}
-		line := label
-		if it.detail != "" {
-			line += "  " + styleMuted.Render(it.detail)
-		}
-		if i == m.pick.sel {
-			line = styleSelected.Render(truncate(it.label+"  "+it.detail, m.width-2))
+	for _, r := range m.pick.window(h) {
+		line := styleTitle.Render(r.head)
+		if r.item >= 0 {
+			it := m.pick.filtered[r.item]
+			line = it.styled()
+			if r.item == m.pick.sel {
+				line = styleSelected.Render(truncate(it.plain(), m.width-2))
+			}
 		}
 		b.WriteString("  " + line + "\n")
 		shown++

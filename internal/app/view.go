@@ -472,6 +472,9 @@ type PlaceView struct {
 	Kind string `json:"kind"` // "journal", "page" or "tag"
 	Name string `json:"name"`
 	Rel  string `json:"rel,omitempty"` // empty for a tag, which may have no file
+	// What a page has been said to be — person, project — so that a list of
+	// places can tell one kind of page from another.
+	Tags []string `json:"tags,omitempty"`
 }
 
 // Places ranks everywhere you could go against what has been typed — the same
@@ -484,7 +487,11 @@ func (l *Lookup) Places(query string, limit int) []PlaceView {
 	out := []PlaceView{}
 	add := func(kind string, names []string, rel func(string) string) {
 		for _, n := range graph.FuzzyRank(names, query, 0) {
-			out = append(out, PlaceView{Kind: kind, Name: n, Rel: rel(n)})
+			p := PlaceView{Kind: kind, Name: n, Rel: rel(n)}
+			if kind == "page" {
+				p.Tags = l.g.PageTags(n)
+			}
+			out = append(out, p)
 		}
 	}
 	idx := l.Index()

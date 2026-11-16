@@ -43,6 +43,19 @@ func TestPlacesRanksEverywhereYouCouldGo(t *testing.T) {
 		t.Fatalf("a page must carry its path so opening it creates nothing: %+v", hits[0])
 	}
 
+	// A page says what it is, so a list of places can tell a person from a
+	// project without opening either.
+	if err := s.Tag("pages/Ada Lovelace.md", "person"); err != nil {
+		t.Fatal(err)
+	}
+	hits, err = s.Places("lov", 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) == 0 || len(hits[0].Tags) != 1 || hits[0].Tags[0] != "person" {
+		t.Fatalf("the page does not carry its tag: %+v", hits)
+	}
+
 	// A tag may have no file of its own, and that is not an error.
 	for _, p := range all {
 		if p.Kind == "tag" && p.Rel != "" {

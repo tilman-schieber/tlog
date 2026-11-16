@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/tilman-schieber/tlog/internal/app"
+	"github.com/tilman-schieber/tlog/internal/dates"
 	"github.com/tilman-schieber/tlog/internal/markdown"
 	"github.com/tilman-schieber/tlog/internal/store"
 	"github.com/tilman-schieber/tlog/internal/termimg"
@@ -143,7 +144,6 @@ type Model struct {
 	layout      edLayout
 	edCursorVis int
 	bodyTop     int
-	pickTop     int
 	// hover is the link under the mouse pointer, whose address the footer
 	// shows: links are drawn as their label, and this is how to see where
 	// one goes before clicking.
@@ -1470,6 +1470,30 @@ func (m *Model) openPalette() {
 	if l == nil {
 		return
 	}
+	// The core's list of places, journals newest first, so the palette, the
+	// window and `tlog places` offer the same things in the same order.
+	places := l.Places("", 0)
+	tags := map[string][]string{}
+	for _, p := range places {
+		tags[p.Rel] = p.Tags
+	}
+	today := m.svc.TodayRel()
+	// place is a row for somewhere to go. A day is shown with its weekday,
+	// which is what a date alone does not say; a page with what it is.
+	place := func(rel, group, note string) pickItem {
+		it := pickItem{label: store.Title(rel), rel: rel, group: group, kind: pickPage, tags: tags[rel]}
+		if store.IsJournal(rel) {
+			it.kind, it.tags, it.today = pickDay, nil, rel == today
+			if t, err := time.Parse("2006-01-02", it.label); err == nil {
+				it.detail = dates.Weekday(t)
+			}
+		}
+		if note != "" {
+			it.detail = strings.TrimPrefix(it.detail+" · "+note, " · ")
+		}
+		return it
+	}
+
 	seen := map[string]bool{m.doc.Rel: true}
 	var items []pickItem
 	add := func(it pickItem) {
@@ -1479,19 +1503,23 @@ func (m *Model) openPalette() {
 		}
 	}
 	for _, rel := range m.recent {
-		add(pickItem{label: store.Title(rel), detail: "recent", rel: rel})
+		note := "recent"
+		if rel == today {
+			note = "today"
+		}
+		add(place(rel, "Recent", note))
 	}
-	if today := m.svc.TodayRel(); !seen[today] {
-		add(pickItem{label: store.Title(today), detail: "today", rel: today})
-	}
+	add(place(today, "Recent", "today"))
 	items = append(items, m.commands()...)
-	// The core's list of places, journals newest first, so the palette, the
-	// window and `tlog places` offer the same things in the same order.
-	for _, p := range l.Places("", 0) {
+	for _, p := range places {
 		if p.Rel == "" {
 			continue // a tag has no file to go to from here
 		}
-		add(pickItem{label: p.Name, detail: p.Kind, rel: p.Rel})
+		group := "Pages"
+		if p.Kind == "journal" {
+			group = "Days"
+		}
+		add(place(p.Rel, group, ""))
 	}
 	m.pick = newPicker("go to", items)
 	m.pick.creates = true
@@ -1503,13 +1531,19 @@ func (m *Model) openPalette() {
 // a key; slash commands, which change a block, stay in the block.
 func (m *Model) commands() []pickItem {
 	cmd := func(label, detail string, run func(*Model)) pickItem {
-		return pickItem{label: label, detail: detail, run: run}
+		return pickItem{label: label, detail: detail, run: run, kind: pickCommand, group: "Commands"}
+	}
+	// One that throws something away says so before it is chosen.
+	danger := func(label, detail string, run func(*Model)) pickItem {
+		it := cmd(label, detail, run)
+		it.kind = pickDanger
+		return it
 	}
 	return []pickItem{
 		cmd("Agenda", "everything with a deadline", (*Model).openAgenda),
 		cmd("Backlinks", "what links to this page", (*Model).openBacklinks),
-		cmd("Delete block", "the block under the cursor and everything in it", (*Model).deleteBlock),
-		cmd("Reload from disk", "ctrl+r · discards what is not saved", (*Model).reload),
+		danger("Delete block", "the block under the cursor and everything in it", (*Model).deleteBlock),
+		danger("Reload from disk", "ctrl+r · discards what is not saved", (*Model).reload),
 		cmd("Settings", "", (*Model).openSettings),
 		cmd("Messages", "everything tlog has said", (*Model).openLog),
 		cmd("Help", "F1 · how tlog works, and every key", func(m *Model) { m.mode = modeHelp }),

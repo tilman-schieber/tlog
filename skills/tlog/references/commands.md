@@ -17,7 +17,7 @@ other than `$TLOG_DIR` / `~/notes`.
 | `tlog todo` | every open task, dated first (soonest), then undated (newest journal first) | lines; `-json` items with `addr`, `due`, `state`, `label` |
 | `tlog due [-all]` | everything with a deadline that is open; `-all` includes done | as `todo` |
 | `tlog links <addr>` | what a block points at, resolved | page links with their file, block refs with the target's address and text, urls and files with what would open, or why not |
-| `tlog index` | every journal, page and tag | lines; `-json` places: `kind`, `name`, `rel` |
+| `tlog index` | every journal, page and tag | lines; `-json` places: `kind`, `name`, `rel`, and a page's `tags` |
 | `tlog places [query]` | the same, ranked against a query like the palette does | as `index -json` |
 | `tlog tag <tag>` | every page carrying a tag, by frontmatter or by `[[Page #tag]]` anywhere; `tlog people` is `tag person` | names; `-json` `name`, `rel`, `exists`, `tags` |
 | `tlog tag <tag> <page>…` | puts the tag into each page's `tags:` frontmatter (a page only ever linked gets a file); twice is harmless | a line per page |

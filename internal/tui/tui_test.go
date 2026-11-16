@@ -9,8 +9,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	tapp "github.com/tilman-schieber/tlog/internal/app"
+	"github.com/tilman-schieber/tlog/internal/store"
 )
 
 // The outliner is driven headlessly here: Update takes key messages and the
@@ -1666,6 +1668,165 @@ func TestThePaletteMakesAPageThatDoesNotExist(t *testing.T) {
 	send(t, m, k(tea.KeyEsc))
 	if got := onDisk(t, m); got != "- first line\n" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+// paletteNotes is a notebook with one of everything the palette lists: today,
+// an earlier day, a page that has been said to be something, and the page the
+// model is left on.
+func paletteNotes(t *testing.T) *Model {
+	t.Helper()
+	m := newModel(t)
+	for _, p := range []string{"Ada Lovelace", "Grant proposal"} {
+		if _, err := m.svc.AddToPage(p, "x"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := m.svc.Tag("pages/Grant proposal.md", "project"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.svc.Add("journals/2026-11-13.md", "x"); err != nil {
+		t.Fatal(err)
+	}
+	m.goTo("pages/Ada Lovelace.md")
+	return m
+}
+
+func pickNamed(t *testing.T, m *Model, label string) pickItem {
+	t.Helper()
+	for _, it := range m.pick.filtered {
+		if it.label == label {
+			return it
+		}
+	}
+	t.Fatalf("the palette does not offer %q", label)
+	return pickItem{}
+}
+
+func TestThePaletteSaysWhatEachRowIs(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.ANSI)
+	defer lipgloss.SetColorProfile(prev)
+
+	m := paletteNotes(t)
+	today := store.Title(m.svc.TodayRel())
+	send(t, m, k(tea.KeyCtrlP))
+
+	if it := pickNamed(t, m, today); it.kind != pickDay || !it.today || !strings.HasSuffix(it.detail, " · today") {
+		t.Fatalf("today: %+v", it)
+	}
+	// A date alone does not say which day of the week it was.
+	if it := pickNamed(t, m, "2026-11-13"); it.kind != pickDay || it.today || it.detail != "Fr" {
+		t.Fatalf("an earlier day: %+v", it)
+	}
+	if it := pickNamed(t, m, "Grant proposal"); it.kind != pickPage || len(it.tags) != 1 || it.tags[0] != "project" {
+		t.Fatalf("a page: %+v", it)
+	}
+	if it := pickNamed(t, m, "Settings"); it.kind != pickCommand {
+		t.Fatalf("a command: %+v", it)
+	}
+	// What throws something away says so before it is chosen.
+	for _, name := range []string{"Delete block", "Reload from disk"} {
+		if it := pickNamed(t, m, name); it.kind != pickDanger {
+			t.Fatalf("%s: %+v", name, it)
+		}
+	}
+
+	frame := m.View()
+	for _, want := range []string{
+		styleDay.Render("2026-11-13"),
+		styleCommand.Render("> Settings"),
+		styleDanger.Render("> Delete block"),
+		styleTag.Render("#project"),
+	} {
+		if !strings.Contains(frame, want) {
+			t.Fatalf("%q is not drawn in its colour:\n%s", stripANSI(want), stripANSI(frame))
+		}
+	}
+	// A page is the plain one: most of the list is pages.
+	if !strings.Contains(frame, "  Grant proposal  ") {
+		t.Fatalf("a page should be drawn plain:\n%s", stripANSI(frame))
+	}
+}
+
+func TestThePaletteIsGroupedUntilSomethingIsTyped(t *testing.T) {
+	m := paletteNotes(t)
+	send(t, m, k(tea.KeyCtrlP))
+
+	frame := stripANSI(m.View())
+	at := -1
+	for _, head := range []string{"\n  Recent\n", "\n  Commands\n", "\n  Days\n", "\n  Pages\n"} {
+		i := strings.Index(frame, head)
+		if i <= at {
+			t.Fatalf("heading %q is missing or out of order:\n%s", strings.TrimSpace(head), frame)
+		}
+		at = i
+	}
+	// The mark says what a row is where colour cannot: on the selected row,
+	// and in a terminal with little colour to give.
+	if !strings.Contains(frame, "> Settings") || !strings.Contains(frame, "Grant proposal  #project") || !strings.Contains(frame, "2026-11-13  Fr") {
+		t.Fatalf("a row is missing its mark:\n%s", frame)
+	}
+
+	// Typing ranks the rows by how well they match, so the groups are gone.
+	typeText(t, m, "sett")
+	frame = stripANSI(m.View())
+	if strings.Contains(frame, "\n  Commands\n") {
+		t.Fatalf("a heading over a ranked list:\n%s", frame)
+	}
+	if m.pick.filtered[0].label != "Settings" || !strings.Contains(frame, "> Settings") {
+		t.Fatalf("got %+v\n%s", m.pick.filtered[0], frame)
+	}
+}
+
+func TestAPageInThePaletteAnswersToWhatItIs(t *testing.T) {
+	m := paletteNotes(t)
+	send(t, m, k(tea.KeyCtrlP))
+	typeText(t, m, "project")
+	if len(m.pick.filtered) == 0 || m.pick.filtered[0].label != "Grant proposal" {
+		t.Fatalf("typing a tag did not find the page that has it: %+v", m.pick.filtered)
+	}
+}
+
+func TestAClickInThePaletteLandsOnTheRowUnderIt(t *testing.T) {
+	m := paletteNotes(t)
+	send(t, m, k(tea.KeyCtrlP))
+
+	line := func(text string) int {
+		for y, l := range strings.Split(stripANSI(m.View()), "\n") {
+			if strings.TrimSpace(l) == text || strings.HasPrefix(strings.TrimSpace(l), text+"  ") {
+				return y
+			}
+		}
+		t.Fatalf("%q is not on the screen:\n%s", text, stripANSI(m.View()))
+		return 0
+	}
+	// A heading is not something to choose.
+	m.Update(clickAt(5, line("Commands")))
+	if m.mode != modePalette {
+		t.Fatalf("a click on a heading did something: mode %v", m.mode)
+	}
+	// The headings above a row must not shift what a click on it means.
+	m.Update(clickAt(5, line("> Settings")))
+	if m.mode != modeSettings {
+		t.Fatalf("a click on Settings opened something else: mode %v", m.mode)
+	}
+}
+
+func TestALongPaletteScrollsToTheSelectedRow(t *testing.T) {
+	m := paletteNotes(t)
+	m.height = 10 // six lines of list, fewer than there are rows and headings
+	send(t, m, k(tea.KeyCtrlP))
+	for range len(m.pick.filtered) - 1 {
+		send(t, m, k(tea.KeyDown))
+	}
+	last := m.pick.filtered[len(m.pick.filtered)-1]
+	frame := stripANSI(m.View())
+	if !strings.Contains(frame, last.plain()) {
+		t.Fatalf("the selected row %q scrolled out of sight:\n%s", last.label, frame)
+	}
+	if n := len(strings.Split(frame, "\n")); n > m.height {
+		t.Fatalf("the list is %d lines in a window of %d", n, m.height)
 	}
 }
 

@@ -43,9 +43,25 @@ created once you write something in it. Press `t` to return.
 
 ## Going to a page
 
-Press `p`. A list opens: the pages you visited recently, then today, a handful
-of commands, and every journal and page you have. Type a few letters to narrow
-it and press `enter`.
+Press `p`. A list opens: where you have been recently, a handful of commands,
+and every day and page you have.
+
+```text
+go to
+  Recent
+  2026-11-15  Su · today
+  Commands
+  > Agenda  everything with a deadline
+  > Settings
+  Days
+  2026-11-14  Sa
+  Pages
+  Ada Lovelace  #person
+```
+
+A day is shown with its weekday, a command with `>` in front, and a page with
+its tags; each kind also has its own colour. Type a few letters to narrow the
+list and press `enter`.
 
 Type a name that does not exist yet — say `Grant proposal` — and `enter` takes
 you to a new, empty page with that name. That is how pages are made: by going

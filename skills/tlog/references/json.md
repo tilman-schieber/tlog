@@ -151,7 +151,7 @@ has none.
 ```json
 [
   {"kind": "journal", "name": "2026-11-03", "rel": "journals/2026-11-03.md"},
-  {"kind": "page",    "name": "Grant",      "rel": "pages/Grant.md"},
+  {"kind": "page",    "name": "Grant",      "rel": "pages/Grant.md", "tags": ["project"]},
   {"kind": "tag",     "name": "project"}                                     // a tag has no file
 ]
 ```
@@ -159,7 +159,7 @@ has none.
 ## `commands -json`
 
 ```json
-[{"name": "deadline", "title": "Deadline", "hint": "Due on …", "arg": "date"}]
+[{"name": "deadline", "group": "Block", "title": "Deadline", "hint": "Due on …", "arg": "date"}]
 ```
 
 `arg` is `date`, `attachment`, `text`, or absent when the command takes none.
