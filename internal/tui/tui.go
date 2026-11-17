@@ -592,7 +592,11 @@ func (m *Model) moveKey(msg tea.KeyMsg, k string) (tea.Model, tea.Cmd) {
 		m.structural(func(a app.Addr) (*app.Result, error) { return m.svc.Move(a, 1) })
 	case "y":
 		if b := m.current(); b != nil {
-			m.copy(b.Text, "the block")
+			what := "the block"
+			if len(b.Children) > 0 {
+				what = "the block and what is under it"
+			}
+			m.copy(markdown.CopyText(b), what)
 		}
 	case "Y":
 		m.copyLink()

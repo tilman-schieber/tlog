@@ -358,12 +358,12 @@ func copied(m *Model) *[]string {
 	return &got
 }
 
-func TestYCopiesTheBlocksOwnText(t *testing.T) {
-	m := treeModel(t, "- see [the docs](https://go.dev/doc)\n  and a second line\n  - a child\n")
+func TestYCopiesTheBlockWithWhatIsUnderIt(t *testing.T) {
+	m := treeModel(t, "- see [the docs](https://go.dev/doc) ^ab12\n  and a second line\n  status:: open\n  - a child\n    - a grandchild\n\n- not this\n")
 	got := copied(m)
 	send(t, m, k(tea.KeyEsc))
 	send(t, m, runes("y"))
-	want := "see [the docs](https://go.dev/doc)\nand a second line"
+	want := "- see [the docs](https://go.dev/doc)\n  and a second line\n  status:: open\n  - a child\n    - a grandchild"
 	if len(*got) != 1 || (*got)[0] != want {
 		t.Fatalf("copied %q, want %q", *got, want)
 	}

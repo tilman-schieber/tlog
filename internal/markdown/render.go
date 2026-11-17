@@ -39,7 +39,7 @@ func Render(d *Document) []byte {
 		if i > 0 && blankLineBetweenTopLevel {
 			sb.WriteByte('\n')
 		}
-		writeBlock(&sb, b, 0)
+		writeBlock(&sb, b, 0, true)
 	}
 
 	out := sb.String()
@@ -54,11 +54,21 @@ func Render(d *Document) []byte {
 // as it would appear inside a file. Used when splicing a subtree.
 func RenderBlock(b *Block, depth int) []byte {
 	var sb strings.Builder
-	writeBlock(&sb, b, depth)
+	writeBlock(&sb, b, depth, true)
 	return []byte(sb.String())
 }
 
-func writeBlock(sb *strings.Builder, b *Block, depth int) {
+// CopyText is a block and everything under it as outline text, for the
+// clipboard: what the file holds, less the ^anchors, which name a block in
+// its own file and would be a second block of the same name wherever the copy
+// is pasted.
+func CopyText(b *Block) string {
+	var sb strings.Builder
+	writeBlock(&sb, b, 0, false)
+	return strings.TrimRight(sb.String(), "\n")
+}
+
+func writeBlock(sb *strings.Builder, b *Block, depth int, anchors bool) {
 	indent := strings.Repeat(IndentUnit, depth)
 	cont := indent + IndentUnit
 
@@ -71,7 +81,7 @@ func writeBlock(sb *strings.Builder, b *Block, depth int) {
 		sb.WriteString(" ")
 		sb.WriteString(first)
 	}
-	if b.Anchor != "" {
+	if anchors && b.Anchor != "" {
 		sb.WriteString(" ^")
 		sb.WriteString(b.Anchor)
 	}
@@ -96,7 +106,7 @@ func writeBlock(sb *strings.Builder, b *Block, depth int) {
 	}
 
 	for _, c := range b.Children {
-		writeBlock(sb, c, depth+1)
+		writeBlock(sb, c, depth+1, anchors)
 	}
 }
 
